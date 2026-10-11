@@ -334,6 +334,16 @@ export const atelierCuivre: Record<ToneKey, string> = {
   'partie.ralliement_kind_ONE_SHOT': 'La réunion d’établi',
   'partie.ralliement_kind_CAMPAGNE_EPISODIQUE': 'Le grand chantier',
   'partie.ralliement_submit_btn': 'Monter le rassemblement',
+  /* — page d'un ralliement (Story 38.4) : titres de formulaire et variantes sans mot de quête — */
+  'partie.ralliement_new_title': 'Nouveau rassemblement',
+  'partie.ralliement_edit_title': 'Recalibrer le rassemblement',
+  'partie.ralliement_no_description': 'Dossier du rassemblement vierge.',
+  'partie.ralliement_status_closed_label': 'Ce rassemblement est à l’arrêt.',
+  'identity.ralliement_homonymy_warning':
+    'Un autre mécanicien de ce rassemblement porte le même nom affiché que vous.',
+  'partie.ralliement_save_error': 'Ce rassemblement n’a pu être monté. Réessayez.',
+  'partie.ralliement_created_but_cover_failed':
+    'Le rassemblement est bien monté, mais sa plaque n’a pu être gravée. Vous pouvez la redéposer ici.',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine séance d’atelier',
   'partie.no_session': 'Aucune séance planifiée. Interrogez l’automate.',

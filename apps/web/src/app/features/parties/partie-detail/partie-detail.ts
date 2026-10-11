@@ -203,7 +203,7 @@ export class PartieDetail implements OnInit {
   protected readonly prepAssetError = signal<string | null>(null);
   protected readonly downloadingPrepAsset = signal(false);
 
-  /** Story 38.2 (garde minimale, la page de famille complète est la 38.4) : un ralliement n'a ni
+  /** Story 38.2/38.4 : un ralliement n'a ni
    *  scénario, ni personnage, ni annonce, ni rôle de groupe — le serveur refuse ces lectures (403).
    *  Les chargements qui en dépendent sont donc sautés, sans quoi la page d'un ralliement fraîchement
    *  créé lèverait des erreurs. */
@@ -212,7 +212,7 @@ export class PartieDetail implements OnInit {
   );
 
   /** Le MJ a accès à l'invitation et à la gestion des membres/liens. Jamais dans un ralliement :
-   *  son créateur y est `admin` (rôle serveur), pas MJ — ses droits propres arrivent en 38.4. */
+   *  son créateur y est `admin` (rôle serveur), pas MJ — sa page et ses actions sont celles de sa famille (Story 38.4). */
   protected readonly isMj = computed(
     () => this.partie()?.ownerId === this.auth.currentUser()?.id && !this.isRalliement(),
   );
@@ -407,12 +407,14 @@ export class PartieDetail implements OnInit {
       if (!p) return;
       this.contextualNav.set({
         title: p.name,
-        // Story 38.2 : un ralliement dit sa nature avec ses propres mots (jamais "Quête unique").
-        subtitle: `${this.system(p.gameSystemId)} · ${
-          this.isRalliement()
-            ? (this.theme.tone()[`partie.ralliement_kind_${p.kind}`] ?? p.kind)
-            : this.kind(p.kind)
-        }`,
+        // Story 38.2/38.4 : un ralliement dit sa nature avec ses propres mots (jamais "Quête unique")
+        // et son préfixe est celui du thème (Ralliement / Veillée / Rassemblement), pas le nom du
+        // registre — « Ralliement · La convergence des Sortilèges ».
+        subtitle: this.isRalliement()
+          ? `${this.theme.tone()['partie.mode_ralliement']} · ${
+              this.theme.tone()[`partie.ralliement_kind_${p.kind}`] ?? p.kind
+            }`
+          : `${this.system(p.gameSystemId)} · ${this.kind(p.kind)}`,
       });
     });
 

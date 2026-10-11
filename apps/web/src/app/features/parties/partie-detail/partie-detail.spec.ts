@@ -33,7 +33,8 @@ import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.serv
 import { CharacterRolesService } from '../../../core/character-roles/character-roles.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTabGroup } from '@angular/material/tabs';
-import { TONE_MAP } from '../../../core/theme/tones';
+import { TONE_MAP, THEMES, type Theme } from '../../../core/theme/tones';
+import { NON_JDR_BANNED_WORDS } from '../../../core/theme/non-jdr-words.fixture';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { fillTone } from '../../../core/theme/tone-format';
 
@@ -147,8 +148,8 @@ function makePartie(overrides: Partial<PartieDto> = {}): PartieDto {
   };
 }
 
-function makeToneService() {
-  return { tone: signal(TONE_MAP['grimoire-emeraude']) };
+function makeToneService(theme: Theme = 'grimoire-emeraude') {
+  return { tone: signal(TONE_MAP[theme]) };
 }
 
 function makeAuthService(userId: string, displayName = 'Test') {
@@ -211,6 +212,8 @@ interface CreateFixtureOptions {
   desktop?: boolean;
   displayName?: string;
   announcementIdQueryParam?: string;
+  /** Story 38.4 : thème du registre de textes (Grimoire par défaut). */
+  theme?: Theme;
 }
 
 async function createFixture(
@@ -263,7 +266,7 @@ async function createFixture(
           changed: signal(0),
         },
       },
-      { provide: ThemeToneService, useValue: makeToneService() },
+      { provide: ThemeToneService, useValue: makeToneService(options.theme) },
       {
         provide: ScenariosService,
         useValue: makeScenariosService(options.polls ?? (options.poll ? [options.poll] : [])),
@@ -3312,5 +3315,236 @@ describe('PartieDetail — ralliement, garde minimale (Story 38.2)', () => {
       listByPartie: ReturnType<typeof vi.fn>;
     };
     expect(characterSvc.listByPartie).toHaveBeenCalledWith('party-1');
+  });
+});
+
+// ─── Page d'un ralliement selon sa famille (Story 38.4) ────────────────────────────────────
+
+describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const OTHER_ID = 'member-2';
+  const ralliement = (over: Partial<PartieDto> = {}) =>
+    makePartie({
+      gameSystemId: 'ralliement',
+      kind: 'CAMPAGNE_EPISODIQUE',
+      role: 'admin',
+      description: 'Un soir de partage',
+      ...over,
+    });
+  const members: PartieMemberDto[] = [
+    { userId: MJ_ID, pseudo: 'createur', displayName: 'Créateur', joinedAt: '2026-10-01T00:00:00Z' },
+    {
+      userId: OTHER_ID,
+      pseudo: 'membre',
+      displayName: 'Membre Deux',
+      joinedAt: '2026-10-02T00:00:00Z',
+    },
+  ];
+  const tabLabels = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).map((t) =>
+      (t.textContent ?? '').trim(),
+    );
+  /** Mots interdits hors JDR (UX-DR17), quel que soit le thème — constante partagée avec le registre. */
+  const BANNED = NON_JDR_BANNED_WORDS;
+  const openMissives = (el: HTMLElement, fixture: ComponentFixture<PartieDetail>) => {
+    el.querySelectorAll<HTMLElement>('div[role="tab"]')[1].click();
+    fixture.detectChanges();
+  };
+
+  it.each([
+    ['admin', MJ_ID, 'admin'],
+    ['membre', OTHER_ID, 'member'],
+  ] as const)(
+    '%s : exactement deux onglets, Détails puis Missives',
+    async (_nom, userId, role) => {
+      const { el } = await createFixture(ralliement({ role }), userId, { members });
+      const tone = TONE_MAP['grimoire-emeraude'];
+      expect(tabLabels(el)).toEqual([
+        tone['parties.detail_tab_details'],
+        tone['partie.invitations_tab_label'],
+      ]);
+    },
+  );
+
+  it('Détails : la description seule, ni widget de séance, ni calendrier, ni vote, ni XP', async () => {
+    const { el } = await createFixture(ralliement(), MJ_ID, { members });
+    expect(
+      el.querySelector('.details-zone--reference .zone-card--reference')?.textContent,
+    ).toContain('Un soir de partage');
+    expect(el.querySelector('.scheduling-widget')).toBeNull();
+    expect(el.querySelector('.details-zone--action')).toBeNull();
+    expect(el.querySelector('.details-zone--consultation')).toBeNull();
+    expect(el.querySelector('.xp-section')).toBeNull();
+    expect(el.querySelector('.announcement-section')).toBeNull();
+    expect(el.querySelector('app-status-badge')).toBeNull();
+    expect(el.querySelector('a[href$="/guild-calendar"], a[href$="/calendar"]')).toBeNull();
+    const tone = TONE_MAP['grimoire-emeraude'];
+    for (const key of [
+      'partie.scheduling_title',
+      'partie.no_session',
+      'cta.guild_calendar',
+      'poll.vote_pending',
+    ]) {
+      expect(el.textContent).not.toContain(tone[key]);
+    }
+  });
+
+  it('l’admin garde le seul lien Modifier au pied de carte ; un membre n’en a aucun', async () => {
+    const admin = await createFixture(ralliement(), MJ_ID, { members });
+    expect(
+      Array.from(admin.el.querySelectorAll('.icon-bar a')).map((a) => a.getAttribute('href')),
+    ).toEqual(['/parties/party-1/edit']);
+    TestBed.resetTestingModule();
+
+    const member = await createFixture(ralliement({ role: 'member' }), OTHER_ID, { members });
+    expect(member.el.querySelector('.icon-bar a')).toBeNull();
+    expect(member.el.querySelector('.icon-bar button')).toBeNull();
+  });
+
+  it.each([
+    ['admin', MJ_ID, 'admin'],
+    ['membre', OTHER_ID, 'member'],
+  ] as const)(
+    '%s : Missives liste chaque membre une fois (créateur compris), sans aucune gestion',
+    async (_nom, userId, role) => {
+      const { fixture, el } = await createFixture(ralliement({ role }), userId, {
+        members,
+        noopAnimations: true,
+      });
+      openMissives(el, fixture);
+
+      const rows = Array.from(el.querySelectorAll('.ralliement-members .result-row')).map((r) =>
+        (r.textContent ?? '').trim(),
+      );
+      expect(rows).toEqual(['Créateur', 'Membre Deux']);
+      const panel = el.querySelector('.ralliement-members') as HTMLElement;
+      const tone = TONE_MAP['grimoire-emeraude'];
+      expect(panel.querySelector('h3')?.textContent).toContain(tone['partie.members_title']);
+      expect(panel.querySelector('button')).toBeNull();
+      expect(panel.querySelector('input')).toBeNull();
+      expect(panel.querySelector('mat-form-field')).toBeNull();
+      expect(panel.querySelector('.link-row')).toBeNull();
+      expect(panel.textContent).not.toContain(tone['partie.remove_member_btn']);
+    },
+  );
+
+  it('Missives : deux membres homonymes sont départagés par leur pseudo', async () => {
+    const homonymes: PartieMemberDto[] = [
+      { userId: MJ_ID, pseudo: 'alice', displayName: 'Même Nom', joinedAt: '2026-10-01T00:00:00Z' },
+      { userId: OTHER_ID, pseudo: 'bob', displayName: 'Même Nom', joinedAt: '2026-10-02T00:00:00Z' },
+    ];
+    const { fixture, el } = await createFixture(ralliement(), MJ_ID, {
+      members: homonymes,
+      noopAnimations: true,
+    });
+    openMissives(el, fixture);
+
+    const rows = Array.from(el.querySelectorAll('.ralliement-members .result-row')).map((r) =>
+      (r.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain('(alice)');
+    expect(rows[1]).toContain('(bob)');
+  });
+
+  it.each(THEMES)(
+    'thème %s : les textes partagés rendus par la page d’un ralliement n’emploient aucun mot interdit',
+    (theme) => {
+      for (const key of [
+        'partie.members_title',
+        'partie.invitations_tab_label',
+        'parties.detail_tab_details',
+        'partie.edit_btn',
+        'partie.no_members',
+        'identity.homonymy_change_cta',
+        'identity.homonymy_ignore_cta',
+      ]) {
+        expect(BANNED.test(TONE_MAP[theme][key]), `${theme} / ${key}`).toBe(false);
+      }
+    },
+  );
+
+  it('ni lien d’invitation chargé, ni recherche : la gestion des membres n’existe pas', async () => {
+    await createFixture(ralliement(), MJ_ID, { members });
+    const partiesSvc = TestBed.inject(PartiesService) as unknown as {
+      inviteLinks: ReturnType<typeof vi.fn>;
+      searchUsers: ReturnType<typeof vi.fn>;
+    };
+    expect(partiesSvc.inviteLinks).not.toHaveBeenCalled();
+    expect(partiesSvc.searchUsers).not.toHaveBeenCalled();
+  });
+
+  it.each(THEMES)(
+    'thème %s : sous-titre « <préfixe du thème> · <type> » et aucun mot de JDR dans la page',
+    async (theme) => {
+      const tone = TONE_MAP[theme];
+      for (const kind of ['ONE_SHOT', 'CAMPAGNE_EPISODIQUE'] as const) {
+        const { fixture, el } = await createFixture(ralliement({ kind }), MJ_ID, {
+          members,
+          theme,
+          noopAnimations: true,
+        });
+        expect(TestBed.inject(ContextualNavService).subtitle()).toBe(
+          `${tone['partie.mode_ralliement']} · ${tone[`partie.ralliement_kind_${kind}`]}`,
+        );
+        // Détails (onglet actif), puis Missives : les deux corps sont balayés.
+        expect(BANNED.test(el.textContent ?? ''), `${theme}/${kind} Détails`).toBe(false);
+        openMissives(el, fixture);
+        expect(BANNED.test(el.textContent ?? ''), `${theme}/${kind} Missives`).toBe(false);
+        TestBed.resetTestingModule();
+      }
+    },
+  );
+
+  it.each(THEMES)(
+    'thème %s : description vide, homonymie et clôture parlent le langage du ralliement',
+    async (theme) => {
+      const tone = TONE_MAP[theme];
+      const { el } = await createFixture(
+        ralliement({ description: null, status: 'TERMINEE' }),
+        MJ_ID,
+        {
+          members: [
+            members[0],
+            {
+              userId: OTHER_ID,
+              pseudo: 'autre',
+              displayName: 'Test',
+              joinedAt: '2026-10-02T00:00:00Z',
+            },
+          ],
+          theme,
+          displayName: 'Test',
+        },
+      );
+      expect(el.querySelector('.homonymy-warning')?.textContent).toContain(
+        tone['identity.ralliement_homonymy_warning'],
+      );
+      expect(el.textContent).toContain(tone['partie.ralliement_no_description']);
+      expect(el.querySelector('.closed-banner')?.textContent).toContain(
+        tone['partie.ralliement_status_closed_label'],
+      );
+      expect(BANNED.test(el.textContent ?? '')).toBe(false);
+    },
+  );
+
+  it('témoin JDR : une quête Ryuutama garde ses cinq onglets, son widget de séance et son sous-titre', async () => {
+    const { el } = await createFixture(
+      makePartie({ gameSystemId: 'ryuutama', kind: 'CAMPAGNE_EPISODIQUE', ownerId: MJ_ID }),
+      MJ_ID,
+    );
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(tabLabels(el)).toEqual([
+      tone['parties.detail_tab_details'],
+      tone['partie.invitations_tab_label'],
+      'Homme Dragon',
+      tone['parties.detail_tab_scenarios'],
+      tone['parties.detail_tab_timeline'],
+    ]);
+    expect(el.querySelector('.scheduling-widget')).not.toBeNull();
+    expect(TestBed.inject(ContextualNavService).subtitle()).toBe(
+      `Ryuutama · ${tone['partie.kind_CAMPAGNE_EPISODIQUE']}`,
+    );
   });
 });

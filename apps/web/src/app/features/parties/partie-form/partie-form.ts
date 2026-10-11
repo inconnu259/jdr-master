@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
@@ -145,6 +145,24 @@ export class PartieForm implements OnInit {
   protected readonly coverLocked = computed(() => this.coverSaving() || this.saving());
 
   constructor() {
+    // Bandeau contextuel (patron Story 29.4) — le titre ne vit plus dans la carte, qui le répétait
+    // (leçon de la Story 29.5). Story 38.4 : il suit le mode — bascule à la création, famille de la
+    // partie à l'édition (variantes « ralliement » du registre de textes, sans mot de quête). À
+    // l'édition, le sous-titre est le nom de la partie.
+    effect(() => {
+      const tone = this.theme.tone();
+      const ralliement = this.isRalliement();
+      const editing = this.editId() !== null;
+      // À l'édition, la famille n'est connue qu'une fois la partie chargée (`savedKind` posé en même
+      // temps que le mode) : avant cela, aucun titre — il montrerait des mots de quête à tort.
+      if (editing && this.savedKind() === null) return;
+      this.contextualNav.set({
+        title: editing
+          ? tone[ralliement ? 'partie.ralliement_edit_title' : 'partie.edit_title']
+          : tone[ralliement ? 'partie.ralliement_new_title' : 'partie.new_title'],
+        subtitle: editing ? this.partieName() || null : null,
+      });
+    });
     // Une URL de blob ne se révoque jamais toute seule : sans cela, quitter la page (navigation,
     // annulation) avec un fichier en attente la ferait fuir.
     inject(DestroyRef).onDestroy(() => this.clearPendingCover());
@@ -251,11 +269,8 @@ export class PartieForm implements OnInit {
 
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.paramMap.get('id');
-    // Bandeau contextuel (patron Story 29.4) — le titre ne vit plus dans la carte, qui le
-    // répétait (leçon de la Story 29.5, appliquée sans attendre un retour utilisateur).
-    this.contextualNav.set({
-      title: id ? this.theme.tone()['partie.edit_title'] : this.theme.tone()['partie.new_title'],
-    });
+    // Le bandeau contextuel (patron Story 29.4) est posé par l'effet du constructeur : son titre suit
+    // le mode (Story 38.4).
     if (!id) return;
 
     this.editId.set(id);
@@ -273,10 +288,6 @@ export class PartieForm implements OnInit {
       gameSystemId: p.gameSystemId,
       kind: p.kind,
       description: p.description ?? '',
-    });
-    this.contextualNav.set({
-      title: this.theme.tone()['partie.edit_title'],
-      subtitle: p.name,
     });
 
     // Un seul appel, pour une seule partie : NFR-6 vise les appels proportionnels au NOMBRE de
@@ -480,7 +491,13 @@ export class PartieForm implements OnInit {
           // désormais de coverImageVersion. Sans ce nettoyage, l'URL n'est jamais révoquée (fuite).
           this.clearPendingCover();
         } catch {
-          this.error.set(this.theme.tone()['partie.created_but_cover_failed']);
+          this.error.set(
+            this.theme.tone()[
+              this.isRalliement()
+                ? 'partie.ralliement_created_but_cover_failed'
+                : 'partie.created_but_cover_failed'
+            ],
+          );
           this.saving.set(false);
           this.editId.set(partie.id);
           this.savedKind.set(partie.kind);
@@ -494,7 +511,10 @@ export class PartieForm implements OnInit {
     } catch (err) {
       // AC15 — distinguer les causes plutôt qu'un texte unique. Un refus de conversion porte son
       // propre message serveur, qui nomme la cause réelle : le relayer plutôt que le masquer.
-      this.error.set(this.serverMessage(err) ?? this.theme.tone()['partie.save_error']);
+      this.error.set(
+        this.serverMessage(err) ??
+          this.theme.tone()[this.isRalliement() ? 'partie.ralliement_save_error' : 'partie.save_error'],
+      );
       this.courantChoice.set(null);
     } finally {
       this.saving.set(false);

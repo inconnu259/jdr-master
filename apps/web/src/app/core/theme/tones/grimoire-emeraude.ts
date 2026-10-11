@@ -336,6 +336,16 @@ export const grimoireEmeraude = {
   'partie.ralliement_kind_ONE_SHOT': 'La conjonction des Esprits',
   'partie.ralliement_kind_CAMPAGNE_EPISODIQUE': 'La convergence des Sortilèges',
   'partie.ralliement_submit_btn': 'Convoquer le ralliement',
+  /* — page d'un ralliement (Story 38.4) : titres de formulaire et variantes sans mot de quête — */
+  'partie.ralliement_new_title': 'Nouveau ralliement',
+  'partie.ralliement_edit_title': 'Retranscrire le ralliement',
+  'partie.ralliement_no_description': 'Ce ralliement reste muet.',
+  'partie.ralliement_status_closed_label': 'Ce ralliement est dissous.',
+  'identity.ralliement_homonymy_warning':
+    'Un autre compagnon de ce ralliement porte le même nom affiché que vous.',
+  'partie.ralliement_save_error': 'Ce ralliement n’a pu être convoqué. Réessayez.',
+  'partie.ralliement_created_but_cover_failed':
+    'Le ralliement est bien convoqué, mais son enluminure n’a pu être fixée. Vous pouvez la redéposer ici.',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine séance au grimoire',
   'partie.no_session': "Aucune séance convoquée. Consultez l'oracle des créneaux.",

@@ -253,4 +253,285 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
       expect(Object.keys(signals)).not.toContain(id);
     });
   });
+
+  // Story 38.4 (AD-1) : la page d'un ralliement n'affiche aucune section de JDR, et le serveur refuse
+  // ces mêmes routes en direct — l'écran n'est jamais la seule barrière.
+  describe('capacités de JDR absentes : refus en direct (Story 38.4)', () => {
+    const ZERO = '00000000-0000-4000-8000-000000000000';
+    // Un PNG 1×1 : octets valides, de sorte que la validation du fichier ne précède pas le refus.
+    const PNG_1X1 = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    let partieId: string;
+    /** Séance unique de la rencontre isolée : seul vrai identifiant de séance atteignable ici. */
+    let seanceId: string;
+
+    beforeAll(async () => {
+      // Rencontre isolée : elle porte un événement et une séance réels, de quoi sonder les routes
+      // de séance avec un vrai identifiant (un identifiant aléatoire ne prouverait qu'un 404).
+      ({ id: partieId } = await h.createPartie(admin, 'ONE_SHOT', 'refus-jdr', 'ralliement'));
+      await h.addMember(partieId, member);
+      const seance = await h.prisma.seance.findFirstOrThrow({ where: { event: { partieId } } });
+      seanceId = seance.id;
+    });
+
+    type Probe = {
+      label: string;
+      /** Statuts admis : 403 par défaut ; 403 ou 404 pour un identifiant aléatoire (rien à agir). */
+      allowed?: number[];
+      send: (user: TestUser) => Promise<{ status: number }>;
+    };
+    const p = (id: string) => `/parties/${id}`;
+    const probes = (): Probe[] => [
+      {
+        label: 'POST xp-distributions',
+        send: (u) =>
+          u.agent
+            .post(`${p(partieId)}/xp-distributions`)
+            .send({ entries: [{ characterId: ZERO, amount: 1 }] }),
+      },
+      { label: 'GET xp-distributions', send: (u) => u.agent.get(`${p(partieId)}/xp-distributions`) },
+      {
+        label: 'POST homme-dragon',
+        send: (u) =>
+          u.agent
+            .post(`${p(partieId)}/homme-dragon`)
+            .send({ race: 'DRAGON_VERT', artefact: { key: 'x' }, nom: 'Nom' }),
+      },
+      { label: 'GET homme-dragon', send: (u) => u.agent.get(`${p(partieId)}/homme-dragon`) },
+      { label: 'PUT homme-dragon/:id', send: (u) => u.agent.put(`${p(partieId)}/homme-dragon/${ZERO}`) },
+      {
+        label: 'DELETE homme-dragon/:id',
+        send: (u) => u.agent.delete(`${p(partieId)}/homme-dragon/${ZERO}`),
+      },
+      {
+        label: 'POST announcements',
+        send: (u) => u.agent.post(`${p(partieId)}/announcements`).send({ text: 'Une annonce' }),
+      },
+      { label: 'GET announcements', send: (u) => u.agent.get(`${p(partieId)}/announcements`) },
+      {
+        label: 'PUT visibility-locks',
+        send: (u) => u.agent.put(`${p(partieId)}/visibility-locks`).send({ paths: [] }),
+      },
+      { label: 'GET visibility-locks', send: (u) => u.agent.get(`${p(partieId)}/visibility-locks`) },
+      { label: 'GET characters', send: (u) => u.agent.get(`${p(partieId)}/characters`) },
+      {
+        label: 'POST characters',
+        send: (u) =>
+          u.agent
+            .post(`${p(partieId)}/characters`)
+            .send({ gameSystemId: 'ralliement', sheetData: { a: 1 } }),
+      },
+      {
+        label: 'POST invitations',
+        send: (u) => u.agent.post(`${p(partieId)}/invitations`).send({ inviteeUserId: stranger.id }),
+      },
+      {
+        label: 'POST invitations/by-email',
+        send: (u) =>
+          u.agent.post(`${p(partieId)}/invitations/by-email`).send({ email: 'x@test.local' }),
+      },
+      { label: 'GET invitations', send: (u) => u.agent.get(`${p(partieId)}/invitations`) },
+      { label: 'POST invite-links', send: (u) => u.agent.post(`${p(partieId)}/invite-links`).send({}) },
+      { label: 'GET invite-links', send: (u) => u.agent.get(`${p(partieId)}/invite-links`) },
+      { label: 'GET poll', send: (u) => u.agent.get(`${p(partieId)}/poll`) },
+      {
+        label: 'POST poll/:id/vote',
+        send: (u) =>
+          u.agent.post(`${p(partieId)}/poll/${ZERO}/vote`).send({ optionId: ZERO, answer: 'YES' }),
+      },
+      {
+        label: 'PATCH poll/:id/choose',
+        send: (u) => u.agent.patch(`${p(partieId)}/poll/${ZERO}/choose`).send({ optionId: ZERO }),
+      },
+      {
+        label: 'PUT poll/:id/options',
+        send: (u) =>
+          u.agent.put(`${p(partieId)}/poll/${ZERO}/options`).send({
+            options: [
+              { date: '2030-01-01', slot: 'EVENING' },
+              { date: '2030-01-02', slot: 'EVENING' },
+            ],
+          }),
+      },
+      { label: 'DELETE poll/:id', send: (u) => u.agent.delete(`${p(partieId)}/poll/${ZERO}`) },
+      { label: 'GET available-slots', send: (u) => u.agent.get(`${p(partieId)}/available-slots`) },
+      {
+        label: 'GET heatmap',
+        send: (u) =>
+          u.agent.get(`${p(partieId)}/heatmap`).query({ from: '2030-01-01', to: '2030-01-07' }),
+      },
+      {
+        label: 'DELETE members/:userId',
+        send: (u) => u.agent.delete(`${p(partieId)}/members/${member.id}`),
+      },
+      // Scénarios : aucun n'existe dans un ralliement, les routes de la partie sont refusées.
+      { label: 'GET scenarios', send: (u) => u.agent.get(`${p(partieId)}/scenarios`) },
+      { label: 'GET scenarios/drafts', send: (u) => u.agent.get(`${p(partieId)}/scenarios/drafts`) },
+      {
+        label: 'POST scenarios',
+        send: (u) => u.agent.post(`${p(partieId)}/scenarios`).send({ title: 'Un scénario' }),
+      },
+      { label: 'GET documents', send: (u) => u.agent.get(`${p(partieId)}/documents`) },
+      // Routes d'un scénario : identifiant aléatoire (aucun scénario possible) → 403 ou 404, jamais d'action.
+      ...(
+        [
+          ['PATCH scenarios/:id', 'patch', '', { title: 'X' }],
+          ['PATCH scenarios/:id/open', 'patch', '/open', undefined],
+          ['PATCH scenarios/:id/courant', 'patch', '/courant', undefined],
+          ['PATCH scenarios/:id/passe', 'patch', '/passe', undefined],
+          ['PATCH scenarios/:id/resume-fin', 'patch', '/resume-fin', { resumeFin: 'x' }],
+          ['POST scenarios/:id/participate', 'post', '/participate', undefined],
+          ['POST scenarios/:id/seances', 'post', '/seances', undefined],
+          ['GET scenarios/:id/documents', 'get', '/documents', undefined],
+        ] as const
+      ).map(
+        ([label, method, suffix, payload]): Probe => ({
+          label,
+          allowed: [403, 404],
+          send: (u) => {
+            const req = u.agent[method](`/scenarios/${ZERO}${suffix}`);
+            return payload ? req.send(payload) : req;
+          },
+        }),
+      ),
+      // Séances : vraie séance de la rencontre isolée → refusées (la politique ne les ouvre à personne).
+      {
+        label: 'DELETE seances/:id',
+        send: (u) => u.agent.delete(`/scenarios/seances/${seanceId}`),
+      },
+      {
+        label: 'POST seances/:id/poll',
+        send: (u) =>
+          u.agent.post(`/scenarios/seances/${seanceId}/poll`).send({
+            options: [
+              { date: '2030-01-01', slot: 'EVENING' },
+              { date: '2030-01-02', slot: 'EVENING' },
+            ],
+          }),
+      },
+      {
+        label: 'PATCH seances/:id/reset-date',
+        send: (u) => u.agent.patch(`/scenarios/seances/${seanceId}/reset-date`),
+      },
+      {
+        label: 'PATCH seances/:id/capacite',
+        send: (u) =>
+          u.agent
+            .patch(`/scenarios/seances/${seanceId}/capacite`)
+            .send({ inscriptionMin: 1, inscriptionMax: 4 }),
+      },
+      {
+        label: 'POST seances/:id/inscription',
+        send: (u) => u.agent.post(`/scenarios/seances/${seanceId}/inscription`),
+      },
+      {
+        label: 'DELETE seances/:id/inscription',
+        send: (u) => u.agent.delete(`/scenarios/seances/${seanceId}/inscription`),
+      },
+      {
+        label: 'PATCH seances/:id/compte-rendu',
+        send: (u) =>
+          u.agent.patch(`/scenarios/seances/${seanceId}/compte-rendu`).send({ compteRendu: 'x' }),
+      },
+      {
+        label: 'PATCH seances/:id/infos-pratiques',
+        send: (u) =>
+          u.agent
+            .patch(`/scenarios/seances/${seanceId}/infos-pratiques`)
+            .send({ heureRdv: '20:00', lieu: 'Salle', notePratique: null }),
+      },
+      // Rôles de groupe et ressources d'un système de jeu.
+      {
+        label: 'GET character-roles',
+        send: (u) => u.agent.get(`${p(partieId)}/character-roles`),
+      },
+      {
+        label: 'POST characters/:id/role',
+        send: (u) => u.agent.post(`${p(partieId)}/characters/${ZERO}/role`).send({ roleKey: 'x' }),
+      },
+      {
+        label: 'DELETE characters/:id/role',
+        send: (u) => u.agent.delete(`${p(partieId)}/characters/${ZERO}/role`),
+      },
+      {
+        label: 'GET game-systems/ryuutama/assets/journal',
+        send: (u) => u.agent.get(`${p(partieId)}/game-systems/ryuutama/assets/journal`),
+      },
+    ];
+
+    /** Instantané de tout ce que ces routes pourraient écrire, pour prouver qu'aucune ne l'a fait. */
+    const snapshot = async () => {
+      const where = { partieId };
+      return {
+        announcements: await h.prisma.announcement.count({ where }),
+        xpDistributions: await h.prisma.xpDistribution.count({ where }),
+        visibilityLocks: await h.prisma.partieVisibilityLock.count({ where }),
+        invitations: await h.prisma.invitation.count({ where }),
+        inviteLinks: await h.prisma.inviteLink.count({ where }),
+        characters: await h.prisma.character.count({ where }),
+        scenarios: await h.prisma.scenario.count({ where: { event: { partieId } } }),
+        memberships: (await h.prisma.membership.findMany({ where }))
+          .map((m) => `${m.userId}:${m.role}`)
+          .sort(),
+        // La séance entière, champ par champ : date, capacité, compte rendu, infos pratiques, vote.
+        seances: JSON.stringify(
+          await h.prisma.seance.findMany({ where: { event: { partieId } }, orderBy: { id: 'asc' } }),
+        ),
+        partie: JSON.stringify(await h.prisma.partie.findUniqueOrThrow({ where: { id: partieId } })),
+      };
+    };
+
+    it.each(['admin', 'membre', 'étranger'])(
+      '%s : chaque route d’une capacité absente est refusée en 403',
+      async (who) => {
+        const user = who === 'admin' ? admin : who === 'membre' ? member : stranger;
+        // Jest n'accepte pas de message : on collecte les écarts pour nommer la route fautive.
+        const ecarts: string[] = [];
+        for (const probe of probes()) {
+          const res = await probe.send(user);
+          if (!(probe.allowed ?? [403]).includes(res.status)) {
+            ecarts.push(`${probe.label} → ${res.status}`);
+          }
+        }
+        expect(ecarts).toEqual([]);
+      },
+    );
+
+    it('aucune écriture n’a eu lieu : on sonde toutes les routes puis on compare l’état avant / après', async () => {
+      const avant = await snapshot();
+      for (const user of [admin, member, stranger]) {
+        for (const probe of probes()) await probe.send(user);
+      }
+      expect(await snapshot()).toEqual(avant);
+    });
+
+    it('témoin positif : admin et membre lisent la partie et ses membres (créateur une fois), un étranger est refusé', async () => {
+      for (const user of [admin, member]) {
+        await user.agent.get(p(partieId)).expect(200);
+        const res = await user.agent.get(`${p(partieId)}/members`).expect(200);
+        const ids = body<MemberLike[]>(res).map((m) => m.userId);
+        expect([...ids].sort()).toEqual([admin.id, member.id].sort());
+      }
+      await stranger.agent.get(p(partieId)).expect(403);
+      await stranger.agent.get(`${p(partieId)}/members`).expect(403);
+    });
+
+    it('un membre ne change pas la couverture (403 « réservée aux administrateurs »), un étranger non plus', async () => {
+      const asMember = await member.agent
+        .put(`${p(partieId)}/cover`)
+        .attach('file', PNG_1X1, { filename: 'c.png', contentType: 'image/png' });
+      expect(asMember.status).toBe(403);
+      expect(body<{ message: string }>(asMember).message).toBe(ADMIN_ONLY);
+      const asStranger = await stranger.agent
+        .put(`${p(partieId)}/cover`)
+        .attach('file', PNG_1X1, { filename: 'c.png', contentType: 'image/png' });
+      expect(asStranger.status).toBe(403);
+      const removed = await member.agent.delete(`${p(partieId)}/cover`);
+      expect(removed.status).toBe(403);
+      const stored = await h.prisma.partie.findUniqueOrThrow({ where: { id: partieId } });
+      expect(stored.coverImageUrl).toBeNull();
+    });
+  });
 });

@@ -8,6 +8,8 @@ import { PartiesService } from '../../../core/parties/parties.service';
 import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
+import { TONE_MAP, THEMES } from '../../../core/theme/tones';
 
 const PARTIE: PartieDto = {
   id: 'p1',
@@ -47,11 +49,16 @@ function scenario(over: Partial<ScenarioDto> = {}): ScenarioDto {
 
 async function createComponent(
   editId: string | null = null,
-  options: { partie?: Partial<PartieDto>; scenarios?: ScenarioDto[] } = {},
+  options: {
+    partie?: Partial<PartieDto>;
+    scenarios?: ScenarioDto[];
+    /** Maintient `get()` en attente : observe l'état intermédiaire d'une édition. */
+    getPromise?: Promise<PartieDto>;
+  } = {},
 ) {
   const partie = { ...PARTIE, ...options.partie };
   const partiesSvc = {
-    get: vi.fn().mockResolvedValue(partie),
+    get: vi.fn().mockImplementation(() => options.getPromise ?? Promise.resolve(partie)),
     create: vi.fn().mockResolvedValue({ ...partie, id: 'new-id' }),
     update: vi.fn().mockResolvedValue(partie),
     convertKind: vi.fn().mockResolvedValue(partie),
@@ -916,6 +923,99 @@ describe('PartieForm', () => {
         expect.objectContaining({ gameSystemId: 'ralliement', kind: 'ONE_SHOT' }),
       );
       expect(partiesSvc.convertKind).not.toHaveBeenCalled();
+    });
+
+    it.each(THEMES)(
+      'thème %s : échec d’enregistrement et échec de couverture parlent le langage du ralliement',
+      async (theme) => {
+        const tone = TONE_MAP[theme];
+        const { fixture, partiesSvc } = await createComponent();
+        TestBed.inject(ThemeToneService).activeTheme.set(theme);
+        const comp = fixture.componentInstance as any;
+        comp.setMode('ralliement');
+        comp.form.patchValue({ name: 'Soirée' });
+
+        partiesSvc.create.mockRejectedValueOnce(new Error('boom'));
+        await comp.submit();
+        expect(comp.error()).toBe(tone['partie.ralliement_save_error']);
+
+        partiesSvc.setCoverImage.mockRejectedValueOnce(new Error('boom'));
+        await comp.onCoverFileSelected({
+          target: { files: [new File([new Uint8Array(10)], 'c.png', { type: 'image/png' })], value: '' },
+        });
+        await comp.submit();
+        expect(comp.error()).toBe(tone['partie.ralliement_created_but_cover_failed']);
+      },
+    );
+
+    it('une quête garde ses messages d’échec d’origine', async () => {
+      const { fixture, partiesSvc } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      comp.form.patchValue({ name: 'Ma quête' });
+      partiesSvc.create.mockRejectedValueOnce(new Error('boom'));
+      await comp.submit();
+      expect(comp.error()).toBe(TONE_MAP['grimoire-emeraude']['partie.save_error']);
+    });
+  });
+
+  describe('titre contextuel selon le mode (Story 38.4)', () => {
+    const settle = async (fixture: { detectChanges: () => void; whenStable: () => Promise<unknown> }) => {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+    };
+
+    it.each(THEMES)('création, thème %s : le titre suit la bascule quête / ralliement', async (theme) => {
+      const { fixture } = await createComponent();
+      TestBed.inject(ThemeToneService).activeTheme.set(theme);
+      const nav = TestBed.inject(ContextualNavService);
+      const tone = TONE_MAP[theme];
+      await settle(fixture);
+      expect(nav.title()).toBe(tone['partie.new_title']);
+
+      (fixture.componentInstance as any).setMode('ralliement');
+      await settle(fixture);
+      expect(nav.title()).toBe(tone['partie.ralliement_new_title']);
+
+      (fixture.componentInstance as any).setMode('quest');
+      await settle(fixture);
+      expect(nav.title()).toBe(tone['partie.new_title']);
+    });
+
+    it('édition d’un ralliement : titre de modification du ralliement, nom de la partie en sous-titre', async () => {
+      const { fixture } = await createComponent('p1', {
+        partie: { gameSystemId: 'ralliement', kind: 'ONE_SHOT' },
+      });
+      await settle(fixture);
+      const nav = TestBed.inject(ContextualNavService);
+      const tone = TestBed.inject(ThemeToneService).tone();
+      expect(nav.title()).toBe(tone['partie.ralliement_edit_title']);
+      expect(nav.subtitle()).toBe('La Guilde des Ombres');
+    });
+
+    it('édition : aucun titre (donc aucun mot de quête) tant que la partie n’est pas chargée', async () => {
+      let resolve!: (p: PartieDto) => void;
+      const getPromise = new Promise<PartieDto>((r) => (resolve = r));
+      const { fixture } = await createComponent('p1', { getPromise });
+      await settle(fixture);
+      const nav = TestBed.inject(ContextualNavService);
+      expect(nav.title()).toBeNull();
+
+      resolve({ ...PARTIE, gameSystemId: 'ralliement', kind: 'ONE_SHOT' });
+      await settle(fixture);
+      await settle(fixture);
+      expect(nav.title()).toBe(
+        TestBed.inject(ThemeToneService).tone()['partie.ralliement_edit_title'],
+      );
+    });
+
+    it('édition d’une quête : titre inchangé', async () => {
+      const { fixture } = await createComponent('p1');
+      await settle(fixture);
+      const nav = TestBed.inject(ContextualNavService);
+      const tone = TestBed.inject(ThemeToneService).tone();
+      expect(nav.title()).toBe(tone['partie.edit_title']);
+      expect(nav.subtitle()).toBe('La Guilde des Ombres');
     });
   });
 });

@@ -330,6 +330,16 @@ export const foretAncienne: Record<ToneKey, string> = {
   'partie.ralliement_kind_ONE_SHOT': 'La halte au gué',
   'partie.ralliement_kind_CAMPAGNE_EPISODIQUE': 'La grande transhumance',
   'partie.ralliement_submit_btn': 'Allumer la veillée',
+  /* — page d'un ralliement (Story 38.4) : titres de formulaire et variantes sans mot de quête — */
+  'partie.ralliement_new_title': 'Nouvelle veillée',
+  'partie.ralliement_edit_title': 'Rebattre la veillée',
+  'partie.ralliement_no_description': 'La veillée garde ses secrets.',
+  'partie.ralliement_status_closed_label': 'Cette veillée est achevée.',
+  'identity.ralliement_homonymy_warning':
+    'Un autre voyageur de cette veillée porte le même nom affiché que toi.',
+  'partie.ralliement_save_error': 'Cette veillée n’a pu être allumée. Réessaie.',
+  'partie.ralliement_created_but_cover_failed':
+    'La veillée est bien allumée, mais son image n’a pu prendre racine. Tu peux la redéposer ici.',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine clairière',
   'partie.no_session': "Aucune clairière réservée. L'écureuil cherche encore.",

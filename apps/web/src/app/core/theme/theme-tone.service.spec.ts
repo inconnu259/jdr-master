@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { ThemeToneService } from './theme-tone.service';
 import { THEME_NAMES, THEMES, TONE_MAP, type Theme } from './tones';
+import { NON_JDR_BANNED_WORDS } from './non-jdr-words.fixture';
 
 describe('ThemeToneService', () => {
   afterEach(() => {
@@ -1210,6 +1211,52 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
       }
       // Le groupe de la bascule est nommé (annoncé aux lecteurs d’écran).
       expect(TONE_MAP[theme]['partie.mode_label'], theme).toBeTruthy();
+    }
+  });
+
+  // Story 38.4 : titres de formulaire et variantes de la page d'un ralliement (UX-DR17).
+  const RALLIEMENT_PAGE_KEYS = [
+    'partie.ralliement_save_error',
+    'partie.ralliement_created_but_cover_failed',
+    'partie.ralliement_new_title',
+    'partie.ralliement_edit_title',
+    'partie.ralliement_no_description',
+    'partie.ralliement_status_closed_label',
+    'identity.ralliement_homonymy_warning',
+  ];
+
+  it('Story 38.4 : les variantes de la page d’un ralliement existent, avec trois voix distinctes', () => {
+    for (const key of RALLIEMENT_PAGE_KEYS) {
+      const valeurs = THEMES.map((theme) => TONE_MAP[theme][key]);
+      for (const [i, valeur] of valeurs.entries()) {
+        expect(valeur, `${THEMES[i]} / ${key}`).toBeTruthy();
+      }
+      expect(new Set(valeurs).size, key).toBe(THEMES.length);
+    }
+  });
+
+  it('Story 38.4 : aucun mot de JDR ni de quête dans les textes propres au ralliement', () => {
+    const interdit = NON_JDR_BANNED_WORDS;
+    for (const theme of THEMES) {
+      const cles = Object.keys(TONE_MAP[theme]).filter(
+        (key) => key.includes('ralliement') && !key.startsWith('partie.mode_'),
+      );
+      for (const key of cles) {
+        expect(interdit.test(TONE_MAP[theme][key]), `${theme} / ${key}`).toBe(false);
+      }
+    }
+  });
+
+  it('Story 38.4 : les titres de création et de modification nomment le ralliement du thème', () => {
+    const attendu: Record<Theme, [string, string]> = {
+      'grimoire-emeraude': ['Nouveau ralliement', 'ralliement'],
+      'foret-ancienne': ['Nouvelle veillée', 'veillée'],
+      'atelier-cuivre': ['Nouveau rassemblement', 'rassemblement'],
+    };
+    for (const theme of THEMES) {
+      const [creation, mot] = attendu[theme];
+      expect(TONE_MAP[theme]['partie.ralliement_new_title'], theme).toBe(creation);
+      expect(TONE_MAP[theme]['partie.ralliement_edit_title'], theme).toContain(mot);
     }
   });
 });
