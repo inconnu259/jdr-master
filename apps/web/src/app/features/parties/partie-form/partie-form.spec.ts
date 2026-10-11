@@ -7,6 +7,7 @@ import { PartieForm } from './partie-form';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 const PARTIE: PartieDto = {
   id: 'p1',
@@ -540,6 +541,253 @@ describe('PartieForm', () => {
       fixture.detectChanges();
 
       expect(fixture.nativeElement.querySelector('mat-progress-bar')).not.toBeNull();
+    });
+
+    describe('bannière d’aperçu et puces (Story 38.3)', () => {
+      const chipTexts = (root: HTMLElement): string[] =>
+        Array.from(root.querySelectorAll('.cover-chip')).map((el) =>
+          (el.textContent ?? '').trim(),
+        );
+
+      // Les stubs globaux sont restaurés après chaque test (jsdom peut ne pas définir ces méthodes).
+      const originalCreate = URL.createObjectURL;
+      const originalRevoke = URL.revokeObjectURL;
+
+      beforeEach(() => {
+        let n = 0;
+        URL.createObjectURL = vi.fn(() => `blob:test-${++n}`);
+        URL.revokeObjectURL = vi.fn();
+      });
+
+      afterEach(() => {
+        URL.createObjectURL = originalCreate;
+        URL.revokeObjectURL = originalRevoke;
+      });
+
+      /** Simule le choix d'un fichier sur le vrai champ du gabarit (teste le câblage `(change)`). */
+      const pickOnInput = (root: HTMLElement, file: File): void => {
+        const input = root.querySelector('label.cover-chip input[type="file"]') as HTMLInputElement;
+        Object.defineProperty(input, 'files', { value: [file], configurable: true });
+        input.dispatchEvent(new Event('change'));
+      };
+
+      it('câblage (change) — création : le champ fichier retient le fichier et fait apparaître « Retirer »', async () => {
+        const { fixture } = await createComponent(null);
+        const comp = fixture.componentInstance as any;
+        pickOnInput(fixture.nativeElement, validFile());
+        await vi.waitFor(() => expect(comp.pendingCoverPreview()).toBe('blob:test-1'));
+        fixture.detectChanges();
+        expect(chipTexts(fixture.nativeElement)).toEqual(['Retirer', 'Changer']);
+      });
+
+      it('câblage (change) — édition : le champ fichier appelle setCoverImage avec l’id de la partie', async () => {
+        const { fixture, partiesSvc } = await createComponent('p1');
+        const file = validFile();
+        pickOnInput(fixture.nativeElement, file);
+        await vi.waitFor(() => expect(partiesSvc.setCoverImage).toHaveBeenCalledWith('p1', file));
+      });
+
+      it('un fichier refusé (type ou taille) laisse l’aperçu et le fichier en attente intacts', async () => {
+        const { fixture } = await createComponent(null);
+        const comp = fixture.componentInstance as any;
+        const first = validFile();
+        await comp.onCoverFileSelected(fileEvent(first));
+        const preview = comp.pendingCoverPreview();
+
+        await comp.onCoverFileSelected(
+          fileEvent(new File(['x'], 'doc.txt', { type: 'text/plain' })),
+        );
+        expect(comp.coverError()).toBeTruthy();
+        expect(comp.pendingCoverFile()).toBe(first);
+        expect(comp.pendingCoverPreview()).toBe(preview);
+
+        const huge = new File(['x'], 'big.jpg', { type: 'image/jpeg' });
+        Object.defineProperty(huge, 'size', { value: 5 * 1024 * 1024 + 1 });
+        await comp.onCoverFileSelected(fileEvent(huge));
+        expect(comp.pendingCoverFile()).toBe(first);
+        expect(comp.pendingCoverPreview()).toBe(preview);
+        expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+      });
+
+      it('édition : retirer la couverture enregistrée fait disparaître la puce « Retirer »', async () => {
+        const { fixture, partiesSvc } = await createComponent('p1', {
+          partie: { coverImageVersion: 'v9' },
+        });
+        const comp = fixture.componentInstance as any;
+        expect(comp.hasPersonalCover()).toBe(true);
+
+        (fixture.nativeElement.querySelector('button.cover-chip') as HTMLButtonElement).click();
+        await vi.waitFor(() => expect(partiesSvc.removeCoverImage).toHaveBeenCalledWith('p1'));
+        await vi.waitFor(() => expect(comp.hasPersonalCover()).toBe(false));
+        fixture.detectChanges();
+        expect(chipTexts(fixture.nativeElement)).toEqual(['Changer']);
+      });
+
+      it('édition : si le retrait échoue, la puce « Retirer » reste et l’erreur s’affiche', async () => {
+        const { fixture, partiesSvc } = await createComponent('p1', {
+          partie: { coverImageVersion: 'v9' },
+        });
+        const comp = fixture.componentInstance as any;
+        partiesSvc.removeCoverImage.mockRejectedValueOnce(new Error('boom'));
+
+        (fixture.nativeElement.querySelector('button.cover-chip') as HTMLButtonElement).click();
+        await vi.waitFor(() => expect(comp.coverError()).toBeTruthy());
+        fixture.detectChanges();
+
+        expect(comp.hasPersonalCover()).toBe(true);
+        expect(chipTexts(fixture.nativeElement)).toEqual(['Retirer', 'Changer']);
+        expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(
+          comp.coverError(),
+        );
+      });
+
+      const themeCases = [
+        { theme: 'grimoire-emeraude', changer: 'Changer', retirer: 'Retirer' },
+        { theme: 'foret-ancienne', changer: 'Échanger', retirer: 'Ôter' },
+        { theme: 'atelier-cuivre', changer: 'Substituer', retirer: 'Démonter' },
+      ] as const;
+
+      for (const t of themeCases) {
+        it(`thème ${t.theme} : textes des puces suivent le thème et le nom accessible commence par le mot visible`, async () => {
+          const { fixture } = await createComponent('p1', { partie: { coverImageVersion: 'v9' } });
+          TestBed.inject(ThemeToneService).activeTheme.set(t.theme);
+          fixture.detectChanges();
+
+          const root = fixture.nativeElement as HTMLElement;
+          expect(chipTexts(root)).toEqual([t.retirer, t.changer]);
+          // WCAG 2.5.3 : le nom accessible commence par le mot affiché.
+          expect(
+            root.querySelector('button.cover-chip')?.getAttribute('aria-label'),
+          ).toMatch(new RegExp(`^${t.retirer} — `));
+          expect(
+            root.querySelector('label.cover-chip input')?.getAttribute('aria-label'),
+          ).toMatch(new RegExp(`^${t.changer} — `));
+        });
+      }
+
+      it('création : pendant l’envoi du formulaire (saving), puces et champ fichier sont désactivés', async () => {
+        const { fixture } = await createComponent(null);
+        const comp = fixture.componentInstance as any;
+        await comp.onCoverFileSelected(fileEvent(validFile()));
+        comp.saving.set(true);
+        fixture.detectChanges();
+
+        const root = fixture.nativeElement as HTMLElement;
+        expect((root.querySelector('button.cover-chip') as HTMLButtonElement).disabled).toBe(true);
+        expect((root.querySelector('.cover-chip input') as HTMLInputElement).disabled).toBe(true);
+        expect(root.querySelector('label.cover-chip')?.classList).toContain('cover-chip--disabled');
+      });
+
+      it('la destruction du composant révoque l’URL de blob du fichier en attente', async () => {
+        const { fixture } = await createComponent(null);
+        const comp = fixture.componentInstance as any;
+        await comp.onCoverFileSelected(fileEvent(validFile()));
+
+        fixture.destroy();
+
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:test-1');
+      });
+
+      const cases: { label: string; editId: string | null; partie?: Partial<PartieDto> }[] = [
+        { label: 'création', editId: null },
+        { label: 'édition d’une quête', editId: 'p1' },
+        {
+          label: 'édition d’un ralliement',
+          editId: 'p1',
+          partie: { gameSystemId: 'ralliement', kind: 'ONE_SHOT' },
+        },
+      ];
+
+      for (const c of cases) {
+        it(`${c.label} : la bannière grand format est le premier bloc, sans « Retirer » ni champ visible`, async () => {
+          const { fixture } = await createComponent(c.editId, { partie: c.partie });
+          const root = fixture.nativeElement as HTMLElement;
+          const section = root.querySelector('.cover-section') as HTMLElement;
+          expect(section).not.toBeNull();
+          expect(section.querySelector('app-party-banner')?.getAttribute('mode')).toBe('large');
+          expect(section.querySelector('.cover-frame app-party-banner')).not.toBeNull();
+          // « Changer » seul ; la bannière (aria-hidden) ne contient aucune puce.
+          expect(chipTexts(root)).toEqual(['Changer']);
+          expect(section.querySelector('app-party-banner .cover-chip')).toBeNull();
+          expect(section.querySelector('button.cover-chip')).toBeNull();
+        });
+      }
+
+      it('le champ fichier est dans la puce « Changer », ni hidden ni display:none, accessible au clavier', async () => {
+        const { fixture } = await createComponent(null);
+        const input = fixture.nativeElement.querySelector(
+          'label.cover-chip input[type="file"]',
+        ) as HTMLInputElement;
+        expect(input).not.toBeNull();
+        expect(input.hidden).toBe(false);
+        expect(input.hasAttribute('hidden')).toBe(false);
+        expect(input.style.display).not.toBe('none');
+        expect(input.tabIndex).toBeGreaterThanOrEqual(0);
+        expect(input.getAttribute('accept')).toBe('image/jpeg,image/png,image/webp');
+        // Nom accessible issu de la clé de ton `partie.cover_change`.
+        expect(input.getAttribute('aria-label')).toBe('Changer — Changer l’enluminure');
+      });
+
+      it('création : après le choix d’un fichier, « Retirer » apparaît à côté de « Changer »', async () => {
+        const { fixture } = await createComponent(null);
+        const comp = fixture.componentInstance as any;
+        await comp.onCoverFileSelected(fileEvent(validFile()));
+        fixture.detectChanges();
+
+        const root = fixture.nativeElement as HTMLElement;
+        expect(chipTexts(root)).toEqual(['Retirer', 'Changer']);
+        const remove = root.querySelector('button.cover-chip') as HTMLButtonElement;
+        expect(remove.type).toBe('button');
+        expect(remove.getAttribute('aria-label')).toBe('Retirer — Retirer l’enluminure');
+        // L'aperçu du fichier en attente remplace la bannière générée, dans le même cadre.
+        expect(root.querySelector('.cover-frame img.cover-image')?.getAttribute('src')).toBe(
+          'blob:test-1',
+        );
+        expect(root.querySelector('app-party-banner')).toBeNull();
+      });
+
+      it('création : « Retirer » ramène la bannière générée et révoque l’URL de blob', async () => {
+        const { fixture } = await createComponent(null);
+        const comp = fixture.componentInstance as any;
+        await comp.onCoverFileSelected(fileEvent(validFile()));
+        fixture.detectChanges();
+
+        (fixture.nativeElement.querySelector('button.cover-chip') as HTMLButtonElement).click();
+        fixture.detectChanges();
+
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:test-1');
+        const root = fixture.nativeElement as HTMLElement;
+        expect(root.querySelector('app-party-banner')).not.toBeNull();
+        expect(chipTexts(root)).toEqual(['Changer']);
+      });
+
+      it('création : une seconde sélection révoque l’URL de blob précédente', async () => {
+        const { fixture } = await createComponent(null);
+        const comp = fixture.componentInstance as any;
+        await comp.onCoverFileSelected(fileEvent(validFile()));
+        await comp.onCoverFileSelected(fileEvent(validFile()));
+
+        expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:test-1');
+        expect(comp.pendingCoverPreview()).toBe('blob:test-2');
+      });
+
+      it('édition avec couverture enregistrée : « Retirer » et « Changer » sont proposés', async () => {
+        const { fixture } = await createComponent('p1', { partie: { coverImageVersion: 'v9' } });
+        expect(chipTexts(fixture.nativeElement)).toEqual(['Retirer', 'Changer']);
+      });
+
+      it('pendant le dépôt, les deux puces et le champ fichier sont désactivés', async () => {
+        const { fixture } = await createComponent('p1', { partie: { coverImageVersion: 'v9' } });
+        const comp = fixture.componentInstance as any;
+        comp.coverSaving.set(true);
+        fixture.detectChanges();
+
+        const root = fixture.nativeElement as HTMLElement;
+        expect((root.querySelector('button.cover-chip') as HTMLButtonElement).disabled).toBe(true);
+        expect((root.querySelector('.cover-chip input') as HTMLInputElement).disabled).toBe(true);
+        expect(root.querySelector('label.cover-chip')?.classList).toContain('cover-chip--disabled');
+      });
     });
   });
 

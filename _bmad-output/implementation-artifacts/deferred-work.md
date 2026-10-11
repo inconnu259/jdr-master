@@ -282,3 +282,7 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-38-2-choisir-quete-ou-ralliement-a-la-creation.md`
   summary: Cover the admin cover upload/removal on a ralliement end to end (e2e PUT/DELETE `/parties/:id/cover`, member refused) when the cover story lands.
   evidence: Only the policy cells `PARTIE_COVER_UPDATE/READ` are pinned for ralliement today.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-38-3-changer-la-couverture-depuis-la-banniere.md`
+  summary: By hand in a visible browser window: Tab to the « Changer » chip in the partie form and confirm the focus ring, in the three themes and on a bright cover image; also confirm the chip words (Changer/Échanger/Substituer, Retirer/Ôter/Démonter).
+  evidence: The automated Chrome session ran in a background tab (viewport 0, screenshots timing out) and its Tab key press did not reach the chip; only DOM metrics were checked.

@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
@@ -135,6 +135,20 @@ export class PartieForm implements OnInit {
    *  existe, puisqu'un dépôt a besoin d'un identifiant à cibler. */
   protected readonly pendingCoverFile = signal<File | null>(null);
   protected readonly pendingCoverPreview = signal<string | null>(null);
+  /** Une image personnelle existe (couverture enregistrée ou fichier en attente) : la puce
+   *  « Retirer » n'apparaît alors qu'à côté de « Changer » (Story 38.3). */
+  protected readonly hasPersonalCover = computed(
+    () => !!this.coverImageVersion() || !!this.pendingCoverFile(),
+  );
+  /** Puces et champ fichier verrouillés pendant un dépôt ou l'envoi du formulaire : en création,
+   *  changer le fichier en attente au milieu de `submit()` désynchroniserait aperçu et envoi. */
+  protected readonly coverLocked = computed(() => this.coverSaving() || this.saving());
+
+  constructor() {
+    // Une URL de blob ne se révoque jamais toute seule : sans cela, quitter la page (navigation,
+    // annulation) avec un fichier en attente la ferait fuir.
+    inject(DestroyRef).onDestroy(() => this.clearPendingCover());
+  }
 
   /** Mode courant (Story 38.2). Création : choisi par la bascule (quête par défaut). Édition :
    *  imposé par la famille de la partie, la bascule n'existe pas. */
@@ -321,6 +335,9 @@ export class PartieForm implements OnInit {
     const id = this.editId();
     if (!id) {
       // Création : rien à cibler encore, on retient le fichier pour l'après-`create()`.
+      // Seconde sélection : l'URL de blob précédente ne servira plus, on la révoque (fuite sinon).
+      const previous = this.pendingCoverPreview();
+      if (previous) URL.revokeObjectURL(previous);
       this.pendingCoverFile.set(file);
       this.pendingCoverPreview.set(URL.createObjectURL(file));
       return;
