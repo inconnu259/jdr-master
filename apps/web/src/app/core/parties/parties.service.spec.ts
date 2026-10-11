@@ -46,6 +46,15 @@ describe('PartiesService (front)', () => {
     expect(await p).toEqual([partie]);
   });
 
+  it('list() sans rôle → GET /parties (toutes les parties, sans paramètre) avec withCredentials (Story 38.5)', async () => {
+    const p = service.list();
+    const req = http.expectOne(`${API}/parties`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush([partie]);
+    expect(await p).toEqual([partie]);
+  });
+
   it('create → POST avec le payload', async () => {
     const payload = { name: 'La Nuit', kind: 'ONE_SHOT' as const, gameSystemId: 'draconis' };
     const p = service.create(payload);

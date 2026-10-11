@@ -3,6 +3,7 @@
 // laisse ts-jest transformer `@master-jdr/*`.
 import {
   GAME_SYSTEMS,
+  badgeOf,
   familyOf,
   hasCapability,
   isOpenForCreation,
@@ -70,6 +71,15 @@ describe('registre GAME_SYSTEMS (Story 37.5)', () => {
       'ryuutama',
       'ralliement',
     ]);
+  });
+
+  it("badge (Story 38.5) : R1 pour ryuutama, L1 pour ralliement, aucun pour les autres, jamais d'exception", () => {
+    expect(badgeOf('ryuutama')).toBe('R1');
+    expect(badgeOf('ralliement')).toBe('L1');
+    for (const id of ['draconis', 'conte-de-minuit', 'esteren', 'inconnu']) {
+      expect(badgeOf(id)).toBeNull();
+    }
+    expect(() => badgeOf('inconnu')).not.toThrow();
   });
 
   it('un id inconnu ne lève jamais : null / false / [] / false', () => {

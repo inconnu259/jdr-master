@@ -89,7 +89,6 @@ export class Shell implements OnInit {
 
   // Charge les parties (alimente la liste unifiée du dashboard, Story 29.1).
   ngOnInit(): void {
-    void this.myPartiesSvc.refreshMjParties();
-    void this.myPartiesSvc.refreshPlayerParties();
+    void this.myPartiesSvc.refreshAll();
   }
 }

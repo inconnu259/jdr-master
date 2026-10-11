@@ -279,6 +279,18 @@ export const atelierCuivre: Record<ToneKey, string> = {
   'dashboard.filter_role_all': 'Tous les postes',
   'dashboard.filter_status_label': 'État de service',
   'dashboard.filter_status_all': 'Tous les états',
+  'dashboard.filter_genre_label': 'Genre',
+  'dashboard.filter_genre_all': 'Tous',
+  'dashboard.genre_quetes': 'Missions',
+  'dashboard.genre_ralliements': 'Rassemblements',
+  'dashboard.group_by_type_label': 'Grouper par type',
+  /* Libellés de rôle d’un ralliement : mots de travail PROVISOIRES (epic 38), identiques dans les
+     trois thèmes en attendant les variantes validées. Hôte/Invité = rencontre isolée ; Admin/Membre
+     = groupe, et aussi les valeurs du filtre « Rang ». */
+  'dashboard.role_ralliement_host': 'Hôte',
+  'dashboard.role_ralliement_guest': 'Invité',
+  'dashboard.role_ralliement_admin': 'Admin',
+  'dashboard.role_ralliement_member': 'Membre',
   'dashboard.sort_urgence': 'Priorité',
   'dashboard.sort_date': 'Échéance',
   'dashboard.sort_nom': 'Désignation',

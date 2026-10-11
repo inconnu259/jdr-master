@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 import { Join } from './join';
 import { AuthService } from '../../core/auth/auth.service';
@@ -95,7 +95,7 @@ describe('Join — structure, états et annonces (Story 34.3)', () => {
             join: options.join ?? vi.fn(),
           },
         },
-        { provide: MyPartiesService, useValue: { refreshPlayerParties: vi.fn() } },
+        { provide: MyPartiesService, useValue: { refreshAll: vi.fn() } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(Join);
@@ -176,6 +176,25 @@ describe('Join — structure, états et annonces (Story 34.3)', () => {
     expect(el.querySelector('p.error[role="alert"]')?.textContent).toContain(
       'Impossible de rejoindre',
     );
+  });
+
+  it('connecté, join() réussi : recharge la liste des parties (refreshAll, Story 38.5) avant de naviguer', async () => {
+    const { fixture, el } = await setup({
+      preview: validPreview,
+      user: { displayName: 'Inès' },
+      join: vi.fn().mockResolvedValue({ partieId: 'p9' }),
+    });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    await settle(fixture);
+
+    (el.querySelector('.auth-primary') as HTMLButtonElement).click();
+    await settle(fixture);
+
+    const myParties = TestBed.inject(MyPartiesService) as unknown as {
+      refreshAll: ReturnType<typeof vi.fn>;
+    };
+    expect(myParties.refreshAll).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith(['/parties', 'p9']);
   });
 
   it('lien expiré : raison en texte simple sans role="alert", aucune action', async () => {

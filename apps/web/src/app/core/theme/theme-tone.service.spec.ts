@@ -907,6 +907,15 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'calendar.conflict_kind_unavailable',
     'calendar.compose_confirm_responses_many',
     'calendar.compose_confirm_responses_one',
+    // Story 38.5 : mots de travail provisoires des rôles d’un ralliement (identiques dans les trois
+    // thèmes en attendant les variantes validées) et libellés fonctionnels des filtres de la liste
+    'dashboard.filter_genre_label',
+    'dashboard.filter_genre_all',
+    'dashboard.group_by_type_label',
+    'dashboard.role_ralliement_host',
+    'dashboard.role_ralliement_guest',
+    'dashboard.role_ralliement_admin',
+    'dashboard.role_ralliement_member',
     // Gabarits structurels et libellés techniques
     'partie.signal_more_count',
     'parties.detail_link_expires_short',
@@ -1257,6 +1266,26 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
       const [creation, mot] = attendu[theme];
       expect(TONE_MAP[theme]['partie.ralliement_new_title'], theme).toBe(creation);
       expect(TONE_MAP[theme]['partie.ralliement_edit_title'], theme).toContain(mot);
+    }
+  });
+
+  // Story 38.5 : filtres « Genre » / « Rang » étendu, regroupement par type et rôles d'un ralliement.
+  it('Story 38.5 : les genres de la liste ont une voix par thème, et les rôles du ralliement leurs mots de travail', () => {
+    const genres: Record<Theme, [string, string]> = {
+      'grimoire-emeraude': ['Quêtes', 'Ralliements'],
+      'foret-ancienne': ['Sentiers', 'Veillées'],
+      'atelier-cuivre': ['Missions', 'Rassemblements'],
+    };
+    for (const theme of THEMES) {
+      const tone = TONE_MAP[theme];
+      expect(tone['dashboard.genre_quetes'], theme).toBe(genres[theme][0]);
+      expect(tone['dashboard.genre_ralliements'], theme).toBe(genres[theme][1]);
+      expect(tone['dashboard.filter_genre_label'], theme).toBe('Genre');
+      expect(tone['dashboard.group_by_type_label'], theme).toBe('Grouper par type');
+      expect(tone['dashboard.role_ralliement_host'], theme).toBe('Hôte');
+      expect(tone['dashboard.role_ralliement_guest'], theme).toBe('Invité');
+      expect(tone['dashboard.role_ralliement_admin'], theme).toBe('Admin');
+      expect(tone['dashboard.role_ralliement_member'], theme).toBe('Membre');
     }
   });
 });

@@ -240,6 +240,19 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
       expect(guestAll.find((p) => p.id === id)?.role).toBe('member');
     });
 
+    it('un ralliement tout juste créé figure dans GET /parties (sans rôle) avec le rôle admin et sa famille (Story 38.5)', async () => {
+      const owner = await h.createUser('liste-neuve');
+      const { id } = await h.createPartie(owner, 'ONE_SHOT', 'liste-neuve', 'ralliement');
+      const all = body<PartieDtoLike[]>(await owner.agent.get('/parties').expect(200));
+      const created = all.find((p) => p.id === id);
+      expect(created?.role).toBe('admin');
+      expect(created?.gameSystemId).toBe('ralliement');
+      expect(created?.kind).toBe('ONE_SHOT');
+      // Aucun signal pour lui : la liste des signaux est bâtie sur les listes par rôle seulement.
+      const signals = body<SignalsDto>(await owner.agent.get('/me/party-signals').expect(200));
+      expect(Object.keys(signals)).not.toContain(id);
+    });
+
     it('party-signals n’émet aucune entrée pour un ralliement', async () => {
       const owner = await h.createUser('signaux');
       const { id } = await h.createPartie(owner, 'ONE_SHOT', 'signaux', 'ralliement');

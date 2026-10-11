@@ -44,10 +44,12 @@ export class PartiesService {
     this._changed.update((v) => v + 1);
   }
 
-  list(role: 'mj' | 'player'): Promise<PartieDto[]> {
-    return firstValueFrom(
-      this.http.get<PartieDto[]>(`${API}/parties?role=${role}`, { withCredentials: true }),
-    );
+  /** Sans rôle (Story 38.5) : TOUTES les parties de l'utilisateur, chacune avec son rôle
+   *  (`mj | player | admin | member`) — une seule lecture, ralliements inclus. Avec un rôle, la
+   *  liste historique par rôle (qui exclut les ralliements). */
+  list(role?: 'mj' | 'player'): Promise<PartieDto[]> {
+    const url = role ? `${API}/parties?role=${role}` : `${API}/parties`;
+    return firstValueFrom(this.http.get<PartieDto[]>(url, { withCredentials: true }));
   }
 
   // Plusieurs composants montés simultanément peuvent recharger sur le même changed() (cf. bug

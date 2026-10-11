@@ -125,7 +125,13 @@ export interface GameSystemEntry {
   /** Le système peut-il être choisi à la création d'une partie (ou par un changement de
    *  système) ? */
   openForCreation: boolean;
+  /** Badge rond du système dans la liste des parties (Story 38.5) : `R1` (Ryuutama), `L1`
+   *  (ralliement) ; absent ou `null` = pas de badge, la seule pastille texte suffit. */
+  badge?: GameSystemBadge | null;
 }
+
+/** Glyphes de badge de système (maquettes `badge-R1-…` et `badge-L1-…`). */
+export type GameSystemBadge = 'R1' | 'L1';
 
 const JDR_KINDS = ['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'] as const;
 
@@ -172,6 +178,7 @@ export const GAME_SYSTEMS = [
     ],
     kinds: JDR_KINDS,
     openForCreation: true,
+    badge: 'R1',
   },
   {
     id: 'esteren',
@@ -188,6 +195,7 @@ export const GAME_SYSTEMS = [
     capabilities: [],
     kinds: ['ONE_SHOT', 'CAMPAGNE_EPISODIQUE'],
     openForCreation: true,
+    badge: 'L1',
   },
 ] as const satisfies readonly GameSystemEntry[];
 
@@ -217,6 +225,12 @@ export function kindsOf(id: string): readonly PartieKind[] {
  *  `id` inconnu → `false`. */
 export function isOpenForCreation(id: string): boolean {
   return findGameSystem(id)?.openForCreation ?? false;
+}
+
+/** Glyphe de badge du système (Story 38.5), ou `null` s'il n'en a pas. `id` inconnu → `null`,
+ *  jamais d'exception. */
+export function badgeOf(id: string): GameSystemBadge | null {
+  return findGameSystem(id)?.badge ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

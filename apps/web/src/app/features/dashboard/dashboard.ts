@@ -19,17 +19,19 @@ import type {
   InvitationDto,
   ListViewMode,
   PartieDto,
+  PartieRole,
   PartieSort,
   PartieStatus,
   PartySignalCode,
 } from '@master-jdr/shared';
-import { PARTIE_SORTS } from '@master-jdr/shared';
+import { PARTIE_SORTS, familyOf } from '@master-jdr/shared';
 import {
   ListControlBar,
   type ListControlBarSortOption,
 } from '../../shared/list-control-bar/list-control-bar';
 import { PartyBanner } from '../../shared/party-banner/party-banner';
 import { PartyCountdown } from '../../shared/party-countdown/party-countdown';
+import { SystemBadge, systemBadgeGlyph } from '../../shared/system-badge/system-badge';
 import { countdownProgress } from '../../core/parties/party-countdown.util';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { InvitationsService } from '../../core/invitations/invitations.service';
@@ -95,6 +97,7 @@ export interface PartieTileVm {
     ListControlBar,
     PartyBanner,
     PartyCountdown,
+    SystemBadge,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
@@ -118,9 +121,75 @@ export class Dashboard implements OnInit {
   protected readonly kind = (kind: PartieDto['kind']): string =>
     this.theme.tone()[partieKindLabelKey(kind)] ?? kind;
 
+  /** Un ralliement n'est pas une quête de JDR : sa famille vient du registre des systèmes, jamais
+   *  d'un identifiant en dur (Story 38.5). Un système inconnu retombe sur « quête » (JDR hérité). */
+  private static isRalliement(partie: PartieDto): boolean {
+    return familyOf(partie.gameSystemId) === 'ralliement';
+  }
+
+  private static genreOf(partie: PartieDto): 'quete' | 'ralliement' {
+    return Dashboard.isRalliement(partie) ? 'ralliement' : 'quete';
+  }
+
+  /** Sous-titre de tuile (Story 38.5, UX-DR14) : la seule nature — « Chronique » pour une quête,
+   *  « La convergence des Sortilèges » pour un ralliement. Le nom du système n'y figure plus : il
+   *  est porté par la pastille `.system-chip`. */
+  protected subtitle(partie: PartieDto): string {
+    const tone = this.theme.tone();
+    if (Dashboard.isRalliement(partie)) {
+      return tone[`partie.ralliement_kind_${partie.kind}`] ?? partie.kind;
+    }
+    return this.kind(partie.kind);
+  }
+
+  /** Le badge rond du système existe-t-il pour cette partie ? (R1 Ryuutama, L1 ralliement ; rien
+   *  pour Draconis, qui garde la seule pastille texte.) */
+  protected hasSystemBadge(partie: PartieDto): boolean {
+    return systemBadgeGlyph(partie.gameSystemId) !== null;
+  }
+
+  /** Mot du rôle dans la tuile — JDR : Maître / Héros (clés thématisées, inchangées). Ralliement :
+   *  rencontre isolée → Hôte / Invité, groupe → Admin / Membre (Story 38.5). Un seul endroit
+   *  pour l'indicateur de rôle ET la sous-ligne du mode liste. */
+  protected roleLabel(partie: PartieDto): string {
+    const tone = this.theme.tone();
+    switch (partie.role) {
+      case 'mj':
+        return tone['dashboard.role_mj'];
+      case 'player':
+        return tone['dashboard.role_player'];
+      case 'admin':
+        return tone[
+          partie.kind === 'ONE_SHOT'
+            ? 'dashboard.role_ralliement_host'
+            : 'dashboard.role_ralliement_admin'
+        ];
+      case 'member':
+        return tone[
+          partie.kind === 'ONE_SHOT'
+            ? 'dashboard.role_ralliement_guest'
+            : 'dashboard.role_ralliement_member'
+        ];
+      default: {
+        const exhaustive: never = partie.role;
+        return exhaustive;
+      }
+    }
+  }
+
+  /** Icône du rôle : bouclier pour celui qui administre (mj, admin), silhouette pour les autres. */
+  protected roleIcon(partie: PartieDto): string {
+    return partie.role === 'mj' || partie.role === 'admin' ? 'shield' : 'person';
+  }
+
   /** Critères de filtre (AC2/AC5) — purement transitoires (écran), jamais mémorisés sur le compte
    *  (EXPERIENCE.md §4.2 : seul le tri par défaut vit dans les préférences). */
-  protected readonly roleFilter = signal<'all' | 'mj' | 'player'>('all');
+  protected readonly roleFilter = signal<'all' | PartieRole>('all');
+  /** Genre (Story 38.5) : quêtes de JDR ou ralliements — transitoire, comme les autres filtres. */
+  protected readonly genreFilter = signal<'all' | 'quete' | 'ralliement'>('all');
+  /** « Grouper par type » (Story 38.5) : deux sections Quêtes / Ralliements. Transitoire, décoché
+   *  par défaut, et jamais compté comme un écart au défaut. */
+  protected readonly groupByType = signal(false);
   protected readonly statusFilter = signal<'all' | PartieStatus>('all');
   /** Révélation temporaire des parties terminées (AC6, « restent accessibles à la demande ») —
    *  n'écrit jamais la préférence `hideFinishedParties`, contrairement à la case à cocher. */
@@ -152,7 +221,8 @@ export class Dashboard implements OnInit {
    *  `hideFinishedParties` se persistent immédiatement à chaque changement (patron fire-and-forget
    *  déjà établi) et ne peuvent donc jamais s'écarter d'eux-mêmes après coup (Dev Notes). */
   protected readonly hasDeviatedFromDefault = computed(
-    () => this.roleFilter() !== 'all' || this.statusFilter() !== 'all',
+    () =>
+      this.roleFilter() !== 'all' || this.genreFilter() !== 'all' || this.statusFilter() !== 'all',
   );
   /** Densité d'affichage (AC1) — une seule classe CSS pilotant toutes les grilles de la page. */
   protected readonly gridDensityClass = computed(() => `grid--${this.partiesViewMode()}`);
@@ -164,8 +234,12 @@ export class Dashboard implements OnInit {
     if (!this.hideFinishedParties() || this.showFinishedOverride() || this.statusFilter() !== 'all')
       return false;
     const role = this.roleFilter();
+    const genre = this.genreFilter();
     return this.allParties().some(
-      (p) => p.status === 'TERMINEE' && (role === 'all' || p.role === role),
+      (p) =>
+        p.status === 'TERMINEE' &&
+        (role === 'all' || p.role === role) &&
+        (genre === 'all' || Dashboard.genreOf(p) === genre),
     );
   });
 
@@ -175,12 +249,14 @@ export class Dashboard implements OnInit {
    *  façon d'y accéder « à la demande », cohérente avec le bouton de révélation. */
   private readonly filteredParties = computed<PartieDto[]>(() => {
     const role = this.roleFilter();
+    const genre = this.genreFilter();
     const status = this.statusFilter();
     const query = this.searchQuery().trim().toLowerCase();
     const hideFinished =
       this.hideFinishedParties() && !this.showFinishedOverride() && status === 'all';
     return this.allParties().filter((p) => {
       if (role !== 'all' && p.role !== role) return false;
+      if (genre !== 'all' && Dashboard.genreOf(p) !== genre) return false;
       if (status !== 'all' && p.status !== status) return false;
       if (hideFinished && p.status === 'TERMINEE') return false;
       if (query && !p.name.toLowerCase().includes(query)) return false;
@@ -278,6 +354,16 @@ export class Dashboard implements OnInit {
    *  'urgence' — trier par nom/date/type/statut à l'intérieur de 4 groupes n'aurait pas de sens
    *  pour un utilisateur qui veut un ordre global (Dev Notes, décision documentée). */
   protected readonly flatTiles = this.orderedTiles;
+
+  /** « Grouper par type » (Story 38.5) : les tuiles déjà triées et épinglées (favoris en tête),
+   *  simplement réparties par genre — chaque section garde donc l'ordre du tri choisi, sans les
+   *  intertitres d'urgence. Une section vide n'est pas rendue (cf. le gabarit). */
+  protected readonly questTiles = computed(() =>
+    this.orderedTiles().filter((t) => Dashboard.genreOf(t.partie) === 'quete'),
+  );
+  protected readonly ralliementTiles = computed(() =>
+    this.orderedTiles().filter((t) => Dashboard.genreOf(t.partie) === 'ralliement'),
+  );
 
   /** Libellé de thème d'un code de signal — clé `partie.signal_<code>` en minuscule. */
   protected signalLabel(code: PartySignalCode): string {
@@ -387,8 +473,7 @@ export class Dashboard implements OnInit {
    *  liste, là où les modes moyen/grand s'appuient sur les badges et `.status-indicator`.
    *  Le rôle y est repris parce que `.role-indicator` n'est pas rendu dans ce gabarit. */
   protected rowSummary(t: PartieTileVm): string {
-    const tone = this.theme.tone();
-    const role = t.partie.role === 'mj' ? tone['dashboard.role_mj'] : tone['dashboard.role_player'];
+    const role = this.roleLabel(t.partie);
     const detail = t.dominant ? this.badgeLabel(t.dominant, t.partie) : this.tintLabel(t.tint);
     return `${role} · ${detail}`;
   }
@@ -446,7 +531,7 @@ export class Dashboard implements OnInit {
   async accept(inv: InvitationDto): Promise<void> {
     await this.invitations.accept(inv.id);
     this.received.update((list) => list.filter((i) => i.id !== inv.id));
-    await this.myPartiesSvc.refreshPlayerParties();
+    await this.myPartiesSvc.refreshAll();
   }
 
   async decline(inv: InvitationDto): Promise<void> {
@@ -499,9 +584,10 @@ export class Dashboard implements OnInit {
   }
 
   /** Rétablit les filtres transitoires (Story 29.9, AC6) — seuls réglages comptés dans
-   *  `hasDeviatedFromDefault()`, jamais mémorisés côté compte. */
+   *  `hasDeviatedFromDefault()` (rôle, genre, statut), jamais mémorisés côté compte. */
   protected onResetRequested(): void {
     this.roleFilter.set('all');
+    this.genreFilter.set('all');
     this.statusFilter.set('all');
   }
 
@@ -514,8 +600,7 @@ export class Dashboard implements OnInit {
     return this.pendingFavorites().has(partieId);
   }
 
-  /** Favori (AC1) — rechargement ciblé selon le rôle de CETTE partie, jamais les deux listes
-   *  (même patron que `accept()`/`decline()`, qui ne rechargent que ce qui a pu changer). */
+  /** Favori (AC1) — rechargement de la liste unique (Story 38.5), quel que soit le rôle. */
   protected async toggleFavorite(partie: PartieDto): Promise<void> {
     if (this.pendingFavorites().has(partie.id)) return;
     this.pendingFavorites.update((s) => new Set(s).add(partie.id));
@@ -525,8 +610,9 @@ export class Dashboard implements OnInit {
       } else {
         await this.account.addFavorite(partie.id);
       }
-      if (partie.role === 'mj') await this.myPartiesSvc.refreshMjParties();
-      else await this.myPartiesSvc.refreshPlayerParties();
+      // Une seule liste pour tous les rôles (Story 38.5) : le favori marche pour un ralliement
+      // comme pour une quête, sans brancher sur le rôle.
+      await this.myPartiesSvc.refreshAll();
     } finally {
       this.pendingFavorites.update((s) => {
         const next = new Set(s);

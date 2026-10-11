@@ -275,6 +275,18 @@ export const foretAncienne: Record<ToneKey, string> = {
   'dashboard.filter_role_all': 'Toutes les voies',
   'dashboard.filter_status_label': 'Stade',
   'dashboard.filter_status_all': 'Tous les stades',
+  'dashboard.filter_genre_label': 'Genre',
+  'dashboard.filter_genre_all': 'Tous',
+  'dashboard.genre_quetes': 'Sentiers',
+  'dashboard.genre_ralliements': 'Veillées',
+  'dashboard.group_by_type_label': 'Grouper par type',
+  /* Libellés de rôle d’un ralliement : mots de travail PROVISOIRES (epic 38), identiques dans les
+     trois thèmes en attendant les variantes validées. Hôte/Invité = rencontre isolée ; Admin/Membre
+     = groupe, et aussi les valeurs du filtre « Rang ». */
+  'dashboard.role_ralliement_host': 'Hôte',
+  'dashboard.role_ralliement_guest': 'Invité',
+  'dashboard.role_ralliement_admin': 'Admin',
+  'dashboard.role_ralliement_member': 'Membre',
   'dashboard.sort_urgence': 'Ce qui presse',
   'dashboard.sort_date': 'Date de clairière',
   'dashboard.sort_nom': 'Nom du sentier',

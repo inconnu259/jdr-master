@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 import type {
   AuthUser,
   PartieDto,
+  PartieRole,
   PartySignalsDto,
   SessionPollDto,
   Theme,
@@ -26,7 +27,7 @@ const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 function makeParty(
   id: string,
-  role: 'mj' | 'player' = 'player',
+  role: PartieRole = 'player',
   status: PartieDto['status'] = 'EN_COURS',
   isFavorite = false,
   coverImageVersion: string | null = null,
@@ -119,8 +120,7 @@ async function createFixture(
   const authSvc = { currentUser: signal(makeAuthUser(authUserOverrides)) };
   const myPartiesSvc = {
     allParties: signal(allParties),
-    refreshPlayerParties: vi.fn().mockResolvedValue(undefined),
-    refreshMjParties: vi.fn().mockResolvedValue(undefined),
+    refreshAll: vi.fn().mockResolvedValue(undefined),
   };
   await TestBed.configureTestingModule({
     imports: [Dashboard],
@@ -277,10 +277,10 @@ describe('Dashboard — invitations toujours visibles, sans condition de rôle (
   });
 });
 
-describe('Dashboard — accept() rafraîchit playerParties (comportement préexistant conservé)', () => {
+describe('Dashboard — accept() rafraîchit la liste des parties (Story 38.5 : refreshAll)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('accept() appelle myPartiesSvc.refreshPlayerParties()', async () => {
+  it('accept() appelle myPartiesSvc.refreshAll()', async () => {
     const invitationsSvc = makeInvitationsService();
     invitationsSvc.listReceived.mockResolvedValue([
       {
@@ -294,12 +294,12 @@ describe('Dashboard — accept() rafraîchit playerParties (comportement préexi
     const { fixture } = await createFixture(new Map(), invitationsSvc);
     const comp = fixture.componentInstance as any;
     const myParties = TestBed.inject(MyPartiesService) as unknown as {
-      refreshPlayerParties: ReturnType<typeof vi.fn>;
+      refreshAll: ReturnType<typeof vi.fn>;
     };
 
     await comp.accept(comp.received()[0]);
 
-    expect(myParties.refreshPlayerParties).toHaveBeenCalledTimes(1);
+    expect(myParties.refreshAll).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -718,8 +718,7 @@ describe('Dashboard — filtres rôle/statut (Story 29.8, AC2/AC5)', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelectorAll('.tile').length).toBe(1);
-    expect(myPartiesSvc.refreshMjParties).not.toHaveBeenCalled();
-    expect(myPartiesSvc.refreshPlayerParties).not.toHaveBeenCalled();
+    expect(myPartiesSvc.refreshAll).not.toHaveBeenCalled();
   });
 
   it('filtre par statut : réduit la liste affichée', async () => {
@@ -736,11 +735,11 @@ describe('Dashboard — filtres rôle/statut (Story 29.8, AC2/AC5)', () => {
     expect(fixture.nativeElement.querySelectorAll('.tile').length).toBe(1);
   });
 
-  it('les sélecteurs de filtre se limitent au rôle et au statut (AC5) — aucun select de date/nom/type', async () => {
+  it('les sélecteurs de filtre se limitent au rôle, au genre et au statut (AC5) — aucun select de date/nom/type', async () => {
     const { fixture } = await createFixture(new Map());
     const selects = fixture.nativeElement.querySelectorAll('select');
-    // 3 <select> attendus : rôle, statut, tri (le tri N'EST PAS un filtre — AC5).
-    expect(selects.length).toBe(3);
+    // 4 <select> attendus : rôle, genre (Story 38.5), statut, tri (le tri N'EST PAS un filtre — AC5).
+    expect(selects.length).toBe(4);
   });
 });
 
@@ -933,7 +932,9 @@ describe('Dashboard — câblage de la bannière générative (Story 29.10, AC3/
     const row = fixture.nativeElement.querySelector('.row');
     const children = Array.from(row.children) as Element[];
     const dotIndex = children.findIndex((el) => el.classList.contains('row__dot'));
-    const bannerIndex = children.findIndex((el) => el.tagName.toLowerCase() === 'app-party-banner');
+    // La bannière est enveloppée avec son badge de système (Story 38.5) : le bloc `.row__vignette`.
+    const bannerIndex = children.findIndex((el) => el.classList.contains('row__vignette'));
+    expect(children[bannerIndex].querySelector('app-party-banner')).not.toBeNull();
     const textIndex = children.findIndex((el) => el.classList.contains('row__txt'));
     expect(dotIndex).toBeLessThan(bannerIndex);
     expect(bannerIndex).toBeLessThan(textIndex);
@@ -1315,7 +1316,7 @@ describe('Dashboard — masquage des parties terminées (Story 29.8, AC6)', () =
 describe('Dashboard — favoris (Story 29.8, AC1, FR-11)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it("clic sur l'étoile d'une partie MJ non favorite appelle addFavorite et recharge refreshMjParties (jamais refreshPlayerParties)", async () => {
+  it("clic sur l'étoile d'une partie MJ non favorite appelle addFavorite et recharge la liste (refreshAll)", async () => {
     const { fixture, accountSvc, myPartiesSvc } = await createFixture(new Map(), undefined, [
       makeParty('p1', 'mj', 'EN_COURS', false),
     ]);
@@ -1329,11 +1330,10 @@ describe('Dashboard — favoris (Story 29.8, AC1, FR-11)', () => {
     }
 
     expect(accountSvc.addFavorite).toHaveBeenCalledWith('p1');
-    expect(myPartiesSvc.refreshMjParties).toHaveBeenCalledTimes(1);
-    expect(myPartiesSvc.refreshPlayerParties).not.toHaveBeenCalled();
+    expect(myPartiesSvc.refreshAll).toHaveBeenCalledTimes(1);
   });
 
-  it("clic sur l'étoile d'une partie joueur déjà favorite appelle removeFavorite et recharge refreshPlayerParties", async () => {
+  it("clic sur l'étoile d'une partie joueur déjà favorite appelle removeFavorite et recharge la liste (refreshAll)", async () => {
     const { fixture, accountSvc, myPartiesSvc } = await createFixture(new Map(), undefined, [
       makeParty('p1', 'player', 'EN_COURS', true),
     ]);
@@ -1346,8 +1346,7 @@ describe('Dashboard — favoris (Story 29.8, AC1, FR-11)', () => {
     }
 
     expect(accountSvc.removeFavorite).toHaveBeenCalledWith('p1');
-    expect(myPartiesSvc.refreshPlayerParties).toHaveBeenCalledTimes(1);
-    expect(myPartiesSvc.refreshMjParties).not.toHaveBeenCalled();
+    expect(myPartiesSvc.refreshAll).toHaveBeenCalledTimes(1);
   });
 
   it("l'étoile porte un aria-label explicite, jamais la couleur/l'icône seule", async () => {
@@ -1409,5 +1408,378 @@ describe('Dashboard — favoris (Story 29.8, AC1, FR-11)', () => {
     }
 
     expect(star.disabled).toBe(false);
+  });
+});
+
+// ── Story 38.5 : reconnaître ses ralliements dans la liste ───────────────────────────────────────
+function makeRalliement(
+  id: string,
+  role: PartieRole = 'admin',
+  kind: PartieDto['kind'] = 'ONE_SHOT',
+): PartieDto {
+  return { ...makeParty(id, role), gameSystemId: 'ralliement', kind };
+}
+
+function makeQuete(id: string, role: PartieRole = 'mj', status: PartieDto['status'] = 'EN_COURS') {
+  return { ...makeParty(id, role, status), gameSystemId: 'ryuutama' };
+}
+
+const textOf = (el: Element | null): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+/** Le mot du rôle seul (sans le nom de l'icône Material qui le précède). */
+const roleWord = (indicator: Element | null): string =>
+  textOf(indicator?.querySelector('span') ?? null);
+
+/** Le nom d'une tuile, sans le texte de l'icône d'étoile qui le suit. */
+const titleOf = (title: Element): string => (title.firstChild?.textContent ?? '').trim();
+
+/** La tuile (carte) d'une partie de test, retrouvée par son nom « Party <id> ». */
+function tileOf(root: HTMLElement, id: string): HTMLElement {
+  const tiles = Array.from(root.querySelectorAll('.tile')) as HTMLElement[];
+  return tiles.find((t) => titleOf(t.querySelector('mat-card-title')!) === `Party ${id}`)!;
+}
+
+describe('Dashboard — pastille, badge, sous-titre et rôle des ralliements (Story 38.5)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const MIXED = [
+    makeQuete('q', 'mj'),
+    makeRalliement('iso', 'admin', 'ONE_SHOT'),
+    makeRalliement('grp', 'member', 'CAMPAGNE_EPISODIQUE'),
+  ];
+
+  it('liste mixte : une tuile par partie, pastilles Ryuutama / Ralliement / Ralliement, rôles Maître / Hôte / Membre', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, MIXED);
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelectorAll('.tile')).toHaveLength(3);
+    expect(textOf(tileOf(root, 'q').querySelector('.system-chip'))).toBe('Ryuutama');
+    expect(textOf(tileOf(root, 'iso').querySelector('.system-chip'))).toBe('Ralliement');
+    expect(textOf(tileOf(root, 'grp').querySelector('.system-chip'))).toBe('Ralliement');
+    expect(roleWord(tileOf(root, 'q').querySelector('.role-indicator'))).toBe('Maître');
+    expect(roleWord(tileOf(root, 'iso').querySelector('.role-indicator'))).toBe('Hôte');
+    expect(roleWord(tileOf(root, 'grp').querySelector('.role-indicator'))).toBe('Membre');
+  });
+
+  it('la pastille vient APRÈS l’indicateur de rôle, est un simple texte non interactif', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, [makeQuete('q')]);
+    const subtitle = fixture.nativeElement.querySelector('mat-card-subtitle') as HTMLElement;
+    const role = subtitle.querySelector('.role-indicator') as HTMLElement;
+    const chip = subtitle.querySelector('.system-chip') as HTMLElement;
+    expect(role.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(chip.tagName.toLowerCase()).toBe('span');
+    expect(chip.getAttribute('tabindex')).toBeNull();
+    expect(chip.getAttribute('role')).toBeNull();
+    expect(chip.closest('button, a')).toBeNull();
+  });
+
+  it('badges : R1 (carte, dé) pour Ryuutama, L1 pour les deux ralliements', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, MIXED);
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelectorAll('app-system-badge')).toHaveLength(3);
+    expect(tileOf(root, 'q').querySelector('app-system-badge rect.die')).not.toBeNull();
+    expect(tileOf(root, 'iso').querySelector('app-system-badge rect.die')).toBeNull();
+    expect(tileOf(root, 'iso').querySelector('app-system-badge svg')).not.toBeNull();
+    expect(tileOf(root, 'grp').querySelector('app-system-badge svg')).not.toBeNull();
+  });
+
+  it('Draconis : pastille « Draconis », aucun badge', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, [makeParty('d', 'mj')]);
+    expect(textOf(fixture.nativeElement.querySelector('.system-chip'))).toBe('Draconis');
+    expect(fixture.nativeElement.querySelector('app-system-badge')).toBeNull();
+  });
+
+  it('mode moyen : le badge n’est jamais dans app-party-banner, il est posé sur la vignette', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, [makeQuete('q')]);
+    const badge = fixture.nativeElement.querySelector('app-system-badge') as HTMLElement;
+    expect(badge.closest('app-party-banner')).toBeNull();
+    const wrapper = badge.parentElement as HTMLElement;
+    expect(wrapper.classList.contains('tile__vignette')).toBe(true);
+    expect(wrapper.querySelector('app-party-banner')).not.toBeNull();
+    expect(badge.classList.contains('system-badge')).toBe(true);
+    expect(badge.classList.contains('system-badge--inset')).toBe(false);
+  });
+
+  it('mode grand : le badge se pose DANS le coin de la bannière (écart unique au contrat), hors du composant bannière', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeRalliement('r')],
+      new Map(),
+      { partiesViewMode: 'large' },
+    );
+    const badge = fixture.nativeElement.querySelector('app-system-badge') as HTMLElement;
+    expect(badge.closest('app-party-banner')).toBeNull();
+    expect(badge.classList.contains('system-badge--inset')).toBe(true);
+    expect((badge.parentElement as HTMLElement).classList.contains('tile__banner')).toBe(true);
+  });
+
+  it('mode liste : le badge est rattaché à la vignette de la ligne, et la pastille suit la sous-ligne', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeRalliement('r')],
+      new Map(),
+      { partiesViewMode: 'compact' },
+    );
+    const badge = fixture.nativeElement.querySelector('app-system-badge') as HTMLElement;
+    expect(badge.closest('app-party-banner')).toBeNull();
+    expect((badge.parentElement as HTMLElement).classList.contains('row__vignette')).toBe(true);
+    const sub = fixture.nativeElement.querySelector('.row__subline') as HTMLElement;
+    expect(textOf(sub.querySelector('.system-chip'))).toBe('Ralliement');
+    // Le résumé de la ligne porte le mot de rôle du ralliement (Hôte), plus « Joueur »/« MJ ».
+    expect(textOf(sub.querySelector('.row__sub'))).toContain('Hôte');
+  });
+
+  it('sous-titre : la seule nature — « Chronique » pour une quête, la nature du ralliement sinon, jamais le nom du système', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, [
+      { ...makeQuete('q'), kind: 'CAMPAGNE_EPISODIQUE' },
+      makeRalliement('grp', 'admin', 'CAMPAGNE_EPISODIQUE'),
+      makeRalliement('iso', 'admin', 'ONE_SHOT'),
+    ]);
+    const root = fixture.nativeElement as HTMLElement;
+    const subtitleText = (id: string) => {
+      const clone = tileOf(root, id).querySelector('mat-card-subtitle')!.cloneNode(true) as HTMLElement;
+      clone
+        .querySelectorAll('.role-indicator, .status-indicator, .system-chip')
+        .forEach((n) => n.remove());
+      return textOf(clone);
+    };
+    expect(subtitleText('q')).toBe(GRIMOIRE_TONE['partie.kind_CAMPAGNE_EPISODIQUE']);
+    expect(subtitleText('grp')).toBe(GRIMOIRE_TONE['partie.ralliement_kind_CAMPAGNE_EPISODIQUE']);
+    expect(subtitleText('grp')).toBe('La convergence des Sortilèges');
+    expect(subtitleText('iso')).toBe(GRIMOIRE_TONE['partie.ralliement_kind_ONE_SHOT']);
+    for (const id of ['q', 'grp', 'iso']) {
+      expect(subtitleText(id)).not.toContain('Ryuutama');
+      expect(subtitleText(id)).not.toContain('Ralliement');
+    }
+  });
+
+  it('libellés de rôle : ONE_SHOT Hôte / Invité, groupe Admin / Membre ; JDR inchangé (Maître / Héros)', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, [
+      makeRalliement('a', 'admin', 'ONE_SHOT'),
+      makeRalliement('b', 'member', 'ONE_SHOT'),
+      makeRalliement('c', 'admin', 'CAMPAGNE_EPISODIQUE'),
+      makeRalliement('d', 'member', 'CAMPAGNE_EPISODIQUE'),
+      makeQuete('e', 'mj'),
+      makeQuete('f', 'player'),
+    ]);
+    const root = fixture.nativeElement as HTMLElement;
+    const roleOf = (id: string) => {
+      const indicator = tileOf(root, id).querySelector('.role-indicator') as HTMLElement;
+      return {
+        word: roleWord(indicator),
+        icon: textOf(indicator.querySelector('mat-icon')),
+        aria: indicator.getAttribute('aria-label'),
+      };
+    };
+    expect(roleOf('a')).toMatchObject({ word: 'Hôte', icon: 'shield' });
+    expect(roleOf('b')).toMatchObject({ word: 'Invité', icon: 'person' });
+    expect(roleOf('c')).toMatchObject({ word: 'Admin', icon: 'shield' });
+    expect(roleOf('d')).toMatchObject({ word: 'Membre', icon: 'person' });
+    expect(roleOf('e')).toMatchObject({ word: 'Maître', icon: 'shield' });
+    expect(roleOf('f')).toMatchObject({ word: 'Héros', icon: 'person' });
+    expect(roleOf('a').aria).toBe(`${GRIMOIRE_TONE['dashboard.role_prefix']} Hôte`);
+  });
+});
+
+describe('Dashboard — filtres Genre / Rang et regroupement par type (Story 38.5)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const MIXED = [
+    makeQuete('q', 'mj'),
+    makeQuete('p', 'player'),
+    makeRalliement('iso', 'admin', 'ONE_SHOT'),
+    makeRalliement('grp', 'member', 'CAMPAGNE_EPISODIQUE'),
+  ];
+  const names = (root: HTMLElement) =>
+    (Array.from(root.querySelectorAll('.tile mat-card-title')) as HTMLElement[]).map(
+      (t) => titleOf(t).replace('Party ', ''),
+    );
+  const selectLabelled = (root: HTMLElement, label: string) => {
+    const selects = Array.from(
+      root.querySelectorAll('app-list-control-bar select'),
+    ) as HTMLSelectElement[];
+    return selects.find((s) => s.closest('label')?.textContent?.includes(label))!;
+  };
+
+  it('Genre : le select propose Tous / Quêtes / Ralliements, et « Ralliements » ne garde que les ralliements', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, MIXED);
+    const root = fixture.nativeElement as HTMLElement;
+    const genre = selectLabelled(root, 'Genre');
+    expect(Array.from(genre.options).map((o) => o.textContent?.trim())).toEqual([
+      'Tous',
+      'Quêtes',
+      'Ralliements',
+    ]);
+    const comp = fixture.componentInstance as any;
+    comp.genreFilter.set('ralliement');
+    fixture.detectChanges();
+    expect(names(root).sort()).toEqual(['grp', 'iso']);
+    comp.genreFilter.set('quete');
+    fixture.detectChanges();
+    expect(names(root).sort()).toEqual(['p', 'q']);
+  });
+
+  it('Rang : Tous, Maître, Héros, Admin, Membre — « Membre » ne garde que les lignes member', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, MIXED);
+    const root = fixture.nativeElement as HTMLElement;
+    // Le libellé « Rang » se retrouve aussi dans « Ranger par » : on repère le select par ses valeurs.
+    const rang = (
+      Array.from(root.querySelectorAll('app-list-control-bar select')) as HTMLSelectElement[]
+    ).find((s) => Array.from(s.options).some((o) => o.value === 'member'))!;
+    expect(Array.from(rang.options).map((o) => o.value)).toEqual([
+      'all',
+      'mj',
+      'player',
+      'admin',
+      'member',
+    ]);
+    expect(Array.from(rang.options).map((o) => o.textContent?.trim())).toEqual([
+      GRIMOIRE_TONE['dashboard.filter_role_all'],
+      'Maître',
+      'Héros',
+      'Admin',
+      'Membre',
+    ]);
+    const comp = fixture.componentInstance as any;
+    comp.roleFilter.set('member');
+    fixture.detectChanges();
+    expect(names(root)).toEqual(['grp']);
+    comp.roleFilter.set('admin');
+    fixture.detectChanges();
+    expect(names(root)).toEqual(['iso']);
+  });
+
+  it('Genre et Rang comptent comme un écart au défaut ; le réglage par défaut les remet à Tous', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, MIXED);
+    const comp = fixture.componentInstance as any;
+    expect(comp.hasDeviatedFromDefault()).toBe(false);
+    comp.genreFilter.set('ralliement');
+    expect(comp.hasDeviatedFromDefault()).toBe(true);
+    comp.onResetRequested();
+    expect(comp.genreFilter()).toBe('all');
+    comp.roleFilter.set('member');
+    expect(comp.hasDeviatedFromDefault()).toBe(true);
+    comp.onResetRequested();
+    expect(comp.roleFilter()).toBe('all');
+    expect(comp.hasDeviatedFromDefault()).toBe(false);
+  });
+
+  it('« Grouper par type » : décochée par défaut, jamais comptée comme un écart au défaut', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, MIXED);
+    const comp = fixture.componentInstance as any;
+    expect(comp.groupByType()).toBe(false);
+    const boxes = Array.from(
+      fixture.nativeElement.querySelectorAll('app-list-control-bar input[type="checkbox"]'),
+    ) as HTMLInputElement[];
+    const box = boxes.find((b) => b.closest('label')?.textContent?.includes('Grouper par type'))!;
+    expect(box.checked).toBe(false);
+    comp.groupByType.set(true);
+    expect(comp.hasDeviatedFromDefault()).toBe(false);
+  });
+
+  it('regroupement actif : deux sections « Quêtes » puis « Ralliements », sans intertitres d’urgence', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, MIXED);
+    (fixture.componentInstance as any).groupByType.set(true);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const headings = (Array.from(root.querySelectorAll('h2')) as HTMLElement[]).map(textOf);
+    expect(headings).toEqual(['Quêtes', 'Ralliements']);
+    const grids = Array.from(root.querySelectorAll('.grid')) as HTMLElement[];
+    expect(grids).toHaveLength(2);
+    expect(grids[0].querySelectorAll('.tile')).toHaveLength(2);
+    expect(grids[1].querySelectorAll('.tile')).toHaveLength(2);
+    expect(textOf(grids[0])).toContain('Party q');
+    expect(textOf(grids[1])).toContain('Party iso');
+    for (const key of [
+      'dashboard.section_awaiting',
+      'dashboard.section_ongoing',
+      'dashboard.section_upcoming',
+    ]) {
+      expect(headings).not.toContain(GRIMOIRE_TONE[key]);
+    }
+  });
+
+  it('regroupement actif : une section vide est omise', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, [
+      makeRalliement('iso'),
+      makeRalliement('grp', 'member', 'CAMPAGNE_EPISODIQUE'),
+    ]);
+    (fixture.componentInstance as any).groupByType.set(true);
+    fixture.detectChanges();
+    const headings = (
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('h2')) as HTMLElement[]
+    ).map(textOf);
+    expect(headings).toEqual(['Ralliements']);
+  });
+
+  it('chaque section suit le tri choisi (par nom ici)', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [
+        { ...makeQuete('z'), name: 'Zeta' },
+        { ...makeQuete('a'), name: 'Alpha' },
+        { ...makeRalliement('r2'), name: 'Gamma' },
+        { ...makeRalliement('r1'), name: 'Beta' },
+      ],
+      new Map(),
+      { partiesSort: 'nom' },
+    );
+    (fixture.componentInstance as any).groupByType.set(true);
+    fixture.detectChanges();
+    const grids = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.grid'),
+    ) as HTMLElement[];
+    const order = (grid: HTMLElement) =>
+      (Array.from(grid.querySelectorAll('mat-card-title')) as HTMLElement[]).map(titleOf);
+    expect(order(grids[0])).toEqual(['Alpha', 'Zeta']);
+    expect(order(grids[1])).toEqual(['Beta', 'Gamma']);
+  });
+
+  it('décocher le regroupement rend la liste d’avant (intertitres d’urgence)', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, MIXED);
+    const comp = fixture.componentInstance as any;
+    comp.groupByType.set(true);
+    fixture.detectChanges();
+    comp.groupByType.set(false);
+    fixture.detectChanges();
+    const headings = (
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('h2')) as HTMLElement[]
+    ).map(textOf);
+    expect(headings).toContain(GRIMOIRE_TONE['dashboard.section_ongoing']);
+    expect(headings).not.toContain('Quêtes');
+  });
+
+  it('le bouton de révélation des terminées respecte le filtre de genre', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeQuete('q', 'mj', 'TERMINEE'), makeRalliement('r')],
+      new Map(),
+      { hideFinishedParties: true },
+    );
+    const comp = fixture.componentInstance as any;
+    expect(comp.hasHiddenFinished()).toBe(true);
+    comp.genreFilter.set('ralliement');
+    expect(comp.hasHiddenFinished()).toBe(false);
+  });
+});
+
+describe('Dashboard — favori d’un ralliement (Story 38.5)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('un admin de ralliement peut mettre en favori : même rechargement unique, aucune branche sur le rôle', async () => {
+    const { fixture, accountSvc, myPartiesSvc } = await createFixture(new Map(), undefined, [
+      makeRalliement('r', 'admin'),
+    ]);
+    (fixture.nativeElement.querySelector('.favorite-btn') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    expect(accountSvc.addFavorite).toHaveBeenCalledWith('r');
+    expect(myPartiesSvc.refreshAll).toHaveBeenCalledTimes(1);
   });
 });

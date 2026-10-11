@@ -65,7 +65,7 @@ async function createComponent(
     setCoverImage: vi.fn().mockResolvedValue({ ...partie, coverImageVersion: 'v1' }),
     removeCoverImage: vi.fn().mockResolvedValue({ ...partie, coverImageVersion: null }),
   };
-  const myPartiesSvc = { refreshMjParties: vi.fn().mockResolvedValue(undefined) };
+  const myPartiesSvc = { refreshAll: vi.fn().mockResolvedValue(undefined) };
   const scenariosSvc = {
     listAll: vi.fn().mockResolvedValue(options.scenarios ?? []),
   };
@@ -160,12 +160,12 @@ describe('PartieForm', () => {
     },
   );
 
-  it('création : appelle refreshMjParties() après succès (Story 29.1, setMode disparu)', async () => {
+  it('création : appelle refreshAll() après succès (Story 29.1, setMode disparu)', async () => {
     const { fixture, myPartiesSvc } = await createComponent();
     const comp = fixture.componentInstance as any;
     comp.form.patchValue({ name: 'Ma partie', gameSystemId: 'draconis', kind: 'ONE_SHOT' });
     await comp.submit();
-    expect(myPartiesSvc.refreshMjParties).toHaveBeenCalledTimes(1);
+    expect(myPartiesSvc.refreshAll).toHaveBeenCalledTimes(1);
   });
 
   it('édition d’une Partie CAMPAGNE_EPISODIQUE : le formulaire pré-remplit kind sans le rabattre sur CAMPAGNE_LINEAIRE', async () => {
@@ -383,7 +383,7 @@ describe('PartieForm', () => {
               removeCoverImage: vi.fn(),
             },
           },
-          { provide: MyPartiesService, useValue: { refreshMjParties: vi.fn() } },
+          { provide: MyPartiesService, useValue: { refreshAll: vi.fn() } },
           { provide: ScenariosService, useValue: scenariosSvc },
           {
             provide: ActivatedRoute,

@@ -67,8 +67,7 @@ async function createFixture(
       {
         provide: MyPartiesService,
         useValue: {
-          refreshMjParties: vi.fn().mockResolvedValue(undefined),
-          refreshPlayerParties: vi.fn().mockResolvedValue(undefined),
+          refreshAll: vi.fn().mockResolvedValue(undefined),
           allParties: signal(opts.parties ?? []),
         },
       },
@@ -239,14 +238,12 @@ describe('Shell — suppression du sélecteur de mode (Story 29.1, AC1)', () => 
     expect(fixture.nativeElement.querySelector('mat-button-toggle-group')).toBeNull();
   });
 
-  it('ngOnInit() charge toujours mjParties et playerParties', async () => {
+  it('ngOnInit() charge toute la liste des parties en un seul appel (Story 38.5)', async () => {
     await createFixture(0);
     const myParties = TestBed.inject(MyPartiesService) as unknown as {
-      refreshMjParties: ReturnType<typeof vi.fn>;
-      refreshPlayerParties: ReturnType<typeof vi.fn>;
+      refreshAll: ReturnType<typeof vi.fn>;
     };
-    expect(myParties.refreshMjParties).toHaveBeenCalledTimes(1);
-    expect(myParties.refreshPlayerParties).toHaveBeenCalledTimes(1);
+    expect(myParties.refreshAll).toHaveBeenCalledTimes(1);
   });
 });
 

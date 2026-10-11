@@ -189,7 +189,7 @@ export class PartiesService implements PartieSignalsPort {
       throw new BadRequestException(KIND_NOT_ALLOWED_FOR_SYSTEM_MESSAGE);
     }
     const isRalliement = familyOf(dto.gameSystemId) === 'ralliement';
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       const partie = await tx.partie.create({
         data: {
           name: dto.name,
@@ -243,6 +243,17 @@ export class PartiesService implements PartieSignalsPort {
       // aucune requête `partieFavorite` nécessaire (Story 29.8).
       return toPartieDto(partie, 'mj', dto.kind === 'ONE_SHOT', false);
     });
+    // Story 38.5 : la transaction est validée — la liste d'accueil du créateur (autre onglet, autre
+    // appareil) se rafraîchit sans rechargement, pour toute famille. Hors transaction, et un échec
+    // d'émission ne fait jamais échouer une création déjà enregistrée.
+    try {
+      this.realtimeEvents.emit(userTopic(ownerId));
+    } catch (err) {
+      this.logger.warn(
+        `Échec de l'émission temps réel après la création de la partie ${created.id} : ${String(err)}`,
+      );
+    }
+    return created;
   }
 
   /** Lecture en lot (AD-3) : une seule requête groupée pour dériver `status` de tout le tableau

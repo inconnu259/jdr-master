@@ -286,3 +286,7 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-38-3-changer-la-couverture-depuis-la-banniere.md`
   summary: By hand in a visible browser window: Tab to the « Changer » chip in the partie form and confirm the focus ring, in the three themes and on a bright cover image; also confirm the chip words (Changer/Échanger/Substituer, Retirer/Ôter/Démonter).
   evidence: The automated Chrome session ran in a background tab (viewport 0, screenshots timing out) and its Tab key press did not reach the chip; only DOM metrics were checked.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-38-5-reconnaitre-ses-ralliements-dans-la-liste.md`
+  summary: By hand in the browser (a user with a quest AND a ralliement): check the home list tiles in the three view modes and three themes — chip, R1/L1 badge placement (−6/−6 in medium and compact, inset in large), JDR tiles unchanged inside the new wrappers, filters Genre / Rang / Grouper par type, and a ralliement created in another tab appearing without reload.
+  evidence: The dev user has no parties and the agent creates no data in the dev DB; only unit/DOM tests were run.

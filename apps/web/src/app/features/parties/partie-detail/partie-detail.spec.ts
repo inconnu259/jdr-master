@@ -245,7 +245,7 @@ async function createFixture(
       { provide: BreakpointObserver, useValue: makeBreakpointObserver(options.desktop ?? true) },
       {
         provide: MyPartiesService,
-        useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) },
+        useValue: { refreshAll: vi.fn(), playerParties: signal([]) },
       },
       { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
       {
@@ -978,7 +978,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
         { provide: BreakpointObserver, useValue: dynamicBreakpointObserver },
         {
           provide: MyPartiesService,
-          useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) },
+          useValue: { refreshAll: vi.fn(), playerParties: signal([]) },
         },
         { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
         {
@@ -1289,7 +1289,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
         { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
         {
           provide: MyPartiesService,
-          useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) },
+          useValue: { refreshAll: vi.fn(), playerParties: signal([]) },
         },
         { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
         {
@@ -2306,7 +2306,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
         {
           provide: MyPartiesService,
-          useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) },
+          useValue: { refreshAll: vi.fn(), playerParties: signal([]) },
         },
         { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
         {
@@ -2513,7 +2513,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
         {
           provide: MyPartiesService,
-          useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) },
+          useValue: { refreshAll: vi.fn(), playerParties: signal([]) },
         },
         { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
         {
@@ -3162,6 +3162,38 @@ describe('PartieDetail — barre d’icônes partagée (retouche UX 2026-09-23)'
     );
     expect(deleteButton).toBeTruthy();
     expect(deleteButton!.classList.contains('icon-bar__btn--danger')).toBe(true);
+  });
+
+  it('suppression confirmée : supprime la partie puis recharge la liste des parties (refreshAll, Story 38.5)', async () => {
+    const partie = makePartie({ ownerId: MJ_ID, status: 'EN_COURS' });
+    const { fixture } = await createFixture(partie, MJ_ID);
+    const dialog = TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      remove: ReturnType<typeof vi.fn>;
+    };
+    const myParties = TestBed.inject(MyPartiesService) as unknown as {
+      refreshAll: ReturnType<typeof vi.fn>;
+    };
+
+    await fixture.componentInstance.confirmDelete(partie);
+
+    expect(parties.remove).toHaveBeenCalledWith(partie.id);
+    expect(myParties.refreshAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('suppression annulée : ni suppression ni rechargement', async () => {
+    const partie = makePartie({ ownerId: MJ_ID, status: 'EN_COURS' });
+    const { fixture } = await createFixture(partie, MJ_ID);
+    const dialog = TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+    dialog.open.mockReturnValue({ afterClosed: () => of(false) });
+    const myParties = TestBed.inject(MyPartiesService) as unknown as {
+      refreshAll: ReturnType<typeof vi.fn>;
+    };
+
+    await fixture.componentInstance.confirmDelete(partie);
+
+    expect(myParties.refreshAll).not.toHaveBeenCalled();
   });
 });
 

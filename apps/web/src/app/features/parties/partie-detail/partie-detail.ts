@@ -840,7 +840,7 @@ export class PartieDetail implements OnInit {
     });
     if (!(await firstValueFrom(ref.afterClosed()))) return;
     await this.parties.remove(p.id);
-    await this.myPartiesSvc.refreshMjParties();
+    await this.myPartiesSvc.refreshAll();
     void this.router.navigate(['/']);
   }
 

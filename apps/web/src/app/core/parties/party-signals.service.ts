@@ -23,7 +23,7 @@ export class PartySignalsService {
     void this.refresh();
   }
 
-  /** Même patron anti-course que `MyPartiesService.refreshMjParties()` : une réponse obsolète ne
+  /** Même patron anti-course que `MyPartiesService.refreshAll()` : une réponse obsolète ne
    *  peut jamais écraser un état plus frais, un échec réseau transitoire garde le dernier état
    *  connu bon plutôt que de vider la carte. Public (Story 29.16) : `MyCharacters.ngOnInit()`
    *  l'appelle directement à l'activation de la route, en plus de `notifyChanged()` sur l'événement

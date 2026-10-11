@@ -41,6 +41,17 @@
         <option value="all">{{ theme.tone()['dashboard.filter_role_all'] }}</option>
         <option value="mj">{{ theme.tone()['dashboard.role_mj'] }}</option>
         <option value="player">{{ theme.tone()['dashboard.role_player'] }}</option>
+        <option value="admin">{{ theme.tone()['dashboard.role_ralliement_admin'] }}</option>
+        <option value="member">{{ theme.tone()['dashboard.role_ralliement_member'] }}</option>
+      </select>
+    </label>
+
+    <label extraFilters class="controls-bar__field">
+      <span class="controls-bar__label">{{ theme.tone()['dashboard.filter_genre_label'] }}</span>
+      <select [ngModel]="genreFilter()" (ngModelChange)="genreFilter.set($event)">
+        <option value="all">{{ theme.tone()['dashboard.filter_genre_all'] }}</option>
+        <option value="quete">{{ theme.tone()['dashboard.genre_quetes'] }}</option>
+        <option value="ralliement">{{ theme.tone()['dashboard.genre_ralliements'] }}</option>
       </select>
     </label>
 
@@ -62,6 +73,11 @@
       />
       <span>{{ theme.tone()['dashboard.hide_finished_label'] }}</span>
     </label>
+
+    <label extraFilters class="controls-bar__field controls-bar__field--checkbox">
+      <input type="checkbox" [ngModel]="groupByType()" (ngModelChange)="groupByType.set($event)" />
+      <span>{{ theme.tone()['dashboard.group_by_type_label'] }}</span>
+    </label>
   </app-list-control-bar>
 
   @if (hasHiddenFinished()) {
@@ -75,6 +91,25 @@
   <p class="empty">{{ theme.tone()['dashboard.empty'] }}</p>
 } @else if (flatTiles().length === 0) {
   <p class="empty">{{ theme.tone()['dashboard.empty_filtered'] }}</p>
+} @else if (groupByType()) {
+  <!-- « Grouper par type » (Story 38.5) : deux sections, chacune dans l'ordre du tri choisi, sans
+       les intertitres d'urgence. Une section vide est omise. -->
+  @if (questTiles().length > 0) {
+    <h2>{{ theme.tone()['dashboard.genre_quetes'] }}</h2>
+    <div class="grid" [class]="gridDensityClass()">
+      @for (t of questTiles(); track t.partie.id) {
+        <ng-container [ngTemplateOutlet]="tile" [ngTemplateOutletContext]="{ $implicit: t }" />
+      }
+    </div>
+  }
+  @if (ralliementTiles().length > 0) {
+    <h2>{{ theme.tone()['dashboard.genre_ralliements'] }}</h2>
+    <div class="grid" [class]="gridDensityClass()">
+      @for (t of ralliementTiles(); track t.partie.id) {
+        <ng-container [ngTemplateOutlet]="tile" [ngTemplateOutletContext]="{ $implicit: t }" />
+      }
+    </div>
+  }
 } @else if (partiesSort() === 'urgence') {
   <!-- Quatre intertitres (Story 29.7, AC10) : ce qui t'attend / en cours / à venir / terminées. -->
   @if (awaitingTiles().length > 0) {
@@ -143,16 +178,23 @@
         [class.row__dot--closed]="t.tint === 'done'"
         aria-hidden="true"
       ></span>
-      <app-party-banner
-        class="row__vignette"
-        [partieId]="t.partie.id"
-        [partieName]="t.partie.name"
-        [coverImageVersion]="t.partie.coverImageVersion"
-        mode="compact"
-      />
+      <span class="row__vignette">
+        <app-party-banner
+          [partieId]="t.partie.id"
+          [partieName]="t.partie.name"
+          [coverImageVersion]="t.partie.coverImageVersion"
+          mode="compact"
+        />
+        @if (hasSystemBadge(t.partie)) {
+          <app-system-badge class="system-badge" [systemId]="t.partie.gameSystemId" />
+        }
+      </span>
       <span class="row__txt">
         <span class="row__name">{{ t.partie.name }}</span>
-        <span class="row__sub">{{ rowSummary(t) }}</span>
+        <span class="row__subline">
+          <span class="row__sub">{{ rowSummary(t) }}</span>
+          <span class="system-chip">{{ system(t.partie.gameSystemId) }}</span>
+        </span>
       </span>
       @if (rowCount(t) > 0) {
         <!-- §4.1 bis : « En mode liste, un seul compteur » — jamais les badges détaillés. -->
@@ -183,24 +225,38 @@
     @if (partiesViewMode() === 'large') {
       <!-- Bannière pleine largeur, en tête de carte (DESIGN.md §7.3). Elle remplace le
            pseudo-élément que la Story 29.9 avait réservé à cet emplacement. -->
-      <app-party-banner
-        [partieId]="t.partie.id"
-        [partieName]="t.partie.name"
-        [coverImageVersion]="t.partie.coverImageVersion"
-        mode="large"
-      />
+      <div class="tile__banner">
+        <app-party-banner
+          [partieId]="t.partie.id"
+          [partieName]="t.partie.name"
+          [coverImageVersion]="t.partie.coverImageVersion"
+          mode="large"
+        />
+        @if (hasSystemBadge(t.partie)) {
+          <!-- Seul écart au contrat (-6/-6) : en pleine largeur, le débord serait rogné par
+               `.tile { overflow: hidden }` — le badge se pose donc à 6 px DANS le coin. -->
+          <app-system-badge
+            class="system-badge system-badge--inset"
+            [systemId]="t.partie.gameSystemId"
+          />
+        }
+      </div>
     }
     <div class="tile__head">
       @if (partiesViewMode() === 'medium') {
         <!-- Vignette carrée 44 px : la MÊME composition que ci-dessus, recadrée au centre par le
              composant. `Dashboard` ne connaît pas cette différence. -->
-        <app-party-banner
-          class="tile__vignette"
-          [partieId]="t.partie.id"
-          [partieName]="t.partie.name"
-          [coverImageVersion]="t.partie.coverImageVersion"
-          mode="medium"
-        />
+        <div class="tile__vignette">
+          <app-party-banner
+            [partieId]="t.partie.id"
+            [partieName]="t.partie.name"
+            [coverImageVersion]="t.partie.coverImageVersion"
+            mode="medium"
+          />
+          @if (hasSystemBadge(t.partie)) {
+            <app-system-badge class="system-badge" [systemId]="t.partie.gameSystemId" />
+          }
+        </div>
       }
       <mat-card-header>
       <mat-card-title>
@@ -217,14 +273,15 @@
         </button>
       </mat-card-title>
       <mat-card-subtitle>
-        {{ system(t.partie.gameSystemId) }} · {{ kind(t.partie.kind) }}
+        {{ subtitle(t.partie) }}
         <span
           class="role-indicator"
-          [attr.aria-label]="theme.tone()['dashboard.role_prefix'] + ' ' + (t.partie.role === 'mj' ? theme.tone()['dashboard.role_mj'] : theme.tone()['dashboard.role_player'])"
+          [attr.aria-label]="theme.tone()['dashboard.role_prefix'] + ' ' + roleLabel(t.partie)"
         >
-          <mat-icon aria-hidden="true" class="role-icon">{{ t.partie.role === 'mj' ? 'shield' : 'person' }}</mat-icon>
-          <span aria-hidden="true">{{ t.partie.role === 'mj' ? theme.tone()['dashboard.role_mj'] : theme.tone()['dashboard.role_player'] }}</span>
+          <mat-icon aria-hidden="true" class="role-icon">{{ roleIcon(t.partie) }}</mat-icon>
+          <span aria-hidden="true">{{ roleLabel(t.partie) }}</span>
         </span>
+        <span class="system-chip">{{ system(t.partie.gameSystemId) }}</span>
         @if (t.partie.status === 'TERMINEE') {
           <span class="status-indicator" [attr.aria-label]="theme.tone()['dashboard.status_closed_badge']">
             <mat-icon aria-hidden="true" class="role-icon">flag</mat-icon>

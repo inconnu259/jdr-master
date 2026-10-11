@@ -51,7 +51,7 @@ export class Join implements OnInit {
     this.error.set(null);
     try {
       const { partieId } = await this.joinSvc.join(this.token);
-      await this.myPartiesSvc.refreshPlayerParties();
+      await this.myPartiesSvc.refreshAll();
       void this.router.navigate(['/parties', partieId]);
     } catch {
       this.error.set(this.theme.tone()['join.join_error']);

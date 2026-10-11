@@ -474,6 +474,64 @@ describe('PartiesService', () => {
       });
       expect(prisma.membership.create).not.toHaveBeenCalled();
     });
+
+    // Story 38.5 : la liste d'accueil du créateur se rafraîchit sans rechargement (canal user:{id}).
+    describe('émission temps réel après la création (Story 38.5)', () => {
+      const cas = [
+        { famille: 'quête', gameSystemId: 'ryuutama', kind: 'ONE_SHOT' as const },
+        { famille: 'ralliement isolé', gameSystemId: 'ralliement', kind: 'ONE_SHOT' as const },
+        {
+          famille: 'ralliement durable',
+          gameSystemId: 'ralliement',
+          kind: 'CAMPAGNE_EPISODIQUE' as const,
+        },
+      ];
+
+      it.each(cas)(
+        '$famille : émet userTopic(créateur) APRÈS la validation de la transaction',
+        async ({ gameSystemId, kind }) => {
+          const ordre: string[] = [];
+          prisma.partie.create.mockResolvedValue({ ...partie, gameSystemId, kind });
+          prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => {
+            const result = await fn(prisma);
+            ordre.push('commit');
+            return result;
+          });
+          realtimeEvents.emit.mockImplementation((topic: string) => {
+            if (topic === userTopic('mj1')) ordre.push('emit');
+          });
+
+          await service.create('mj1', { name: 'Test', kind, gameSystemId });
+
+          expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+          expect(ordre.indexOf('commit')).toBeGreaterThanOrEqual(0);
+          expect(ordre.indexOf('emit')).toBeGreaterThanOrEqual(0);
+          expect(ordre.indexOf('emit')).toBeGreaterThan(ordre.indexOf('commit'));
+          expect(ordre.filter((o) => o === 'emit')).toHaveLength(1);
+        },
+      );
+
+      it('aucune émission userTopic si la transaction échoue', async () => {
+        prisma.partie.create.mockRejectedValue(new Error('boom'));
+        await expect(
+          service.create('mj1', { name: 'Test', kind: 'ONE_SHOT', gameSystemId: 'ralliement' }),
+        ).rejects.toThrow('boom');
+        expect(realtimeEvents.emit).not.toHaveBeenCalledWith(userTopic('mj1'));
+      });
+
+      it("un échec d'émission ne fait jamais échouer la création", async () => {
+        prisma.partie.create.mockResolvedValue(ralliement);
+        realtimeEvents.emit.mockImplementation(() => {
+          throw new Error('SSE indisponible');
+        });
+        const dto = await service.create('mj1', {
+          name: 'Soirée',
+          kind: 'ONE_SHOT',
+          gameSystemId: 'ralliement',
+        });
+        expect(dto.role).toBe('admin');
+      });
+    });
   });
 
   it('listForUser(player) renvoie les parties des memberships, projetées avec role: player', async () => {

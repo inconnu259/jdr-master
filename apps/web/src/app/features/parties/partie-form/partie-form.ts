@@ -475,7 +475,7 @@ export class PartieForm implements OnInit {
           }
         }
 
-        await this.myPartiesSvc.refreshMjParties();
+        await this.myPartiesSvc.refreshAll();
         void this.router.navigate(['/parties', id]);
         return;
       }
@@ -506,7 +506,7 @@ export class PartieForm implements OnInit {
           return;
         }
       }
-      await this.myPartiesSvc.refreshMjParties();
+      await this.myPartiesSvc.refreshAll();
       void this.router.navigate(['/parties', partie.id]);
     } catch (err) {
       // AC15 — distinguer les causes plutôt qu'un texte unique. Un refus de conversion porte son

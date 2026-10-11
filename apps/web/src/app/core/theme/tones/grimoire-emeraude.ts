@@ -281,6 +281,18 @@ export const grimoireEmeraude = {
   'dashboard.filter_role_all': 'Tous les rangs',
   'dashboard.filter_status_label': 'Phase',
   'dashboard.filter_status_all': 'Toutes les phases',
+  'dashboard.filter_genre_label': 'Genre',
+  'dashboard.filter_genre_all': 'Tous',
+  'dashboard.genre_quetes': 'Quêtes',
+  'dashboard.genre_ralliements': 'Ralliements',
+  'dashboard.group_by_type_label': 'Grouper par type',
+  /* Libellés de rôle d’un ralliement : mots de travail PROVISOIRES (epic 38), identiques dans les
+     trois thèmes en attendant les variantes validées. Hôte/Invité = rencontre isolée ; Admin/Membre
+     = groupe, et aussi les valeurs du filtre « Rang ». */
+  'dashboard.role_ralliement_host': 'Hôte',
+  'dashboard.role_ralliement_guest': 'Invité',
+  'dashboard.role_ralliement_admin': 'Admin',
+  'dashboard.role_ralliement_member': 'Membre',
   'dashboard.sort_urgence': 'Urgence',
   'dashboard.sort_date': 'Date',
   'dashboard.sort_nom': 'Nom',

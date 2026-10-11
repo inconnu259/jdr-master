@@ -91,7 +91,9 @@
 // Vignette atténuée + monogramme (Story 29.10) — s'intercale entre la pastille d'état et le
 // texte, sans faire grandir la ligne : 28 px est plus bas que la hauteur de deux lignes de texte.
 .row__vignette {
+  position: relative;
   flex: none;
+  display: block;
 }
 .row__txt {
   flex: 1;
@@ -142,6 +144,8 @@
   min-width: 0;
 }
 .tile__vignette {
+  position: relative;
+  flex: none;
   margin: 1rem 0 0 1rem;
 }
 // Story 29.6 (AC5) : « en retrait » — teinte --jdr-status-done (Story 29.0) en accent de bord,
@@ -257,4 +261,46 @@
 }
 .favorite-btn--active {
   color: var(--jdr-status-soon, #ff7ad9);
+}
+
+// Pastille texte du système (Story 38.5) : informative, non interactive, après le rôle.
+.system-chip {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 1px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: color-mix(in srgb, currentColor 85%, transparent);
+  white-space: nowrap;
+}
+.row__subline {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  .row__sub {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .system-chip {
+    flex: none;
+    margin-left: 0.4rem;
+  }
+}
+
+// Badge rond du système (Story 38.5) : coin bas-droit de la vignette, décalage -6/-6 (le retrait
+// de 1 rem de la vignette moyenne évite le rognage par `.tile`). Mode grand : 6 px dans le coin.
+.system-badge {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  pointer-events: none;
+}
+.system-badge--inset {
+  right: 6px;
+  bottom: 6px;
+}
+.tile__banner {
+  position: relative;
 }

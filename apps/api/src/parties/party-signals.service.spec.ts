@@ -457,4 +457,17 @@ describe('PartySignalsService', () => {
       }),
     );
   });
+
+  // Story 38.5 : un ralliement n'a aucune capacité de JDR, donc aucun signal (ni code de couche 3).
+  // Les signaux sont bâtis sur les seules listes par rôle `mj` et `player`, qui excluent les
+  // ralliements (cf. `PartiesService.listForUser`) : lire la liste SANS rôle (qui les inclut)
+  // ferait naître des entrées pour eux. Ce test fige le mécanisme ; le e2e `ralliement.e2e-spec.ts`
+  // fige le résultat de bout en bout.
+  it("n'interroge que les listes par rôle mj et player — jamais la liste sans rôle, qui inclut les ralliements (Story 38.5)", async () => {
+    await service.getSignals('u');
+    const roles = parties.listForUser.mock.calls.map((call) => call[1] as unknown);
+    expect(roles).toHaveLength(2);
+    expect(roles).toEqual(expect.arrayContaining(['mj', 'player']));
+    expect(roles).not.toContain(undefined);
+  });
 });
