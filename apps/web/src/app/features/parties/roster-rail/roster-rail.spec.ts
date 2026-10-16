@@ -9,6 +9,7 @@ const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const MEMBERS: PartieMemberDto[] = [
   {
+    role: 'MEMBER',
     userId: 'mj1',
     pseudo: 'Sylas',
     displayName: 'Sylas',
@@ -16,6 +17,7 @@ const MEMBERS: PartieMemberDto[] = [
     joinedAt: '2026-01-01T00:00:00.000Z',
   },
   {
+    role: 'MEMBER',
     userId: 'u1',
     pseudo: 'Alice',
     displayName: 'Alice au pays',

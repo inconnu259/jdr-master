@@ -127,6 +127,8 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
   PARTIE_DELETE: OWNER_ONLY,
   PARTIE_MEMBERS_READ: OWNER_AND_MEMBERS,
   PARTIE_MEMBER_REMOVE: OWNER_ONLY,
+  // Story 39.4 : nommer un administrateur / quitter l'office n'existe pas pour une partie de JDR.
+  PARTIE_MEMBER_ROLE_SET: NOBODY,
   PARTIE_AVAILABILITY_READ: OWNER_AND_MEMBERS,
   PARTIE_VISIBILITY_LOCKS_READ: OWNER_ONLY,
   PARTIE_VISIBILITY_LOCKS_UPDATE: OWNER_ONLY,
@@ -199,7 +201,8 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
  * Politique de la famille `ralliement` (Story 38.2) : « voir » (partie, membres, couverture) pour
  * l'administrateur et les membres, « modifier la partie » (édition, couverture) et, depuis la Story
  * 39.1, « clore / rouvrir / brûler » et, depuis la Story 39.3, « inviter / retirer un membre » pour
- * l'administrateur seul. TOUTE autre action est refusée
+ * l'administrateur seul, et, depuis la Story 39.4, « nommer un administrateur / quitter l'office ».
+ * TOUTE autre action est refusée
  * à tous les rôles — le ralliement n'a ni scénario, ni personnage, ni XP. Table COMPLÈTE par
  * construction (`Record` sur l'union fermée) : une action ajoutée sans sa ligne ne compile pas.
  */
@@ -213,6 +216,9 @@ export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly Parti
   PARTIE_DELETE: ADMIN_ONLY,
   PARTIE_MEMBERS_READ: ADMIN_AND_MEMBERS,
   PARTIE_MEMBER_REMOVE: ADMIN_ONLY,
+  // Story 39.4 : nommer un administrateur, quitter l'office. La cellule vaut pour la famille
+  // entière ; le refus du `ONE_SHOT` (un seul administrateur) est posé dans le service.
+  PARTIE_MEMBER_ROLE_SET: ADMIN_ONLY,
   PARTIE_AVAILABILITY_READ: NOBODY,
   PARTIE_VISIBILITY_LOCKS_READ: NOBODY,
   PARTIE_VISIBILITY_LOCKS_UPDATE: NOBODY,

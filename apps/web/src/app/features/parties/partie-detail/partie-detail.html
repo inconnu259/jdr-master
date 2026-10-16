@@ -432,8 +432,10 @@
         @if (isRalliement()) {
           <!-- Story 38.4 : « Missives » d'un ralliement = liste des membres, lisible par l'administrateur
                comme par un membre. Story 39.3 : l'administrateur d'un GROUPE y gagne l'invitation (pseudo,
-               e-mail, lien) et « Retirer » ; un membre, comme une rencontre isolée (epic 41), garde la
-               seule liste. Le créateur (admin) figure dans members() : on n'utilise donc pas
+               e-mail, lien), « Retirer » (membre ordinaire seulement), « Nommer admin » et, sur sa propre
+               ligne, « Quitter l'office » (Story 39.4) ; un membre, comme une rencontre isolée (epic 41),
+               garde la seule liste. Chaque administrateur d'un groupe porte le badge « Admin ». Le
+               créateur (admin) figure dans members() : on n'utilise donc pas
                otherMembers(), qui l'écarterait — « Retirer » lui est simplement refusé
                (canRemoveGroupMember). -->
           <mat-tab [label]="theme.tone()['partie.invitations_tab_label']">
@@ -446,6 +448,25 @@
                     [pseudo]="m.pseudo"
                     [ambiguous]="isMemberAmbiguous(m.userId)"
                   />
+                  @if (isGroup() && m.role === 'ADMIN') {
+                    <!-- Story 39.4 : badge d'administrateur = pictogramme ET mot, jamais la couleur seule. -->
+                    <span class="admin-badge">
+                      <mat-icon aria-hidden="true">shield</mat-icon>
+                      {{ theme.tone()['partie.ralliement_admin_badge'] }}
+                    </span>
+                  }
+                  @if (canAppointAdmin(m)) {
+                    <button mat-button (click)="appointAdmin(m)">
+                      <mat-icon aria-hidden="true">admin_panel_settings</mat-icon>
+                      {{ theme.tone()['partie.ralliement_appoint_btn'] }}
+                    </button>
+                  }
+                  @if (canStepDown(m)) {
+                    <button mat-button (click)="stepDownFromOffice()">
+                      <mat-icon aria-hidden="true">logout</mat-icon>
+                      {{ theme.tone()['partie.ralliement_step_down_btn'] }}
+                    </button>
+                  }
                   @if (canRemoveGroupMember(m)) {
                     <button mat-button (click)="removeMember(m)">
                       <mat-icon>person_remove</mat-icon> {{ theme.tone()['partie.remove_member_btn'] }}
@@ -454,9 +475,6 @@
                 </div>
               }
               @if (canInviteMembers()) {
-                @if (notice()) {
-                  <p class="notice" role="status">{{ notice() }}</p>
-                }
                 <ng-container [ngTemplateOutlet]="inviteTools" />
               }
             </section>
@@ -523,6 +541,12 @@
          AUCUN EFFET en theming M3 (documenté par Angular Material, « supported in M2 themes only »)
          -- la teinte destructrice passe donc par la classe icon-bar__btn--danger, qui référence
          --mat-sys-error directement (cf. partie-detail.scss). -->
+    @if (isGroup() && notice()) {
+      <!-- Story 39.4 : l'avis d'un groupe (invitation envoyée, refus de « Quitter l'office » lancé
+           depuis le pied de page…) reste visible quel que soit l'onglet ouvert. -->
+      <p class="notice" role="status">{{ notice() }}</p>
+    }
+
     <mat-card-actions class="icon-bar">
       @if (isMj()) {
         <a mat-button class="icon-bar__btn" [routerLink]="['/parties', p.id, 'edit']">
@@ -561,6 +585,10 @@
               <mat-icon aria-hidden="true">replay</mat-icon> {{ theme.tone()['partie.reopen_btn'] }}
             </button>
           }
+          <button mat-button class="icon-bar__btn" (click)="stepDownFromOffice()">
+            <mat-icon aria-hidden="true">logout</mat-icon>
+            {{ theme.tone()['partie.ralliement_step_down_btn'] }}
+          </button>
           <button mat-button class="icon-bar__btn icon-bar__btn--danger" (click)="confirmDelete(p)">
             <mat-icon aria-hidden="true">delete</mat-icon> {{ theme.tone()['partie.delete_btn'] }}
           </button>

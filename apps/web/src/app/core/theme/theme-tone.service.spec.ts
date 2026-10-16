@@ -921,6 +921,14 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_conjonctions_past',
     'partie.ralliement_conjonctions_upcoming_empty',
     'partie.ralliement_conjonctions_past_empty',
+    // Story 39.4 : badge, boutons et confirmation de nomination des administrateurs d’un groupe,
+    // verbatim du contrat d’UI (identiques dans les trois thèmes) ; « Vous restez membre » prend le
+    // tutoiement de la forêt, donc sa clé a une voix et n’est pas listée ici
+    'partie.ralliement_admin_badge',
+    'partie.ralliement_appoint_btn',
+    'partie.ralliement_appoint_confirm',
+    'partie.ralliement_step_down_btn',
+    'partie.ralliement_last_admin_btn',
     // Gabarits structurels et libellés techniques
     'partie.signal_more_count',
     'parties.detail_link_expires_short',
@@ -1314,6 +1322,59 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
         expect(NON_JDR_BANNED_WORDS.test(valeur), `${THEMES[i]} / ${key}`).toBe(false);
       }
       expect(new Set(valeurs).size, key).toBe(THEMES.length);
+    }
+  });
+
+  // Story 39.4 : administrateurs d'un groupe. Les mots du contrat d'UI (badge, boutons, confirmations
+  // courtes) sont identiques dans les trois thèmes ; l'avertissement du dernier administrateur et le
+  // repli d'erreur ont une voix par thème. Aucun mot de JDR nulle part, mêmes trous partout.
+  const ADMINS_NEUTRES: Record<string, string> = {
+    'partie.ralliement_admin_badge': 'Admin',
+    'partie.ralliement_appoint_btn': 'Nommer admin',
+    'partie.ralliement_step_down_btn': 'Quitter l’office',
+    'partie.ralliement_last_admin_btn': 'Quitter et supprimer',
+  };
+  const ADMINS_VOIX = ['partie.ralliement_last_admin_confirm', 'partie.ralliement_role_error'];
+
+  it('Story 39.4 : les mots du contrat d’UI des administrateurs sont identiques et sans mot de JDR', () => {
+    for (const [key, attendu] of Object.entries(ADMINS_NEUTRES)) {
+      for (const theme of THEMES) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(attendu);
+        expect(NON_JDR_BANNED_WORDS.test(TONE_MAP[theme][key]), `${theme} / ${key}`).toBe(false);
+      }
+    }
+  });
+
+  it('Story 39.4 : l’avertissement du dernier administrateur et le repli d’erreur ont une voix par thème', () => {
+    for (const key of ADMINS_VOIX) {
+      const valeurs = THEMES.map((theme) => TONE_MAP[theme][key]);
+      for (const [i, valeur] of valeurs.entries()) {
+        expect(valeur, `${THEMES[i]} / ${key}`).toBeTruthy();
+        expect(NON_JDR_BANNED_WORDS.test(valeur), `${THEMES[i]} / ${key}`).toBe(false);
+      }
+      expect(new Set(valeurs).size, key).toBe(THEMES.length);
+    }
+  });
+
+  it('Story 39.4 : « quitter l’office » garde le texte du contrat, tutoyé dans la forêt', () => {
+    const contrat =
+      'Quitter l’office d’administrateur de « {partie} » ? Vous restez membre du groupe.';
+    expect(TONE_MAP['grimoire-emeraude']['partie.ralliement_step_down_confirm']).toBe(contrat);
+    expect(TONE_MAP['atelier-cuivre']['partie.ralliement_step_down_confirm']).toBe(contrat);
+    expect(TONE_MAP['foret-ancienne']['partie.ralliement_step_down_confirm']).toBe(
+      contrat.replace('Vous restez', 'Tu restes'),
+    );
+  });
+
+  it('Story 39.4 : les confirmations gardent leurs trous dans les trois thèmes', () => {
+    for (const theme of THEMES) {
+      const tone = TONE_MAP[theme];
+      expect(tone['partie.ralliement_appoint_confirm'], theme).toContain('{name}');
+      expect(tone['partie.ralliement_appoint_confirm'], theme).toContain('{partie}');
+      expect(tone['partie.ralliement_step_down_confirm'], theme).toContain('{partie}');
+      for (const trou of ['{partie}', '{members}', '{conjonctions}']) {
+        expect(tone['partie.ralliement_last_admin_confirm'], theme).toContain(trou);
+      }
     }
   });
 

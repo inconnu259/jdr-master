@@ -18,6 +18,7 @@ import { ConvertPartieKindDto } from './dto/convert-partie-kind.dto';
 import { CreatePartieDto } from './dto/create-partie.dto';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
 import { GetHeatmapDto } from './dto/get-heatmap.dto';
+import { SetMemberRoleDto } from './dto/set-member-role.dto';
 import { SetVisibilityLocksDto } from './dto/set-visibility-locks.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
 
@@ -72,6 +73,17 @@ export class PartiesController {
     @Param('userId') targetUserId: string,
   ) {
     return this.parties.removeMember(id, user.id, targetUserId);
+  }
+
+  /** Nommer un administrateur ou quitter l'office (Story 39.4) — groupes seulement. */
+  @Patch(':id/members/:userId/role')
+  setMemberRole(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('userId') targetUserId: string,
+    @Body() dto: SetMemberRoleDto,
+  ) {
+    return this.parties.setMemberRole(id, user.id, targetUserId, dto);
   }
 
   @Patch(':id')

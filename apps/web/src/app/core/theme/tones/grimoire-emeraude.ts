@@ -381,6 +381,18 @@ export const grimoireEmeraude = {
   'partie.ralliement_generate_link': 'Tisser un parchemin de ralliement',
   'partie.ralliement_remove_member_confirm': 'Retirer {name} du ralliement « {partie} » ?',
   'partie.ralliement_remove_member_error': 'Ce compagnon n’a pu être retiré. Réessayez.',
+  /* — administrateurs d’un groupe (Story 39.4) : badge, boutons et confirmations courtes, mots fonctionnels identiques — */
+  'partie.ralliement_admin_badge': 'Admin',
+  'partie.ralliement_appoint_btn': 'Nommer admin',
+  'partie.ralliement_appoint_confirm':
+    'Nommer {name} administrateur de « {partie} » ? Cette personne pourra ajouter et retirer des membres et nommer d’autres administrateurs.',
+  'partie.ralliement_step_down_btn': 'Quitter l’office',
+  'partie.ralliement_step_down_confirm':
+    'Quitter l’office d’administrateur de « {partie} » ? Vous restez membre du groupe.',
+  'partie.ralliement_last_admin_btn': 'Quitter et supprimer',
+  'partie.ralliement_last_admin_confirm':
+    'Vous êtes le dernier administrateur du ralliement « {partie} ». En quittant l’office, le ralliement est dissous avec tout ce qu’il contient — compagnons : {members}, conjonctions : {conjonctions}. Nommez d’abord un autre administrateur pour le conserver.',
+  'partie.ralliement_role_error': 'Ce changement d’office n’a pu être inscrit. Réessayez.',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine séance au grimoire',
   'partie.no_session': "Aucune séance convoquée. Consultez l'oracle des créneaux.",

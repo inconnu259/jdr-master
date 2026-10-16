@@ -232,14 +232,40 @@ export class PartieDetail implements OnInit {
     () => this.isGroup() && this.partie()?.role === 'admin',
   );
 
-  /** « Retirer » n'est offert que sur un membre que le serveur acceptera de retirer : ni le créateur
-   *  (propriétaire), ni soi-même. Un autre administrateur n'est pas distinguable ici (le rôle d'un
-   *  membre n'est pas dans la liste) : le serveur le refuse en 409, message affiché (`removeMember`). */
+  /** Story 39.4 : l'utilisateur courant est administrateur de ce GROUPE (jamais d'une rencontre
+   *  isolée, ni d'une quête). Même condition que `canInviteMembers`, nommée pour ce qu'elle dit ici :
+   *  nommer un administrateur, quitter l'office. */
+  protected readonly isGroupAdmin = this.canInviteMembers;
+
+  /** Story 39.4 : nombre de conjonctions du groupe, pour l'avertissement du dernier administrateur.
+   *  Aucune n'existe avant l'epic 40 (la liste s'ouvre sur son état vide) ; ce calcul sera branché sur
+   *  les conjonctions du groupe à ce moment-là, sans toucher au dialogue. */
+  protected readonly conjonctionCount = computed(() => 0);
+
+  /** « Retirer » n'est offert que sur un membre ordinaire que le serveur acceptera de retirer : ni le
+   *  créateur (propriétaire), ni soi-même, ni un administrateur (Story 39.4 : son rôle vient de
+   *  `members()`). Sur écran périmé, le serveur refuse quand même (409), message affiché
+   *  (`removeMember`). */
   protected canRemoveGroupMember(member: PartieMemberDto): boolean {
     return (
       this.canInviteMembers() &&
+      member.role !== 'ADMIN' &&
       member.userId !== this.partie()?.ownerId &&
       member.userId !== this.auth.currentUser()?.id
+    );
+  }
+
+  /** Story 39.4 : « Nommer admin » sur chaque membre ordinaire, pour l'administrateur d'un groupe. */
+  protected canAppointAdmin(member: PartieMemberDto): boolean {
+    return this.isGroupAdmin() && member.role === 'MEMBER';
+  }
+
+  /** Story 39.4 : « Quitter l'office » sur SA PROPRE ligne d'administrateur. */
+  protected canStepDown(member: PartieMemberDto): boolean {
+    return (
+      this.isGroupAdmin() &&
+      member.role === 'ADMIN' &&
+      member.userId === this.auth.currentUser()?.id
     );
   }
 
@@ -840,22 +866,112 @@ export class PartieDetail implements OnInit {
     try {
       await this.parties.removeMember(p.id, member.userId);
     } catch (error) {
-      // Groupe (Story 39.3) : le serveur refuse de retirer un autre administrateur (409) ; son
-      // message est en français et neutre. Sans message textuel (réseau, 403, 404, message en
-      // tableau), repli sur le libellé générique du thème. Quête : comportement inchangé (l'erreur
-      // remonte).
+      // Groupe : « Retirer » n'est jamais offert sur un administrateur (Story 39.4), mais un écran
+      // périmé (membre nommé entre-temps, droits changés) peut encore recevoir un refus du serveur —
+      // message en français, affiché tel quel, sinon repli sur le libellé du thème. Quête :
+      // comportement inchangé (l'erreur remonte).
       if (!this.isRalliement()) throw error;
-      const message = (error as { error?: { message?: unknown } }).error?.message;
       this.notice.set(
-        typeof message === 'string' && message.trim()
-          ? message
-          : this.theme.tone()['partie.ralliement_remove_member_error'],
+        this.refusalMessage(error, this.theme.tone()['partie.ralliement_remove_member_error']),
       );
       // La liste est rechargée : l'échec peut venir d'un état périmé (membre déjà parti, droits changés).
       await this.loadMembers();
       return;
     }
     await this.loadMembers();
+  }
+
+  /** Message de refus renvoyé par le serveur (texte français), ou le libellé de repli du thème quand
+   *  la réponse n'en porte pas de textuel (réseau, 403, 404, message en tableau). */
+  private refusalMessage(error: unknown, fallback: string): string {
+    const message = (error as { error?: { message?: unknown } } | null)?.error?.message;
+    return typeof message === 'string' && message.trim() ? message : fallback;
+  }
+
+  /** Story 39.4 : l'administrateur d'un groupe en nomme un autre. Confirmation, puis rechargement de
+   *  la liste (le rôle change, « Retirer » disparaît de la ligne). Un refus du serveur est affiché. */
+  async appointAdmin(member: PartieMemberDto): Promise<void> {
+    const p = this.partie();
+    if (!p || !this.canAppointAdmin(member)) return;
+    const tone = this.theme.tone();
+    const ref = this.dialog.open(ConfirmDialog, {
+      data: {
+        message: fillTone(tone['partie.ralliement_appoint_confirm'], {
+          name: member.displayName,
+          partie: p.name,
+        }),
+        confirmLabel: tone['partie.ralliement_appoint_btn'],
+      },
+    });
+    if (!(await firstValueFrom(ref.afterClosed()))) return;
+    this.notice.set(null);
+    try {
+      await this.parties.setMemberRole(p.id, member.userId, { role: 'ADMIN' });
+    } catch (error) {
+      this.notice.set(this.refusalMessage(error, tone['partie.ralliement_role_error']));
+    }
+    await this.loadMembers();
+  }
+
+  /** Story 39.4 : l'administrateur d'un groupe quitte l'office (reste membre). S'il en est le DERNIER
+   *  (compte tiré de `members()`), la confirmation annonce la suppression du groupe, en rouge, et
+   *  seule celle-ci envoie `deleteIfLastAdmin`. Le serveur reste juge : une réponse `deleted` renvoie
+   *  à l'accueil, sinon la page recharge la partie (rôle `member`, outils d'administrateur retirés). */
+  async stepDownFromOffice(): Promise<void> {
+    const p = this.partie();
+    const me = this.auth.currentUser();
+    if (!p || !me || !this.isGroupAdmin()) return;
+    const tone = this.theme.tone();
+    // Liste relue AVANT de choisir la confirmation : une liste vide (pas encore chargée) ou périmée
+    // ferait annoncer — ou taire — la suppression du groupe à tort. Le serveur reste juge.
+    this.notice.set(null);
+    try {
+      await this.loadMembers();
+    } catch (error) {
+      this.notice.set(this.refusalMessage(error, tone['partie.ralliement_role_error']));
+      return;
+    }
+    const adminCount = this.members().filter((m) => m.role === 'ADMIN').length;
+    const lastAdmin = adminCount <= 1;
+    const ref = this.dialog.open(ConfirmDialog, {
+      data: lastAdmin
+        ? {
+            message: fillTone(tone['partie.ralliement_last_admin_confirm'], {
+              partie: p.name,
+              members: this.members().length,
+              conjonctions: this.conjonctionCount(),
+            }),
+            confirmLabel: tone['partie.ralliement_last_admin_btn'],
+            destructive: true,
+          }
+        : {
+            message: fillTone(tone['partie.ralliement_step_down_confirm'], { partie: p.name }),
+            confirmLabel: tone['partie.ralliement_step_down_btn'],
+          },
+    });
+    if (!(await firstValueFrom(ref.afterClosed()))) return;
+    this.notice.set(null);
+    try {
+      const result = await this.parties.setMemberRole(
+        p.id,
+        me.id,
+        lastAdmin ? { role: 'MEMBER', deleteIfLastAdmin: true } : { role: 'MEMBER' },
+      );
+      if (result.deleted) {
+        // Le groupe n'existe plus : un échec du rafraîchissement de la liste ne change rien à la suite.
+        try {
+          await this.myPartiesSvc.refreshAll();
+        } catch {
+          // non bloquant : la liste d'accueil se rechargera à l'arrivée
+        }
+        void this.router.navigate(['/']);
+        return;
+      }
+    } catch (error) {
+      this.notice.set(this.refusalMessage(error, tone['partie.ralliement_role_error']));
+    }
+    // Succès ou refus sur écran périmé : rôle et liste sont relus depuis le serveur.
+    await Promise.all([this.refreshPartie(), this.loadMembers()]);
   }
 
   async createLink(): Promise<void> {
@@ -893,6 +1009,8 @@ export class PartieDetail implements OnInit {
     const ref = this.dialog.open(ConfirmDialog, {
       data: {
         message: fillTone(this.theme.tone()['parties.detail_delete_confirm'], { partie: p.name }),
+        // Story 39.4 (UX-DR11) : irréversible, donc le bouton de confirmation est rouge.
+        destructive: true,
       },
     });
     if (!(await firstValueFrom(ref.afterClosed()))) return;

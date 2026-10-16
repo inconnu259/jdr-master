@@ -168,6 +168,10 @@ const LAYER3_PREFIXES = ['CHARACTER_', 'XP_', 'HOMME_DRAGON_', 'GROUP_ROLE_', 'A
 
 const ACTIONS: PermissionAction[] = [...MJ_ONLY, ...MEMBER_ACTIONS];
 
+/** Actions que la politique `jdr` n'ouvre à aucun rôle (Story 39.4) : nommer un administrateur et
+ *  quitter l'office n'existent que pour la famille `ralliement`. */
+const JDR_NOBODY: PermissionAction[] = ['PARTIE_MEMBER_ROLE_SET'];
+
 describe('PermissionService', () => {
   let prisma: ReturnType<typeof makePrisma>;
   let service: PermissionService;
@@ -186,6 +190,7 @@ describe('PermissionService', () => {
       const expected: Record<string, string[]> = {};
       for (const action of MJ_ONLY) expected[action] = ['mj'];
       for (const action of MEMBER_ACTIONS) expected[action] = ['mj', 'player'];
+      for (const action of JDR_NOBODY) expected[action] = [];
       expect(JDR_POLICY).toEqual(expected);
     });
 
@@ -236,6 +241,26 @@ describe('PermissionService', () => {
     it.each(MEMBER_ACTIONS)('%s : accordé à un membre, avec le rôle player', async (action) => {
       const grant = await service.assert(PLAYER, action, { partieId: 'A' });
       expect(grant).toEqual(objectLike({ partieId: 'A', role: 'player' }));
+    });
+  });
+
+  describe('assert() — action fermée à tous en JDR (Story 39.4)', () => {
+    it.each(JDR_NOBODY)('%s : refusé au MJ lui-même — 403', async (action) => {
+      const refusal = service.assert(MJ, action, { partieId: 'A' });
+      await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(refusal).rejects.toThrow(MJ_ONLY_MESSAGE);
+    });
+
+    it.each(JDR_NOBODY)('%s : refusé à un membre — 403', async (action) => {
+      await expect(service.assert(PLAYER, action, { partieId: 'A' })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    it.each(JDR_NOBODY)('%s : refusé à un non-membre — 403 « pas accès »', async (action) => {
+      const refusal = service.assert(STRANGER, action, { partieId: 'A' });
+      await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(refusal).rejects.toThrow(NO_ACCESS_MESSAGE);
     });
   });
 
@@ -463,6 +488,8 @@ describe('PermissionService', () => {
       'PARTIE_DELETE',
       // Story 39.3 : inviter (pseudo, e-mail, lien), lister, révoquer, retirer un membre.
       'PARTIE_MEMBER_REMOVE',
+      // Story 39.4 : nommer un administrateur, quitter l'office.
+      'PARTIE_MEMBER_ROLE_SET',
       'INVITATION_CREATE',
       'INVITATION_READ',
       'INVITATION_REVOKE',
@@ -536,11 +563,14 @@ describe('PermissionService', () => {
       },
     );
 
-    it.each(ACTIONS)('%s : refusé à un étranger — 403 « pas accès »', async (action) => {
-      const refusal = service.assert(STRANGER, action, { partieId: 'R' });
-      await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
-      await expect(refusal).rejects.toThrow(NO_ACCESS_MESSAGE);
-    });
+    it.each([...ACTIONS, ...JDR_NOBODY])(
+      '%s : refusé à un étranger — 403 « pas accès »',
+      async (action) => {
+        const refusal = service.assert(STRANGER, action, { partieId: 'R' });
+        await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(refusal).rejects.toThrow(NO_ACCESS_MESSAGE);
+      },
+    );
 
     it('un propriétaire sans ligne de membership compte comme admin, jamais mj', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie('R', OWNER_SANS_LIGNE, 'ralliement'));

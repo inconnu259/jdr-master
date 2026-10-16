@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import type {
   CreateXpDistributionDto,
   InviteLinkDto,
+  MembershipRole,
   PartieDto,
   PartieKind,
   PartieMemberDto,
@@ -152,6 +153,23 @@ export class PartiesService {
   removeMember(id: string, userId: string): Promise<void> {
     return firstValueFrom(
       this.http.delete<void>(`${API}/parties/${id}/members/${userId}`, { withCredentials: true }),
+    );
+  }
+
+  /** Story 39.4 : nommer un administrateur (`ADMIN`, sur un autre membre) ou quitter l'office
+   *  (`MEMBER`, sur soi-même). `deleteIfLastAdmin` n'est envoyé que par la confirmation du DERNIER
+   *  administrateur : sans lui, le serveur refuse (409) plutôt que de supprimer le groupe. */
+  setMemberRole(
+    id: string,
+    userId: string,
+    payload: { role: MembershipRole; deleteIfLastAdmin?: boolean },
+  ): Promise<{ ok: true; deleted: boolean }> {
+    return firstValueFrom(
+      this.http.patch<{ ok: true; deleted: boolean }>(
+        `${API}/parties/${id}/members/${userId}/role`,
+        payload,
+        { withCredentials: true },
+      ),
     );
   }
 

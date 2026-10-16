@@ -895,3 +895,193 @@ describe('Ralliement — inviter dans un groupe (Story 39.3)', () => {
     expect(body<{ message: string }>(asStranger).message).toBe(NO_ACCESS);
   });
 });
+
+// Story 39.4 — nommer des administrateurs et quitter l'office : mouvements autorisés, refus (membre,
+// étranger, JDR, rencontre isolée), dernier administrateur sous confirmation explicite, et deux
+// départs simultanés sous le verrou de la partie.
+describe("Ralliement — nommer des admins et quitter l'office (Story 39.4)", () => {
+  let h: Harness;
+  let admin: TestUser;
+  let admin2: TestUser;
+  let member: TestUser;
+  let member2: TestUser;
+  let stranger: TestUser;
+
+  type MemberRoleLike = { userId: string; role: string };
+  const LAST_ADMIN = 'dernier administrateur';
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, admin2, member, member2, stranger] = await Promise.all([
+      h.createUser('role-admin'),
+      h.createUser('role-admin2'),
+      h.createUser('role-membre'),
+      h.createUser('role-membre2'),
+      h.createUser('role-etranger'),
+    ]);
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  /** Un groupe neuf : `admin` (créateur) + les membres demandés. */
+  const newGroup = async (label: string, members: [TestUser, 'ADMIN' | 'MEMBER'][] = []) => {
+    const { id } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', label, 'ralliement');
+    for (const [user, role] of members) await h.addMember(id, user, role);
+    return id;
+  };
+  const roleOf = async (partieId: string, userId: string) =>
+    (await h.prisma.membership.findUnique({ where: { userId_partieId: { userId, partieId } } }))
+      ?.role ?? null;
+  const setRole = (
+    who: TestUser,
+    partieId: string,
+    targetId: string,
+    payload: Record<string, unknown>,
+  ) => who.agent.patch(`/parties/${partieId}/members/${targetId}/role`).send(payload);
+
+  it('un admin nomme un membre ordinaire : il devient ADMIN, la liste des membres le dit', async () => {
+    const id = await newGroup('role-nommer', [[member, 'MEMBER']]);
+    await setRole(admin, id, member.id, { role: 'ADMIN' }).expect(200);
+    expect(await roleOf(id, member.id)).toBe('ADMIN');
+
+    const list = body<MemberRoleLike[]>(
+      await member.agent.get(`/parties/${id}/members`).expect(200),
+    );
+    expect(list.find((m) => m.userId === member.id)?.role).toBe('ADMIN');
+    expect(list.find((m) => m.userId === admin.id)?.role).toBe('ADMIN');
+    // Le nouvel administrateur voit ses droits changer.
+    const got = await member.agent.get(`/parties/${id}`).expect(200);
+    expect(body<PartieDtoLike>(got).role).toBe('admin');
+  });
+
+  it('la propriété ne bouge jamais : ownerId reste le créateur après nomination et départ', async () => {
+    const id = await newGroup('role-owner', [[admin2, 'MEMBER']]);
+    await setRole(admin, id, admin2.id, { role: 'ADMIN' }).expect(200);
+    await setRole(admin, id, admin.id, { role: 'MEMBER' }).expect(200);
+    const stored = await h.prisma.partie.findUniqueOrThrow({ where: { id } });
+    expect(stored.ownerId).toBe(admin.id);
+  });
+
+  it("quitter l'office alors qu'un autre admin reste : devient MEMBER, reste dans le groupe, perd les droits d'admin", async () => {
+    const id = await newGroup('role-quitter', [[admin2, 'ADMIN']]);
+    await setRole(admin, id, admin.id, { role: 'MEMBER' }).expect(200);
+    expect(await roleOf(id, admin.id)).toBe('MEMBER');
+    expect(await h.prisma.partie.count({ where: { id } })).toBe(1);
+    const got = await admin.agent.get(`/parties/${id}`).expect(200);
+    expect(body<PartieDtoLike>(got).role).toBe('member');
+    const refused = await admin.agent
+      .patch(`/parties/${id}`)
+      .send({ name: 'Plus admin' })
+      .expect(403);
+    expect(body<{ message: string }>(refused).message).toBe(ADMIN_ONLY);
+  });
+
+  it('dernier administrateur sans confirmation : 409, rien ne change ; avec confirmation, le groupe disparaît pour tous', async () => {
+    const id = await newGroup('role-dernier', [[member, 'MEMBER']]);
+    const sans = await setRole(admin, id, admin.id, { role: 'MEMBER' }).expect(409);
+    expect(body<{ message: string }>(sans).message).toContain(LAST_ADMIN);
+    await setRole(admin, id, admin.id, { role: 'MEMBER', deleteIfLastAdmin: false }).expect(409);
+    expect(await roleOf(id, admin.id)).toBe('ADMIN');
+    expect(await h.prisma.partie.count({ where: { id } })).toBe(1);
+
+    await setRole(admin, id, admin.id, { role: 'MEMBER', deleteIfLastAdmin: true }).expect(200);
+    expect(await h.prisma.partie.count({ where: { id } })).toBe(0);
+    expect(await h.prisma.membership.count({ where: { partieId: id } })).toBe(0);
+    await member.agent.get(`/parties/${id}`).expect(404);
+  });
+
+  it('un membre ordinaire : 403 « réservée aux administrateurs » (nommer et se nommer), rien écrit', async () => {
+    const id = await newGroup('role-membre', [
+      [member, 'MEMBER'],
+      [member2, 'MEMBER'],
+    ]);
+    for (const target of [member2.id, member.id]) {
+      const res = await setRole(member, id, target, { role: 'ADMIN' }).expect(403);
+      expect(body<{ message: string }>(res).message).toBe(ADMIN_ONLY);
+    }
+    const down = await setRole(member, id, member.id, { role: 'MEMBER' }).expect(403);
+    expect(body<{ message: string }>(down).message).toBe(ADMIN_ONLY);
+    expect(await roleOf(id, member.id)).toBe('MEMBER');
+    expect(await roleOf(id, member2.id)).toBe('MEMBER');
+  });
+
+  it('un étranger : 403 « pas accès »', async () => {
+    const id = await newGroup('role-etranger', [[member, 'MEMBER']]);
+    const res = await setRole(stranger, id, member.id, { role: 'ADMIN' }).expect(403);
+    expect(body<{ message: string }>(res).message).toBe(NO_ACCESS);
+    expect(await roleOf(id, member.id)).toBe('MEMBER');
+  });
+
+  it("mouvements inexistants : retirer l'office à un autre, nommer un admin, se nommer → 409 ; membre inconnu → 404", async () => {
+    const id = await newGroup('role-mauvais', [
+      [admin2, 'ADMIN'],
+      [member, 'MEMBER'],
+    ]);
+    await setRole(admin, id, admin2.id, { role: 'MEMBER' }).expect(409);
+    await setRole(admin, id, admin2.id, { role: 'ADMIN' }).expect(409);
+    await setRole(admin, id, admin.id, { role: 'ADMIN' }).expect(409);
+    await setRole(admin, id, stranger.id, { role: 'ADMIN' }).expect(404);
+    expect(await roleOf(id, admin2.id)).toBe('ADMIN');
+    expect(await roleOf(id, member.id)).toBe('MEMBER');
+  });
+
+  it('corps invalide : 400', async () => {
+    const id = await newGroup('role-corps', [[member, 'MEMBER']]);
+    await setRole(admin, id, member.id, { role: 'SUPER' }).expect(400);
+    await setRole(admin, id, member.id, {}).expect(400);
+    await setRole(admin, id, member.id, { role: 'ADMIN', deleteIfLastAdmin: 'oui' }).expect(400);
+  });
+
+  it('rencontre isolée (ONE_SHOT) : refusée en 403 même à son administrateur', async () => {
+    const { id } = await h.createPartie(admin, 'ONE_SHOT', 'role-isolee', 'ralliement');
+    await h.addMember(id, member);
+    const res = await setRole(admin, id, member.id, { role: 'ADMIN' }).expect(403);
+    expect(body<{ message: string }>(res).message).toBe(UNAVAILABLE);
+    expect(await roleOf(id, member.id)).toBe('MEMBER');
+  });
+
+  it('partie de JDR : la route est fermée à tous, y compris au MJ', async () => {
+    const { id } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'role-jdr');
+    await h.addMember(id, member);
+    await setRole(admin, id, member.id, { role: 'ADMIN' }).expect(403);
+    await setRole(member, id, member.id, { role: 'MEMBER' }).expect(403);
+    await setRole(stranger, id, member.id, { role: 'ADMIN' }).expect(403);
+    expect(await roleOf(id, member.id)).toBe('MEMBER');
+    const list = body<MemberRoleLike[]>(
+      await admin.agent.get(`/parties/${id}/members`).expect(200),
+    );
+    expect(list.map((m) => m.role)).toEqual(['MEMBER']);
+  });
+
+  it('« Retirer » : un administrateur nommé n’est plus retirable (409), même par le créateur', async () => {
+    const id = await newGroup('role-retirer', [[member, 'MEMBER']]);
+    await setRole(admin, id, member.id, { role: 'ADMIN' }).expect(200);
+    await admin.agent.delete(`/parties/${id}/members/${member.id}`).expect(409);
+    expect(await roleOf(id, member.id)).toBe('ADMIN');
+  });
+
+  it("deux administrateurs quittent l'office en même temps, avec confirmation : le groupe disparaît une seule fois, jamais zéro admin sans suppression", async () => {
+    const id = await newGroup('role-concurrent', [[admin2, 'ADMIN']]);
+    const [a, b] = await Promise.all([
+      setRole(admin, id, admin.id, { role: 'MEMBER', deleteIfLastAdmin: true }),
+      setRole(admin2, id, admin2.id, { role: 'MEMBER', deleteIfLastAdmin: true }),
+    ]);
+    // Le verrou sérialise : le premier quitte l'office, le second voit le recomptage (dernier
+    // administrateur, suppression confirmée). Les deux réussissent, le groupe disparaît UNE fois.
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect(await h.prisma.partie.count({ where: { id } })).toBe(0);
+  });
+
+  it("deux départs simultanés sans confirmation : un seul réussit, l'autre est refusé, un admin reste", async () => {
+    const id = await newGroup('role-concurrent-sans', [[admin2, 'ADMIN']]);
+    const [a, b] = await Promise.all([
+      setRole(admin, id, admin.id, { role: 'MEMBER' }),
+      setRole(admin2, id, admin2.id, { role: 'MEMBER' }),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect(await h.prisma.partie.count({ where: { id } })).toBe(1);
+    expect(await h.prisma.membership.count({ where: { partieId: id, role: 'ADMIN' } })).toBe(1);
+  });
+});

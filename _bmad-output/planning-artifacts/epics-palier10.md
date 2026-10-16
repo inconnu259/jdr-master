@@ -486,7 +486,8 @@ So that la bande sache quand et où on se retrouve.
 **And** la conjonction apparaît sous forme de carte dans « À venir », sans rechargement chez tous les membres ; une fois sa date passée, elle passe dans « Passées » (UX-DR7, NFR1)
 **And** la carte montre le titre, le badge d'état (« À venir », « Dans *n* jours » en plein quand la date est proche, « Passé »), la date en gras, l'hôte, le lieu et la ligne « Ma situation » ; la grille garde des cartes de 250 px minimum, une seule colonne sous 520 px
 **And** le groupe passe au statut « En cours » dès sa première conjonction (AD-18), et sa date entre dans `nextSessionDate`, les indisponibilités des membres et leur calendrier personnel (AD-15)
-**And** un `startSlot` est toujours renseigné pour une conjonction : un ralliement n'écrit jamais de journée sans créneau.
+**And** un `startSlot` est toujours renseigné pour une conjonction : un ralliement n'écrit jamais de journée sans créneau
+**And** l'avertissement rouge du dernier admin qui quitte l'office (story 39.4) cite le vrai nombre de conjonctions du groupe, et non plus le « 0 » provisoire de `conjonctionCount` dans `PartieDetail`.
 
 ### Story 40.2 : Consulter et modifier une conjonction dans sa fenêtre
 
@@ -502,7 +503,8 @@ So that je sache tout de suite ce qu'on attend de moi.
 **And** l'ordre est : titre + badge d'état → encadré de situation → la fiche (date, hôte, lieu, heure, participation « 8 places · 5 inscrits · 3 libres » ou « Tous les membres », infos pratiques) → inscrits en pastilles (avatar 26 px + nom, la sienne bordée) → pied
 **And** le titre de la fenêtre est le nom de la conjonction ; le focus y est piégé, puis rendu à la carte ; Échap, « Refermer » et le retour du navigateur rendent la liste intacte (UX-DR19)
 **And** l'hôte voit « Modifier » au pied : la même fenêtre repasse en mode édition, tant que la conjonction n'est pas passée ; un autre membre reçoit un refus serveur, testé (FR8)
-**And** le lieu est visible de tous les membres du groupe et de personne d'autre (NFR2).
+**And** le lieu est visible de tous les membres du groupe et de personne d'autre (NFR2)
+**And** ⚠️ le badge d'admin reporté de la story 39.4 (sa page de groupe n'a pas de rail d'avatars) : dans les pastilles d'inscrits, l'avatar d'un admin du groupe porte le bouclier de 14 px au coin (UX-DR11) ; badge non dessiné, il suit la proposition de l'UX et est relu avec l'utilisateur ; le mot « Admin » reste porté en texte pour l'accessibilité (la couleur ou le glyphe ne portent jamais seuls).
 
 ### Story 40.3 : S'inscrire à une conjonction et s'en désinscrire
 

@@ -76,8 +76,12 @@ import {
   GAME_SYSTEM_FAMILY_CHANGE_MESSAGE,
   GAME_SYSTEM_WITHOUT_MODULE_MESSAGE,
   KIND_NOT_ALLOWED_FOR_SYSTEM_MESSAGE,
+  LAST_ADMIN_MESSAGE,
   PartiesService,
   RALLIEMENT_REMOVE_PROTECTED_MESSAGE,
+  ROLE_ALREADY_ADMIN_MESSAGE,
+  ROLE_DEMOTE_OTHER_MESSAGE,
+  ROLE_SELF_APPOINT_MESSAGE,
   RALLIEMENT_TYPE_LOCKED_MESSAGE,
 } from './parties.service';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
@@ -96,6 +100,8 @@ describe('PartiesService', () => {
       delete: jest.Mock;
     };
     membership: {
+      update: jest.Mock;
+      count: jest.Mock;
       findUnique: jest.Mock;
       findMany: jest.Mock;
       deleteMany: jest.Mock;
@@ -176,6 +182,8 @@ describe('PartiesService', () => {
         findMany: jest.fn(),
         deleteMany: jest.fn(),
         create: jest.fn(),
+        update: jest.fn(),
+        count: jest.fn(),
       },
       user: {
         findUnique: jest.fn().mockResolvedValue(null),
@@ -1309,6 +1317,265 @@ describe('PartiesService', () => {
       );
       expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
     });
+
+    // Story 39.4 : la relecture du rôle de la cible se fait sous le verrou de la partie.
+    it('retire sous le verrou de la partie, dans une seule transaction (Story 39.4)', async () => {
+      const ordre: string[] = [];
+      prisma.$queryRaw.mockImplementation(() => {
+        ordre.push('verrou');
+        return Promise.resolve([{ id: 'p1' }]);
+      });
+      prisma.membership.deleteMany.mockImplementation(() => {
+        ordre.push('delete');
+        return Promise.resolve({ count: 1 });
+      });
+      await service.removeMember('p1', 'admin1', 'membre1');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(ordre).toEqual(['verrou', 'delete']);
+    });
+
+    it('cible nommée administrateur entre-temps : relue sous le verrou, 409, aucune suppression', async () => {
+      roles.membre1 = 'ADMIN';
+      try {
+        await expect(service.removeMember('p1', 'admin1', 'membre1')).rejects.toBeInstanceOf(
+          ConflictException,
+        );
+      } finally {
+        roles.membre1 = 'MEMBER';
+      }
+      expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("l'appelant qui a quitté l'office entre-temps ne retire plus personne : 403", async () => {
+      roles.admin2 = 'MEMBER';
+      try {
+        // Décision de droit prise sur un rôle ADMIN, puis rôle relu MEMBER sous le verrou.
+        prisma.membership.findUnique
+          .mockResolvedValueOnce({ userId: 'admin2', role: 'ADMIN' })
+          .mockResolvedValueOnce({ userId: 'admin2', role: 'MEMBER' });
+        await expect(service.removeMember('p1', 'admin2', 'membre1')).rejects.toBeInstanceOf(
+          ForbiddenException,
+        );
+      } finally {
+        roles.admin2 = 'ADMIN';
+      }
+      expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // Story 39.4 : nommer un administrateur / quitter l'office, sous le verrou de la partie.
+  describe('setMemberRole() — groupe de ralliement (Story 39.4)', () => {
+    const groupe = {
+      ...partie,
+      kind: 'CAMPAGNE_EPISODIQUE',
+      gameSystemId: 'ralliement',
+      ownerId: 'admin1',
+    };
+    const roles: Record<string, 'ADMIN' | 'MEMBER'> = {};
+
+    beforeEach(() => {
+      for (const k of Object.keys(roles)) delete roles[k];
+      Object.assign(roles, { admin1: 'ADMIN', membre1: 'MEMBER' });
+      prisma.partie.findUnique.mockResolvedValue(groupe);
+      prisma.partie.delete.mockResolvedValue(groupe);
+      prisma.membership.update.mockResolvedValue({});
+      prisma.membership.count.mockResolvedValue(1);
+      prisma.membership.findMany.mockResolvedValue([
+        { userId: 'admin1' },
+        { userId: 'membre1' },
+        { userId: 'membre2' },
+      ]);
+      prisma.user.findUnique.mockResolvedValue({ id: 'admin1', pseudo: 'a', displayName: 'A' });
+      prisma.membership.findUnique.mockImplementation(
+        ({ where }: { where: { userId_partieId: { userId: string } } }) => {
+          const role = roles[where.userId_partieId.userId];
+          return Promise.resolve(role ? { userId: where.userId_partieId.userId, role } : null);
+        },
+      );
+    });
+
+    it('nomme un membre ordinaire administrateur : rôle ADMIN écrit sous le verrou, listes rafraîchies', async () => {
+      const ordre: string[] = [];
+      prisma.$queryRaw.mockImplementation(() => {
+        ordre.push('verrou');
+        return Promise.resolve([{ id: 'p1' }]);
+      });
+      prisma.membership.update.mockImplementation(() => {
+        ordre.push('update');
+        return Promise.resolve({});
+      });
+      realtimeEvents.emit.mockImplementation((topic: string) => ordre.push(topic));
+      // Lecture des participants pour `user:{id}` (membersOf), après le commit.
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'admin1', pseudo: 'a', displayName: 'A' } },
+        { user: { id: 'membre1', pseudo: 'm', displayName: 'M' } },
+      ]);
+
+      await expect(
+        service.setMemberRole('p1', 'admin1', 'membre1', { role: 'ADMIN' }),
+      ).resolves.toEqual({ ok: true, deleted: false });
+
+      expect(prisma.membership.update).toHaveBeenCalledWith({
+        where: { userId_partieId: { userId: 'membre1', partieId: 'p1' } },
+        data: { role: 'ADMIN' },
+      });
+      // Émission après l'écriture, jamais avant : le verrou et l'update précèdent le topic.
+      expect(ordre.slice(0, 2)).toEqual(['verrou', 'update']);
+      expect(ordre.indexOf(partieTopic('p1'))).toBeGreaterThan(ordre.indexOf('update'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('admin1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('membre1'));
+    });
+
+    it('refus : un membre ordinaire ne nomme personne (403, rien écrit)', async () => {
+      roles.membre2 = 'MEMBER';
+      const promise = service.setMemberRole('p1', 'membre1', 'membre2', { role: 'ADMIN' });
+      await expect(promise).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(promise).rejects.toThrow(ADMIN_ONLY_MESSAGE);
+      expect(prisma.membership.update).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('refus : étranger au groupe (403)', async () => {
+      await expect(
+        service.setMemberRole('p1', 'etranger', 'membre1', { role: 'ADMIN' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.membership.update).not.toHaveBeenCalled();
+    });
+
+    it('refus : se nommer soi-même → 409', async () => {
+      const promise = service.setMemberRole('p1', 'admin1', 'admin1', { role: 'ADMIN' });
+      await expect(promise).rejects.toBeInstanceOf(ConflictException);
+      await expect(promise).rejects.toThrow(ROLE_SELF_APPOINT_MESSAGE);
+    });
+
+    it('refus : nommer un administrateur → 409', async () => {
+      roles.admin2 = 'ADMIN';
+      const promise = service.setMemberRole('p1', 'admin1', 'admin2', { role: 'ADMIN' });
+      await expect(promise).rejects.toBeInstanceOf(ConflictException);
+      await expect(promise).rejects.toThrow(ROLE_ALREADY_ADMIN_MESSAGE);
+      expect(prisma.membership.update).not.toHaveBeenCalled();
+    });
+
+    it('refus : membre inconnu → 404', async () => {
+      await expect(
+        service.setMemberRole('p1', 'admin1', 'inconnu', { role: 'ADMIN' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("refus : retirer l'office à un autre → 409", async () => {
+      roles.admin2 = 'ADMIN';
+      const promise = service.setMemberRole('p1', 'admin1', 'admin2', { role: 'MEMBER' });
+      await expect(promise).rejects.toBeInstanceOf(ConflictException);
+      await expect(promise).rejects.toThrow(ROLE_DEMOTE_OTHER_MESSAGE);
+      expect(prisma.membership.update).not.toHaveBeenCalled();
+    });
+
+    it('refus : une rencontre à usage unique (ONE_SHOT) → 403 « indisponible »', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...groupe, kind: 'ONE_SHOT' });
+      const promise = service.setMemberRole('p1', 'admin1', 'membre1', { role: 'ADMIN' });
+      await expect(promise).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(promise).rejects.toThrow(RALLIEMENT_UNAVAILABLE_MESSAGE);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('refus : une partie de JDR → 403, aucune transaction', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      await expect(
+        service.setMemberRole('p1', 'mj1', 'u', { role: 'ADMIN' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("quitter l'office alors qu'un autre administrateur reste : devient MEMBER, le groupe reste", async () => {
+      prisma.membership.count.mockResolvedValue(2);
+      await expect(
+        service.setMemberRole('p1', 'admin1', 'admin1', { role: 'MEMBER' }),
+      ).resolves.toEqual({ ok: true, deleted: false });
+      expect(prisma.membership.update).toHaveBeenCalledWith({
+        where: { userId_partieId: { userId: 'admin1', partieId: 'p1' } },
+        data: { role: 'MEMBER' },
+      });
+      expect(prisma.partie.delete).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('dernier administrateur sans confirmation : 409 « dernier administrateur », rien ne change', async () => {
+      const promise = service.setMemberRole('p1', 'admin1', 'admin1', { role: 'MEMBER' });
+      await expect(promise).rejects.toBeInstanceOf(ConflictException);
+      await expect(promise).rejects.toThrow(LAST_ADMIN_MESSAGE);
+      expect(prisma.membership.update).not.toHaveBeenCalled();
+      expect(prisma.partie.delete).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('dernier administrateur, deleteIfLastAdmin false : même refus', async () => {
+      await expect(
+        service.setMemberRole('p1', 'admin1', 'admin1', {
+          role: 'MEMBER',
+          deleteIfLastAdmin: false,
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.partie.delete).not.toHaveBeenCalled();
+    });
+
+    it('dernier administrateur avec confirmation : groupe supprimé, chaque participant notifié après le commit', async () => {
+      const ordre: string[] = [];
+      prisma.membership.findMany.mockImplementation(() => {
+        ordre.push('lecture');
+        return Promise.resolve([
+          { userId: 'admin1' },
+          { userId: 'membre1' },
+          { userId: 'membre2' },
+        ]);
+      });
+      prisma.partie.delete.mockImplementation(() => {
+        ordre.push('delete');
+        return Promise.resolve(groupe);
+      });
+      prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+        const result = await fn(prisma);
+        ordre.push('commit');
+        return result;
+      });
+      realtimeEvents.emit.mockImplementation((topic: string) => ordre.push(topic));
+
+      await expect(
+        service.setMemberRole('p1', 'admin1', 'admin1', {
+          role: 'MEMBER',
+          deleteIfLastAdmin: true,
+        }),
+      ).resolves.toEqual({ ok: true, deleted: true });
+
+      expect(prisma.partie.delete).toHaveBeenCalledWith({ where: { id: 'p1' } });
+      for (const id of ['admin1', 'membre1', 'membre2']) {
+        expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic(id));
+      }
+      // Lecture des participants avant la suppression ; aucune émission avant le commit.
+      expect(ordre.indexOf('lecture')).toBeLessThan(ordre.indexOf('delete'));
+      expect(ordre.indexOf('commit')).toBeLessThan(ordre.indexOf(userTopic('membre1')));
+      expect(ordre.indexOf('commit')).toBeLessThan(ordre.indexOf(partieTopic('p1')));
+    });
+
+    it("l'appelant devenu simple membre entre la décision et le verrou : 403, rien écrit", async () => {
+      prisma.membership.findUnique
+        .mockResolvedValueOnce({ userId: 'admin1', role: 'ADMIN' })
+        .mockResolvedValueOnce({ userId: 'admin1', role: 'MEMBER' });
+      await expect(
+        service.setMemberRole('p1', 'admin1', 'admin1', {
+          role: 'MEMBER',
+          deleteIfLastAdmin: true,
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.partie.delete).not.toHaveBeenCalled();
+      expect(prisma.membership.update).not.toHaveBeenCalled();
+    });
+
+    it('partie disparue entre la décision et le verrou : 404', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      await expect(
+        service.setMemberRole('p1', 'admin1', 'membre1', { role: 'ADMIN' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
   });
 
   it('update() émet un événement temps réel scopé sur la Partie (Story 18.3, AC1)', async () => {
@@ -1655,6 +1922,36 @@ describe('PartiesService', () => {
         displayName: 'Alice au pays',
       });
       expect(asMember[0].email).toBeUndefined();
+    });
+
+    it("expose le rôle d'adhésion pour un groupe, et toujours MEMBER pour une partie de JDR (Story 39.4)", async () => {
+      const lignes = [
+        {
+          role: 'ADMIN',
+          joinedAt: new Date('2026-01-01'),
+          user: { id: 'a1', pseudo: 'Ada', displayName: 'Ada', email: 'a@b.c' },
+        },
+        {
+          role: 'MEMBER',
+          joinedAt: new Date('2026-01-02'),
+          user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice', email: 'u@b.c' },
+        },
+      ];
+      prisma.membership.findMany.mockResolvedValue(lignes);
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        kind: 'CAMPAGNE_EPISODIQUE',
+        gameSystemId: 'ralliement',
+        ownerId: 'a1',
+      });
+      prisma.membership.findUnique.mockResolvedValue({ userId: 'a1', role: 'ADMIN' });
+      const groupe = await service.listMembers('p1', 'a1');
+      expect(groupe.map((m) => m.role)).toEqual(['ADMIN', 'MEMBER']);
+
+      // JDR : même un rôle ADMIN en base ne sort jamais de l'API.
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      const jdr = await service.listMembers('p1', 'mj1');
+      expect(jdr.map((m) => m.role)).toEqual(['MEMBER', 'MEMBER']);
     });
 
     it('lève ForbiddenException si ni MJ ni membre (aucune requête membership)', async () => {

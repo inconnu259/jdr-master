@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -9,7 +10,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
-import type { Partie } from '@prisma/client';
+import type { Partie, Prisma } from '@prisma/client';
 import type {
   AggregatedSlotDto,
   AvailableSlotDto,
@@ -34,7 +35,12 @@ import {
 } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { EventsService } from '../events/events.service';
-import { PermissionService } from '../permissions/permission.service';
+import {
+  ADMIN_ONLY_MESSAGE,
+  NO_ACCESS_MESSAGE,
+  PermissionService,
+  RALLIEMENT_UNAVAILABLE_MESSAGE,
+} from '../permissions/permission.service';
 import type { PartieSignalsPort } from '../poll/ports/partie-signals.port';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
@@ -48,6 +54,7 @@ import {
 import { UPLOADS_ROOT } from '../common/uploads-root';
 import { ConvertPartieKindDto } from './dto/convert-partie-kind.dto';
 import { CreatePartieDto } from './dto/create-partie.dto';
+import { SetMemberRoleDto } from './dto/set-member-role.dto';
 import { SetVisibilityLocksDto } from './dto/set-visibility-locks.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
 
@@ -105,6 +112,18 @@ export const RALLIEMENT_TYPE_LOCKED_MESSAGE = "Le type d'un ralliement ne peut p
  *  administrateur et soi-même relèvent de la procédure de départ (Stories 39.4/39.5). */
 export const RALLIEMENT_REMOVE_PROTECTED_MESSAGE =
   'Seul un membre ordinaire peut être retiré ici : ni le créateur du groupe, ni un administrateur, ni vous-même';
+
+/** Story 39.4 : refus d'un mouvement de rôle qui n'existe pas (nommer un administrateur, ou
+ *  quitter soi-même l'office — rien d'autre). */
+export const ROLE_ALREADY_ADMIN_MESSAGE = 'Ce membre est déjà administrateur du groupe';
+export const ROLE_SELF_APPOINT_MESSAGE = 'Vous êtes déjà administrateur du groupe';
+export const ROLE_DEMOTE_OTHER_MESSAGE =
+  "Seul un administrateur peut quitter son propre office : on ne retire pas l'office à un autre";
+
+/** Story 39.4 : quitter l'office en étant le dernier administrateur supprime le groupe — refusé
+ *  tant que la suppression n'est pas confirmée explicitement (`deleteIfLastAdmin`). */
+export const LAST_ADMIN_MESSAGE =
+  "Vous êtes le dernier administrateur : quitter l'office supprimerait le groupe. Nommez d'abord un autre administrateur, ou confirmez la suppression";
 
 /**
  * Dimensions cibles des dérivées (Story 29.12, AC9) — alignées sur le rendu réel de `PartyBanner`
@@ -401,9 +420,14 @@ export class PartiesService implements PartieSignalsPort {
    *  que si le demandeur est le MJ (AD-2) — un `InviteLink` acceptant un nombre d'usages
    *  illimité, un membre n'est pas nécessairement quelqu'un que le MJ a choisi individuellement. */
   async listMembers(partieId: string, userId: string) {
-    const { role } = await this.permissions.assert(userId, 'PARTIE_MEMBERS_READ', { partieId });
+    const { role, partie } = await this.permissions.assert(userId, 'PARTIE_MEMBERS_READ', {
+      partieId,
+    });
     // Projection selon le rôle (Story 37.6) : l'e-mail n'est exposé qu'au MJ.
     const withEmail = role === 'mj';
+    // Story 39.4 : le rôle d'adhésion ne compte que pour un groupe ; une partie de JDR renvoie
+    // toujours `MEMBER` (son pouvoir vient de `ownerId`, pas de ce rôle).
+    const isGroup = familyOf(partie.gameSystemId) === 'ralliement';
     const memberships = await this.prisma.membership.findMany({
       where: { partieId },
       orderBy: { joinedAt: 'asc' },
@@ -417,6 +441,7 @@ export class PartiesService implements PartieSignalsPort {
       userId: m.user.id,
       pseudo: m.user.pseudo,
       displayName: m.user.displayName,
+      role: isGroup ? m.role : ('MEMBER' as const),
       email: withEmail ? m.user.email : undefined,
       joinedAt: m.joinedAt,
     }));
@@ -427,23 +452,36 @@ export class PartiesService implements PartieSignalsPort {
     const { partie } = await this.permissions.assert(userId, 'PARTIE_MEMBER_REMOVE', { partieId });
     if (familyOf(partie.gameSystemId) === 'ralliement') {
       // Story 39.3 : seul un membre ordinaire se retire ici. Le créateur, un autre administrateur
-      // et soi-même sont refusés tant que `leave()` (39.4/39.5) ne porte pas les règles de
-      // propriétaire et de dernier administrateur — elles ne sont pas réinventées dans ce chemin.
+      // et soi-même sont refusés tant que `leave()` (39.5) ne porte pas les règles de propriétaire
+      // et de dernier administrateur — elles ne sont pas réinventées dans ce chemin.
       if (targetUserId === userId || targetUserId === partie.ownerId) {
         throw new ConflictException(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
       }
-      const target = await this.prisma.membership.findUnique({
-        where: { userId_partieId: { userId: targetUserId, partieId } },
-        select: { role: true },
+      // Story 39.4 : les rôles sont relus SOUS le verrou de la partie — un administrateur nommé (ou
+      // un appelant qui vient de quitter l'office) entre la décision de droit et l'écriture ne
+      // doit jamais être retiré par erreur.
+      await this.prisma.$transaction(async (tx) => {
+        await this.lockPartie(tx, partieId);
+        const caller = await tx.membership.findUnique({
+          where: { userId_partieId: { userId, partieId } },
+          select: { role: true },
+        });
+        if (caller?.role !== 'ADMIN') throw new ForbiddenException(ADMIN_ONLY_MESSAGE);
+        const target = await tx.membership.findUnique({
+          where: { userId_partieId: { userId: targetUserId, partieId } },
+          select: { role: true },
+        });
+        if (!target) throw new NotFoundException('Ce membre est introuvable');
+        if (target.role !== 'MEMBER') {
+          throw new ConflictException(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
+        }
+        await tx.membership.deleteMany({ where: { partieId, userId: targetUserId } });
       });
-      if (!target) throw new NotFoundException('Ce membre est introuvable');
-      if (target.role !== 'MEMBER') {
-        throw new ConflictException(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
-      }
+    } else {
+      await this.prisma.membership.deleteMany({
+        where: { partieId, userId: targetUserId },
+      });
     }
-    await this.prisma.membership.deleteMany({
-      where: { partieId, userId: targetUserId },
-    });
     // Bug fix : le MJ/les autres membres ne voyaient jamais le roster rétrécir sans recharger, et
     // le joueur retiré ne voyait jamais sa propre liste de Parties se mettre à jour.
     this.realtimeEvents.emit(partieTopic(partieId));
@@ -454,6 +492,108 @@ export class PartiesService implements PartieSignalsPort {
     // émission SSE trouvée sur tous les points d'appel).
     await this.emitMembersOnlySafe(partieId, partie.ownerId);
     return { ok: true };
+  }
+
+  /**
+   * Story 39.4 — change le rôle d'un membre d'un GROUPE. Deux mouvements seulement : un
+   * administrateur en nomme un autre (membre ordinaire → `ADMIN`), ou quitte lui-même l'office
+   * (`MEMBER` sur son propre `userId`). Tout le reste (retirer l'office à un autre, nommer un
+   * administrateur ou soi-même) est un 409.
+   *
+   * Tout se passe sous `SELECT … FOR UPDATE` de la partie : les rôles sont relus et les
+   * administrateurs recomptés après avoir pris le verrou, si bien que deux départs simultanés ne
+   * laissent jamais un groupe sans administrateur. Quitter l'office en étant le DERNIER
+   * administrateur supprime le groupe (adhésions et événements par cascade), et seulement si
+   * `deleteIfLastAdmin` est vrai — sinon 409 et rien ne change. `ownerId` ne change jamais.
+   * Les émissions temps réel ont lieu après le commit, jamais dans la transaction.
+   */
+  async setMemberRole(
+    partieId: string,
+    userId: string,
+    targetUserId: string,
+    dto: SetMemberRoleDto,
+  ): Promise<{ ok: true; deleted: boolean }> {
+    const { partie } = await this.permissions.assert(userId, 'PARTIE_MEMBER_ROLE_SET', {
+      partieId,
+    });
+    // La cellule de la politique vaut pour la famille entière : la rencontre à usage unique
+    // (`ONE_SHOT`, un seul administrateur) est écartée ici.
+    if (partie.kind === 'ONE_SHOT') {
+      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
+    }
+    const appoint = dto.role === 'ADMIN';
+    if (appoint && targetUserId === userId) throw new ConflictException(ROLE_SELF_APPOINT_MESSAGE);
+    if (!appoint && targetUserId !== userId) throw new ConflictException(ROLE_DEMOTE_OTHER_MESSAGE);
+
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      await this.lockPartie(tx, partieId);
+      // Rôles relus SOUS le verrou : la décision de droit date d'avant.
+      const caller = await tx.membership.findUnique({
+        where: { userId_partieId: { userId, partieId } },
+        select: { role: true },
+      });
+      if (!caller) throw new ForbiddenException(NO_ACCESS_MESSAGE);
+      if (caller.role !== 'ADMIN') throw new ForbiddenException(ADMIN_ONLY_MESSAGE);
+
+      if (appoint) {
+        const target = await tx.membership.findUnique({
+          where: { userId_partieId: { userId: targetUserId, partieId } },
+          select: { role: true },
+        });
+        if (!target) throw new NotFoundException('Ce membre est introuvable');
+        if (target.role === 'ADMIN') throw new ConflictException(ROLE_ALREADY_ADMIN_MESSAGE);
+        await tx.membership.update({
+          where: { userId_partieId: { userId: targetUserId, partieId } },
+          data: { role: 'ADMIN' },
+        });
+        return { deleted: false, participantIds: [] as string[] };
+      }
+
+      // Quitter l'office : le recomptage des administrateurs fait foi (le verrou le fige).
+      const adminCount = await tx.membership.count({ where: { partieId, role: 'ADMIN' } });
+      if (adminCount > 1) {
+        await tx.membership.update({
+          where: { userId_partieId: { userId, partieId } },
+          data: { role: 'MEMBER' },
+        });
+        return { deleted: false, participantIds: [] as string[] };
+      }
+      if (dto.deleteIfLastAdmin !== true) throw new ConflictException(LAST_ADMIN_MESSAGE);
+      // Participants lus AVANT la suppression (la cascade emporte leurs adhésions), sous le verrou.
+      const memberships = await tx.membership.findMany({
+        where: { partieId },
+        select: { userId: true },
+      });
+      await tx.partie.delete({ where: { id: partieId } });
+      return { deleted: true, participantIds: memberships.map((m) => m.userId) };
+    });
+
+    // Après le commit uniquement.
+    this.realtimeEvents.emit(partieTopic(partieId));
+    if (outcome.deleted) {
+      this.emitPartieDeleted(partie.ownerId, outcome.participantIds);
+      return { ok: true, deleted: true };
+    }
+    await this.notifyPartieSignalsChanged(partieId, partie.ownerId);
+    return { ok: true, deleted: false };
+  }
+
+  /** Verrou d'écriture de la partie pour la durée de la transaction (`SELECT … FOR UPDATE`, même
+   *  patron que `EventsService.assertCanAddEvent`) : toute opération qui change le nombre
+   *  d'administrateurs le prend, puis relit les rôles avant d'écrire. */
+  private async lockPartie(tx: Prisma.TransactionClient, partieId: string): Promise<void> {
+    const rows = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "Partie" WHERE "id" = ${partieId} FOR UPDATE`;
+    if (rows.length === 0) throw new NotFoundException('Partie introuvable');
+  }
+
+  /** Émission après suppression d'une partie : chaque participant (propriétaire compris) voit sa
+   *  liste changer. À appeler APRÈS le commit, jamais dans une transaction. */
+  private emitPartieDeleted(ownerId: string | null, participantIds: readonly string[]): void {
+    const recipients = new Set<string>();
+    if (ownerId !== null) recipients.add(ownerId);
+    for (const id of participantIds) recipients.add(id);
+    for (const id of recipients) this.realtimeEvents.emit(userTopic(id));
   }
 
   async update(id: string, userId: string, dto: UpdatePartieDto): Promise<PartieDto> {
@@ -757,10 +897,10 @@ export class PartiesService implements PartieSignalsPort {
         ? await this.permissions.membersOf({ id, ownerId: partie.ownerId })
         : [];
     await this.prisma.partie.delete({ where: { id } });
-    if (partie.ownerId !== null) this.realtimeEvents.emit(userTopic(partie.ownerId));
-    for (const p of participants) {
-      if (p.userId !== partie.ownerId) this.realtimeEvents.emit(userTopic(p.userId));
-    }
+    this.emitPartieDeleted(
+      partie.ownerId,
+      participants.map((p) => p.userId),
+    );
     return { ok: true };
   }
 

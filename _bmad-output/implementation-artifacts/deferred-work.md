@@ -336,3 +336,16 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-39-3-inviter-quelquun-dans-un-groupe.md`
   summary: By hand: invite a second account to a group by pseudo, e-mail (Mailpit) and link; check the e-mail, the join page and the invitee's list in the three themes.
   evidence: No live check was run; only unit/DOM/e2e tests.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-4-nommer-des-admins-et-quitter-loffice.md`
+  summary: Wire `conjonctionCount` of `PartieDetail` (hard-coded 0) to the group's real conjonctions in epic 40, so the red last-admin confirmation states the true number it deletes.
+  evidence: Three reviewers flagged that the destructive warning would understate the cascade once events exist; epics-palier10.md story 40.1 now carries the criterion.
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-4-nommer-des-admins-et-quitter-loffice.md`
+  summary: Decide the « Nommer admin » confirmation copy: the UX text lists « ajouter et retirer des membres et nommer d'autres administrateurs » but an admin can also close, edit and burn the group, and only the person can step down (no demotion).
+  evidence: Policy `RALLIEMENT_POLICY` gives PARTIE_UPDATE/CLOSE/DELETE to every admin; the wording is the validated UX contract, so changing it is the user's call.
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-4-nommer-des-admins-et-quitter-loffice.md`
+  summary: Accessibility pass on the group Missives rows: repeated « Nommer admin » / « Retirer » buttons have no accessible name tied to their member, and the red confirm button hard-codes `#fff` over `--color-unavailable` (contrast unchecked in the three themes).
+  evidence: Reviewer findings; the accessibility review of the UX is still « non lancée » and contrast of `status-unavailable` is listed as a to-check in the UX notes.
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-4-nommer-des-admins-et-quitter-loffice.md`
+  summary: By hand in the browser (two accounts in a group): appoint an admin, step down from the Missives row and from the footer, last-admin red dialog, « Brûler » red, in the three themes; check the footer placement of « Quitter l'office » (between Clore and Brûler, to confirm).
+  evidence: No live check was run; only unit/DOM/e2e tests. UX note 7 leaves the footer placement open.

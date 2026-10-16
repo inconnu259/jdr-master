@@ -375,6 +375,19 @@ export const foretAncienne: Record<ToneKey, string> = {
   'partie.ralliement_generate_link': 'Tisser un laissez-passer de veillée',
   'partie.ralliement_remove_member_confirm': 'Renvoyer {name} de la veillée « {partie} » ?',
   'partie.ralliement_remove_member_error': 'Cet habitant n’a pu être renvoyé. Réessaie.',
+  /* — administrateurs d’un groupe (Story 39.4) : badge, boutons et confirmations courtes, mots fonctionnels identiques — */
+  'partie.ralliement_admin_badge': 'Admin',
+  'partie.ralliement_appoint_btn': 'Nommer admin',
+  'partie.ralliement_appoint_confirm':
+    'Nommer {name} administrateur de « {partie} » ? Cette personne pourra ajouter et retirer des membres et nommer d’autres administrateurs.',
+  'partie.ralliement_step_down_btn': 'Quitter l’office',
+  'partie.ralliement_step_down_confirm':
+    'Quitter l’office d’administrateur de « {partie} » ? Tu restes membre du groupe.',
+  'partie.ralliement_last_admin_btn': 'Quitter et supprimer',
+  'partie.ralliement_last_admin_confirm':
+    'Tu es le dernier administrateur de la veillée « {partie} ». En quittant l’office, la veillée s’éteint pour de bon avec tout ce qu’elle contient — habitants : {members}, haltes : {conjonctions}. Nomme d’abord un autre administrateur pour la garder vivante.',
+  'partie.ralliement_role_error':
+    'Ce changement de rôle n’a pu être gravé dans l’écorce. Réessaie.',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine clairière',
   'partie.no_session': "Aucune clairière réservée. L'écureuil cherche encore.",

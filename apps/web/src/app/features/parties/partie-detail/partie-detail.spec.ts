@@ -2,7 +2,7 @@ import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { PartieDetail } from './partie-detail';
 import { ActivatedRoute } from '@angular/router';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { signal, type WritableSignal } from '@angular/core';
@@ -182,6 +182,7 @@ function makePartiesService(
     inviteUser: vi.fn(),
     inviteByEmail: vi.fn(),
     removeMember: vi.fn(),
+    setMemberRole: vi.fn().mockResolvedValue({ ok: true, deleted: false }),
     createInviteLink: vi.fn(),
     revokeInviteLink: vi.fn(),
     remove: vi.fn(),
@@ -430,13 +431,21 @@ describe('PartieDetail — statut du vote', () => {
 
   const members: PartieMemberDto[] = [
     {
+      role: 'MEMBER',
       userId: 'u1',
       pseudo: 'Alice',
       displayName: 'Alice au pays',
       email: 'alice@test.com',
       joinedAt: '',
     },
-    { userId: 'u2', pseudo: 'Bob', displayName: 'Bobby', email: 'bob@test.com', joinedAt: '' },
+    {
+      role: 'MEMBER',
+      userId: 'u2',
+      pseudo: 'Bob',
+      displayName: 'Bobby',
+      email: 'bob@test.com',
+      joinedAt: '',
+    },
   ];
 
   function makePoll(votesOnOpt: string[]): SessionPollDto {
@@ -787,8 +796,16 @@ describe('PartieDetail — roster (Story 6.1)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   const members: PartieMemberDto[] = [
-    { userId: MJ_ID, pseudo: 'Sylas', displayName: 'Sylas', email: 'sylas@test.com', joinedAt: '' },
     {
+      role: 'MEMBER',
+      userId: MJ_ID,
+      pseudo: 'Sylas',
+      displayName: 'Sylas',
+      email: 'sylas@test.com',
+      joinedAt: '',
+    },
+    {
+      role: 'MEMBER',
       userId: PLAYER_ID,
       pseudo: 'Alice',
       displayName: 'Alice au pays',
@@ -1151,6 +1168,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
     const members: PartieMemberDto[] = [
       {
+        role: 'MEMBER',
         userId: MJ_ID,
         pseudo: 'Sylas',
         displayName: 'Sylas',
@@ -1158,6 +1176,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
         joinedAt: '',
       },
       {
+        role: 'MEMBER',
         userId: PLAYER_ID,
         pseudo: 'Alice',
         displayName: 'Alice au pays',
@@ -1178,6 +1197,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'draconis', status: 'EN_COURS' });
     const members: PartieMemberDto[] = [
       {
+        role: 'MEMBER',
         userId: MJ_ID,
         pseudo: 'Sylas',
         displayName: 'Sylas',
@@ -1185,6 +1205,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
         joinedAt: '',
       },
       {
+        role: 'MEMBER',
         userId: PLAYER_ID,
         pseudo: 'Alice',
         displayName: 'Alice au pays',
@@ -1417,6 +1438,7 @@ describe('PartieDetail — invitations', () => {
   it('le MJ peut retirer un membre depuis la liste "Membres actuels" de l\'onglet Invitations', async () => {
     const members: PartieMemberDto[] = [
       {
+        role: 'MEMBER',
         userId: MJ_ID,
         pseudo: 'Sylas',
         displayName: 'Sylas',
@@ -1424,6 +1446,7 @@ describe('PartieDetail — invitations', () => {
         joinedAt: '',
       },
       {
+        role: 'MEMBER',
         userId: PLAYER_ID,
         pseudo: 'Alice',
         displayName: 'Alice au pays',
@@ -2584,6 +2607,7 @@ describe("PartieDetail — alerte d'homonymie", () => {
   it('deux membres avec le même displayName → avertissement visible (AC1)', async () => {
     const members: PartieMemberDto[] = [
       {
+        role: 'MEMBER',
         userId: PLAYER_ID,
         pseudo: 'Alice',
         displayName: 'Même Nom',
@@ -2591,6 +2615,7 @@ describe("PartieDetail — alerte d'homonymie", () => {
         joinedAt: '',
       },
       {
+        role: 'MEMBER',
         userId: 'other',
         pseudo: 'Bob',
         displayName: 'Même Nom',
@@ -2608,6 +2633,7 @@ describe("PartieDetail — alerte d'homonymie", () => {
   it("Revue de code : le bandeau porte role=alert et aria-live=polite (annoncé aux lecteurs d'écran)", async () => {
     const members: PartieMemberDto[] = [
       {
+        role: 'MEMBER',
         userId: PLAYER_ID,
         pseudo: 'Alice',
         displayName: 'Même Nom',
@@ -2615,6 +2641,7 @@ describe("PartieDetail — alerte d'homonymie", () => {
         joinedAt: '',
       },
       {
+        role: 'MEMBER',
         userId: 'other',
         pseudo: 'Bob',
         displayName: 'Même Nom',
@@ -2635,6 +2662,7 @@ describe("PartieDetail — alerte d'homonymie", () => {
     const partie = makePartie({ ownerId: MJ_ID, ownerDisplayName: 'Même Nom' });
     const members: PartieMemberDto[] = [
       {
+        role: 'MEMBER',
         userId: PLAYER_ID,
         pseudo: 'Alice',
         displayName: 'Même Nom',
@@ -2652,13 +2680,21 @@ describe("PartieDetail — alerte d'homonymie", () => {
   it('aucun homonyme → aucun avertissement', async () => {
     const members: PartieMemberDto[] = [
       {
+        role: 'MEMBER',
         userId: PLAYER_ID,
         pseudo: 'Alice',
         displayName: 'Alice',
         email: 'a@test.com',
         joinedAt: '',
       },
-      { userId: 'other', pseudo: 'Bob', displayName: 'Bob', email: 'b@test.com', joinedAt: '' },
+      {
+        role: 'MEMBER',
+        userId: 'other',
+        pseudo: 'Bob',
+        displayName: 'Bob',
+        email: 'b@test.com',
+        joinedAt: '',
+      },
     ];
     const { el } = await createFixture(makePartie(), PLAYER_ID, {
       members,
@@ -2670,6 +2706,7 @@ describe("PartieDetail — alerte d'homonymie", () => {
   it('clic "Ignorer" → l\'avertissement disparaît et sessionStorage est écrit avec la bonne clé (AC2)', async () => {
     const members: PartieMemberDto[] = [
       {
+        role: 'MEMBER',
         userId: PLAYER_ID,
         pseudo: 'Alice',
         displayName: 'Même Nom',
@@ -2677,6 +2714,7 @@ describe("PartieDetail — alerte d'homonymie", () => {
         joinedAt: '',
       },
       {
+        role: 'MEMBER',
         userId: 'other',
         pseudo: 'Bob',
         displayName: 'Même Nom',
@@ -2706,6 +2744,7 @@ describe("PartieDetail — alerte d'homonymie", () => {
     sessionStorage.setItem(`homonymy-dismissed:party-1:${PLAYER_ID}`, '1');
     const members: PartieMemberDto[] = [
       {
+        role: 'MEMBER',
         userId: PLAYER_ID,
         pseudo: 'Alice',
         displayName: 'Même Nom',
@@ -2713,6 +2752,7 @@ describe("PartieDetail — alerte d'homonymie", () => {
         joinedAt: '',
       },
       {
+        role: 'MEMBER',
         userId: 'other',
         pseudo: 'Bob',
         displayName: 'Même Nom',
@@ -2737,13 +2777,21 @@ describe('PartieDetail — pseudo en complément (gestion des membres)', () => {
     // Revue de code : le MJ n'apparaît jamais dans `members()` — seuls des joueurs réels ici.
     const members: PartieMemberDto[] = [
       {
+        role: 'MEMBER',
         userId: PLAYER_ID,
         pseudo: 'Alice',
         displayName: 'Même Nom',
         email: 'alice@test.com',
         joinedAt: '',
       },
-      { userId: 'p2', pseudo: 'Bob', displayName: 'Même Nom', email: 'bob@test.com', joinedAt: '' },
+      {
+        role: 'MEMBER',
+        userId: 'p2',
+        pseudo: 'Bob',
+        displayName: 'Même Nom',
+        email: 'bob@test.com',
+        joinedAt: '',
+      },
     ];
     const { fixture, el } = await createFixture(makePartie(), MJ_ID, {
       members,
@@ -3368,12 +3416,14 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
     });
   const members: PartieMemberDto[] = [
     {
+      role: 'MEMBER',
       userId: MJ_ID,
       pseudo: 'createur',
       displayName: 'Créateur',
       joinedAt: '2026-10-01T00:00:00Z',
     },
     {
+      role: 'MEMBER',
       userId: OTHER_ID,
       pseudo: 'membre',
       displayName: 'Membre Deux',
@@ -3467,8 +3517,15 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
 
   it('Missives : deux membres homonymes sont départagés par leur pseudo', async () => {
     const homonymes: PartieMemberDto[] = [
-      { userId: MJ_ID, pseudo: 'alice', displayName: 'Même Nom', joinedAt: '2026-10-01T00:00:00Z' },
       {
+        role: 'MEMBER',
+        userId: MJ_ID,
+        pseudo: 'alice',
+        displayName: 'Même Nom',
+        joinedAt: '2026-10-01T00:00:00Z',
+      },
+      {
+        role: 'MEMBER',
         userId: OTHER_ID,
         pseudo: 'bob',
         displayName: 'Même Nom',
@@ -3552,6 +3609,7 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
           members: [
             members[0],
             {
+              role: 'MEMBER',
               userId: OTHER_ID,
               pseudo: 'autre',
               displayName: 'Test',
@@ -3609,12 +3667,19 @@ describe('PartieDetail — un groupe s’ouvre sur ses conjonctions (Story 39.1)
     });
   const members: PartieMemberDto[] = [
     {
+      role: 'ADMIN',
       userId: MJ_ID,
       pseudo: 'createur',
       displayName: 'Créateur',
       joinedAt: '2026-10-01T00:00:00Z',
     },
-    { userId: OTHER_ID, pseudo: 'membre', displayName: 'Membre', joinedAt: '2026-10-02T00:00:00Z' },
+    {
+      role: 'MEMBER',
+      userId: OTHER_ID,
+      pseudo: 'membre',
+      displayName: 'Membre',
+      joinedAt: '2026-10-02T00:00:00Z',
+    },
   ];
   const tabs = (el: HTMLElement) => Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]'));
   const tabLabels = (el: HTMLElement) => tabs(el).map((t) => (t.textContent ?? '').trim());
@@ -3691,16 +3756,25 @@ describe('PartieDetail — un groupe s’ouvre sur ses conjonctions (Story 39.1)
     const rows = Array.from(el.querySelectorAll('.ralliement-members .result-row')).map((r) =>
       (r.textContent ?? '').trim(),
     );
-    // L'admin (Story 39.3) peut retirer le membre, jamais le créateur.
-    expect(rows).toEqual(['Créateur', expect.stringContaining('Membre')]);
+    // L'admin (Story 39.3) peut retirer le membre, jamais le créateur ; Story 39.4 : le créateur
+    // porte le badge « Admin » et « Quitter l'office », le membre « Nommer admin ».
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(rows).toEqual([expect.stringContaining('Créateur'), expect.stringContaining('Membre')]);
+    expect(rows[0]).toContain(tone['partie.ralliement_admin_badge']);
+    expect(rows[0]).toContain(tone['partie.ralliement_step_down_btn']);
+    expect(rows[1]).toContain(tone['partie.ralliement_appoint_btn']);
   });
 
-  it('admin : pied de carte Retranscrire, Clore, Brûler — sans Sceller des secrets', async () => {
+  it('admin : pied de carte Retranscrire, Clore, Quitter l’office, Brûler — sans Sceller des secrets', async () => {
     const { el } = await createFixture(groupe(), MJ_ID, { members });
     const tone = TONE_MAP['grimoire-emeraude'];
     const actions = el.querySelector('mat-card-actions') as HTMLElement;
     expect(Array.from(actions.querySelectorAll('a')).map(label)).toEqual([tone['partie.edit_btn']]);
-    expect(footerButtons(el)).toEqual([tone['partie.close_btn'], tone['partie.delete_btn']]);
+    expect(footerButtons(el)).toEqual([
+      tone['partie.close_btn'],
+      tone['partie.ralliement_step_down_btn'],
+      tone['partie.delete_btn'],
+    ]);
     expect(actions.textContent).not.toContain(tone['partie.visibility_btn']);
     const brule = Array.from(actions.querySelectorAll('button')).find((b) =>
       b.textContent?.includes(tone['partie.delete_btn']),
@@ -3711,7 +3785,11 @@ describe('PartieDetail — un groupe s’ouvre sur ses conjonctions (Story 39.1)
   it('admin, groupe terminé : « Rouvrir » remplace « Clore »', async () => {
     const { el } = await createFixture(groupe({ status: 'TERMINEE' }), MJ_ID, { members });
     const tone = TONE_MAP['grimoire-emeraude'];
-    expect(footerButtons(el)).toEqual([tone['partie.reopen_btn'], tone['partie.delete_btn']]);
+    expect(footerButtons(el)).toEqual([
+      tone['partie.reopen_btn'],
+      tone['partie.ralliement_step_down_btn'],
+      tone['partie.delete_btn'],
+    ]);
   });
 
   it('membre : aucune action au pied de carte', async () => {
@@ -3811,12 +3889,19 @@ describe('PartieDetail — Missives d’un groupe : invitation et retrait (Story
     });
   const members: PartieMemberDto[] = [
     {
+      role: 'ADMIN',
       userId: MJ_ID,
       pseudo: 'createur',
       displayName: 'Créateur',
       joinedAt: '2026-10-01T00:00:00Z',
     },
-    { userId: OTHER_ID, pseudo: 'membre', displayName: 'Membre', joinedAt: '2026-10-02T00:00:00Z' },
+    {
+      role: 'MEMBER',
+      userId: OTHER_ID,
+      pseudo: 'membre',
+      displayName: 'Membre',
+      joinedAt: '2026-10-02T00:00:00Z',
+    },
   ];
   const openMissives = (el: HTMLElement, fixture: ComponentFixture<PartieDetail>) => {
     el.querySelectorAll<HTMLElement>('div[role="tab"]')[2].click();
@@ -3856,10 +3941,12 @@ describe('PartieDetail — Missives d’un groupe : invitation et retrait (Story
       expect(panel(el).textContent).toContain(tone['partie.ralliement_search_label']);
       expect(panel(el).textContent).toContain(tone['partie.ralliement_invite_by_email_label']);
       expect(panel(el).textContent).toContain(tone['partie.ralliement_generate_link']);
-      // « Retirer » : sur le membre seulement, jamais sur le créateur (et soi-même).
+      // « Retirer » : sur le membre seulement, jamais sur le créateur (et soi-même). Le créateur
+      // n'a que « Quitter l'office » (Story 39.4), jamais « Retirer ».
       const lignes = Array.from(panel(el).querySelectorAll('.result-row'));
       expect(lignes).toHaveLength(2);
-      expect(lignes[0].querySelector('button')).toBeNull();
+      expect(lignes[0].textContent).not.toContain(tone['partie.remove_member_btn']);
+      expect(lignes[0].querySelectorAll('button')).toHaveLength(1);
       expect(lignes[1].textContent).toContain(tone['partie.remove_member_btn']);
       // Aucun mot de JDR, ni libellé de la variante quête.
       expect(NON_JDR_BANNED_WORDS.test(el.textContent ?? '')).toBe(false);
@@ -3985,5 +4072,365 @@ describe('PartieDetail — Missives d’un groupe : invitation et retrait (Story
     await comp.removeMember(members[1]);
 
     expect(comp['notice']()).toBeNull();
+  });
+});
+
+// ─── Nommer des admins et quitter l'office (Story 39.4) ─────────────────────────────────────
+
+describe('PartieDetail — admins d’un groupe : nommer et quitter l’office (Story 39.4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const OTHER_ID = 'member-2';
+  const THIRD_ID = 'member-3';
+  const groupe = (over: Partial<PartieDto> = {}) =>
+    makePartie({
+      gameSystemId: 'ralliement',
+      kind: 'CAMPAGNE_EPISODIQUE',
+      role: 'admin',
+      ...over,
+    });
+  const member = (
+    userId: string,
+    displayName: string,
+    role: 'ADMIN' | 'MEMBER',
+  ): PartieMemberDto => ({
+    userId,
+    pseudo: displayName.toLowerCase(),
+    displayName,
+    role,
+    joinedAt: '2026-10-01T00:00:00Z',
+  });
+  /** Créateur (soi) admin, un second admin, un membre ordinaire. */
+  const members = [
+    member(MJ_ID, 'Créateur', 'ADMIN'),
+    member(OTHER_ID, 'Seconde', 'ADMIN'),
+    member(THIRD_ID, 'Membre', 'MEMBER'),
+  ];
+  const seul = [member(MJ_ID, 'Créateur', 'ADMIN'), member(THIRD_ID, 'Membre', 'MEMBER')];
+
+  const openMissives = (el: HTMLElement, fixture: ComponentFixture<PartieDetail>) => {
+    el.querySelectorAll<HTMLElement>('div[role="tab"]')[2].click();
+    fixture.detectChanges();
+  };
+  const rows = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll('.ralliement-members .result-row')) as HTMLElement[];
+  const services = () =>
+    TestBed.inject(PartiesService) as unknown as {
+      get: ReturnType<typeof vi.fn>;
+      members: ReturnType<typeof vi.fn>;
+      setMemberRole: ReturnType<typeof vi.fn>;
+      removeMember: ReturnType<typeof vi.fn>;
+    };
+  const dialogOpen = () =>
+    (TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> }).open;
+  const myParties = () =>
+    TestBed.inject(MyPartiesService) as unknown as { refreshAll: ReturnType<typeof vi.fn> };
+  const confirm = (answer: boolean) =>
+    dialogOpen().mockReturnValue({ afterClosed: () => of(answer) });
+
+  it.each(THEMES)(
+    'thème %s : badge Admin (pictogramme + mot) sur chaque admin, « Nommer admin » sur le membre, « Retirer » jamais sur un admin',
+    async (theme) => {
+      const { fixture, el } = await createFixture(groupe(), MJ_ID, {
+        members,
+        theme,
+        noopAnimations: true,
+      });
+      openMissives(el, fixture);
+      const tone = TONE_MAP[theme];
+      const [moi, seconde, membre] = rows(el);
+
+      for (const admin of [moi, seconde]) {
+        const badge = admin.querySelector('.admin-badge') as HTMLElement;
+        expect(badge.textContent).toContain(tone['partie.ralliement_admin_badge']);
+        expect(badge.querySelector('mat-icon')?.textContent?.trim()).toBe('shield');
+        expect(admin.textContent).not.toContain(tone['partie.remove_member_btn']);
+        expect(admin.textContent).not.toContain(tone['partie.ralliement_appoint_btn']);
+      }
+      // « Quitter l'office » sur SA ligne seulement.
+      expect(moi.textContent).toContain(tone['partie.ralliement_step_down_btn']);
+      expect(seconde.textContent).not.toContain(tone['partie.ralliement_step_down_btn']);
+      // Le membre ordinaire : pas de badge, « Nommer admin » et « Retirer ».
+      expect(membre.querySelector('.admin-badge')).toBeNull();
+      expect(membre.textContent).toContain(tone['partie.ralliement_appoint_btn']);
+      expect(membre.textContent).toContain(tone['partie.remove_member_btn']);
+      expect(NON_JDR_BANNED_WORDS.test(el.textContent ?? '')).toBe(false);
+    },
+  );
+
+  it('un membre ordinaire voit les badges mais aucune action', async () => {
+    const { fixture, el } = await createFixture(groupe({ role: 'member' }), THIRD_ID, {
+      members,
+      noopAnimations: true,
+    });
+    openMissives(el, fixture);
+    expect(el.querySelectorAll('.ralliement-members .admin-badge')).toHaveLength(2);
+    expect(el.querySelector('.ralliement-members button')).toBeNull();
+  });
+
+  it('une rencontre isolée n’affiche ni badge ni action de rôle', async () => {
+    const { fixture, el } = await createFixture(groupe({ kind: 'ONE_SHOT' }), MJ_ID, {
+      members,
+      noopAnimations: true,
+    });
+    el.querySelectorAll<HTMLElement>('div[role="tab"]')[1].click();
+    fixture.detectChanges();
+    expect(el.querySelector('.ralliement-members .admin-badge')).toBeNull();
+    expect(el.querySelector('.ralliement-members button')).toBeNull();
+  });
+
+  it('nommer : confirmation « Nommer … » puis appel ADMIN, liste rechargée', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    confirm(true);
+    const avant = services().members.mock.calls.length;
+
+    await fixture.componentInstance.appointAdmin(members[2]);
+
+    const tone = TONE_MAP['grimoire-emeraude'];
+    const data = dialogOpen().mock.calls[0][1].data;
+    expect(data.message).toBe(
+      tone['partie.ralliement_appoint_confirm']
+        .replace('{name}', 'Membre')
+        .replace('{partie}', 'Test Party'),
+    );
+    expect(data.confirmLabel).toBe(tone['partie.ralliement_appoint_btn']);
+    expect(data.destructive).toBeUndefined();
+    expect(services().setMemberRole).toHaveBeenCalledWith('party-1', THIRD_ID, { role: 'ADMIN' });
+    expect(services().members.mock.calls.length).toBeGreaterThan(avant);
+  });
+
+  it('nommer : « Renoncer » n’appelle rien', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    confirm(false);
+    await fixture.componentInstance.appointAdmin(members[2]);
+    expect(services().setMemberRole).not.toHaveBeenCalled();
+  });
+
+  it('nommer : un refus du serveur est affiché, la liste rechargée', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    confirm(true);
+    services().setMemberRole.mockRejectedValueOnce({ error: { message: 'Refus du serveur' } });
+    const avant = services().members.mock.calls.length;
+
+    await fixture.componentInstance.appointAdmin(members[2]);
+
+    expect(fixture.componentInstance['notice']()).toBe('Refus du serveur');
+    expect(services().members.mock.calls.length).toBeGreaterThan(avant);
+  });
+
+  it('nommer : sans message textuel, repli sur le libellé du thème', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    confirm(true);
+    services().setMemberRole.mockRejectedValueOnce({ status: 0 });
+    await fixture.componentInstance.appointAdmin(members[2]);
+    expect(fixture.componentInstance['notice']()).toBe(
+      TONE_MAP['grimoire-emeraude']['partie.ralliement_role_error'],
+    );
+  });
+
+  it('quitter l’office alors qu’un autre admin reste : confirmation courte (non rouge), partie rechargée, pas de suppression', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    confirm(true);
+    const avant = services().get.mock.calls.length;
+
+    await fixture.componentInstance.stepDownFromOffice();
+
+    const tone = TONE_MAP['grimoire-emeraude'];
+    const data = dialogOpen().mock.calls[0][1].data;
+    expect(data.message).toBe(
+      tone['partie.ralliement_step_down_confirm'].replace('{partie}', 'Test Party'),
+    );
+    expect(data.confirmLabel).toBe(tone['partie.ralliement_step_down_btn']);
+    expect(data.destructive).toBeUndefined();
+    // Le drapeau de suppression n'est jamais envoyé quand un autre admin reste.
+    expect(services().setMemberRole).toHaveBeenCalledWith('party-1', MJ_ID, { role: 'MEMBER' });
+    expect(services().get.mock.calls.length).toBeGreaterThan(avant);
+    expect(myParties().refreshAll).not.toHaveBeenCalled();
+  });
+
+  it('dernier admin : confirmation ROUGE annonçant la suppression, puis deleteIfLastAdmin et retour à l’accueil', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members: seul });
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    confirm(true);
+    services().setMemberRole.mockResolvedValueOnce({ ok: true, deleted: true });
+
+    await fixture.componentInstance.stepDownFromOffice();
+
+    const tone = TONE_MAP['grimoire-emeraude'];
+    const data = dialogOpen().mock.calls[0][1].data;
+    expect(data.destructive).toBe(true);
+    expect(data.confirmLabel).toBe(tone['partie.ralliement_last_admin_btn']);
+    expect(data.message).toBe(
+      tone['partie.ralliement_last_admin_confirm']
+        .replace('{partie}', 'Test Party')
+        .replace('{members}', '2')
+        .replace('{conjonctions}', '0'),
+    );
+    expect(services().setMemberRole).toHaveBeenCalledWith('party-1', MJ_ID, {
+      role: 'MEMBER',
+      deleteIfLastAdmin: true,
+    });
+    expect(myParties().refreshAll).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith(['/']);
+  });
+
+  it.each(THEMES)(
+    'thème %s : la confirmation du dernier admin cite les membres, les conjonctions, conseille de nommer un autre admin et n’emploie aucun mot de JDR',
+    (theme) => {
+      const texte = TONE_MAP[theme]['partie.ralliement_last_admin_confirm'];
+      expect(texte).toContain('{members}');
+      expect(texte).toContain('{conjonctions}');
+      expect(texte).toContain('{partie}');
+      expect(texte).toMatch(/Nomm(ez|e) d’abord un autre administrateur/);
+      expect(NON_JDR_BANNED_WORDS.test(texte)).toBe(false);
+    },
+  );
+
+  it('dernier admin, « Renoncer » : rien n’est envoyé', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members: seul });
+    confirm(false);
+    await fixture.componentInstance.stepDownFromOffice();
+    expect(services().setMemberRole).not.toHaveBeenCalled();
+    expect(myParties().refreshAll).not.toHaveBeenCalled();
+  });
+
+  it('écran périmé : la page croyait être le dernier admin mais le serveur ne supprime pas (deleted: false) → pas de départ, partie rechargée', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members: seul });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    confirm(true);
+    services().setMemberRole.mockResolvedValueOnce({ ok: true, deleted: false });
+    const avant = services().get.mock.calls.length;
+
+    await fixture.componentInstance.stepDownFromOffice();
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(services().get.mock.calls.length).toBeGreaterThan(avant);
+  });
+
+  it('quitter l’office : un refus du serveur est affiché, partie et liste rechargées', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    confirm(true);
+    services().setMemberRole.mockRejectedValueOnce({ error: { message: 'Refus du serveur' } });
+    const avant = services().get.mock.calls.length;
+
+    await fixture.componentInstance.stepDownFromOffice();
+
+    expect(fixture.componentInstance['notice']()).toBe('Refus du serveur');
+    expect(services().get.mock.calls.length).toBeGreaterThan(avant);
+    expect(myParties().refreshAll).not.toHaveBeenCalled();
+  });
+
+  /** Clique le bouton d'une ligne de Missives portant ce libellé, puis laisse les promesses se résoudre. */
+  const clickRowButton = async (
+    fixture: ComponentFixture<PartieDetail>,
+    row: HTMLElement,
+    label: string,
+  ) => {
+    const bouton = Array.from(row.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes(label),
+    ) as HTMLButtonElement;
+    bouton.click();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+  };
+
+  it('le bouton « Nommer admin » de la ligne du membre nomme CE membre', async () => {
+    const { fixture, el } = await createFixture(groupe(), MJ_ID, { members, noopAnimations: true });
+    openMissives(el, fixture);
+    confirm(true);
+    const [, , membre] = rows(el);
+
+    await clickRowButton(
+      fixture,
+      membre,
+      TONE_MAP['grimoire-emeraude']['partie.ralliement_appoint_btn'],
+    );
+
+    expect(services().setMemberRole).toHaveBeenCalledTimes(1);
+    expect(services().setMemberRole).toHaveBeenCalledWith('party-1', THIRD_ID, { role: 'ADMIN' });
+  });
+
+  it('le bouton « Quitter l’office » de sa propre ligne quitte l’office de SOI', async () => {
+    const { fixture, el } = await createFixture(groupe(), MJ_ID, { members, noopAnimations: true });
+    openMissives(el, fixture);
+    confirm(true);
+    const [moi] = rows(el);
+
+    await clickRowButton(
+      fixture,
+      moi,
+      TONE_MAP['grimoire-emeraude']['partie.ralliement_step_down_btn'],
+    );
+
+    expect(services().setMemberRole).toHaveBeenCalledTimes(1);
+    expect(services().setMemberRole).toHaveBeenCalledWith('party-1', MJ_ID, { role: 'MEMBER' });
+  });
+
+  it('un refus de « Quitter l’office » lancé depuis le pied de page reste visible hors de Missives', async () => {
+    const { fixture, el } = await createFixture(groupe(), MJ_ID, { members });
+    confirm(true);
+    services().setMemberRole.mockRejectedValueOnce({ error: { message: 'Refus du serveur' } });
+    const bouton = Array.from(el.querySelectorAll('mat-card-actions button')).find((b) =>
+      b.textContent?.includes(TONE_MAP['grimoire-emeraude']['partie.ralliement_step_down_btn']),
+    ) as HTMLButtonElement;
+    bouton.click();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    // L'onglet ouvert est « Conjonctions » : l'avis est hors de l'onglet Missives.
+    expect(el.querySelector('p.notice')?.textContent).toContain('Refus du serveur');
+  });
+
+  it('quitter l’office relit la liste avant de choisir la confirmation (liste périmée → dernier admin)', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    confirm(false);
+    // L'écran croit à deux administrateurs ; le serveur n'en renvoie plus qu'un.
+    services().members.mockResolvedValueOnce(seul);
+
+    await fixture.componentInstance.stepDownFromOffice();
+
+    expect(dialogOpen().mock.calls[0][1].data.destructive).toBe(true);
+  });
+
+  it('le bouton « Quitter l’office » du pied de carte lance la même procédure', async () => {
+    const { fixture, el } = await createFixture(groupe(), MJ_ID, { members });
+    confirm(true);
+    const bouton = Array.from(el.querySelectorAll('mat-card-actions button')).find((b) =>
+      b.textContent?.includes(TONE_MAP['grimoire-emeraude']['partie.ralliement_step_down_btn']),
+    ) as HTMLButtonElement;
+    bouton.click();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    expect(services().setMemberRole).toHaveBeenCalledWith('party-1', MJ_ID, { role: 'MEMBER' });
+  });
+
+  it('un membre ordinaire n’a pas « Quitter l’office » au pied de carte', async () => {
+    const { el } = await createFixture(groupe({ role: 'member' }), THIRD_ID, { members });
+    expect(el.querySelector('mat-card-actions button')).toBeNull();
+  });
+
+  it('une quête : aucun rôle de groupe, pas de badge, « Retirer » inchangé', async () => {
+    const { fixture, el } = await createFixture(
+      makePartie({ gameSystemId: 'ryuutama', kind: 'CAMPAGNE_EPISODIQUE', ownerId: MJ_ID }),
+      MJ_ID,
+      { members: [member(THIRD_ID, 'Membre', 'MEMBER')], noopAnimations: true },
+    );
+    const text = el.textContent ?? '';
+    expect(text).not.toContain(TONE_MAP['grimoire-emeraude']['partie.ralliement_appoint_btn']);
+    expect(text).not.toContain(TONE_MAP['grimoire-emeraude']['partie.ralliement_step_down_btn']);
+    expect(fixture.componentInstance['isGroupAdmin']()).toBe(false);
+  });
+
+  it('« Brûler » ouvre une confirmation ROUGE (variante irréversible)', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    confirm(false);
+    await fixture.componentInstance.confirmDelete(groupe());
+    expect(dialogOpen().mock.calls[0][1].data.destructive).toBe(true);
   });
 });

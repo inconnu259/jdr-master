@@ -263,6 +263,7 @@ export type PermissionAction =
   | 'PARTIE_DELETE'
   | 'PARTIE_MEMBERS_READ'
   | 'PARTIE_MEMBER_REMOVE'
+  | 'PARTIE_MEMBER_ROLE_SET'
   | 'PARTIE_AVAILABILITY_READ'
   | 'PARTIE_VISIBILITY_LOCKS_READ'
   | 'PARTIE_VISIBILITY_LOCKS_UPDATE'
@@ -518,6 +519,9 @@ export interface PartieMemberDto {
   userId: string;
   pseudo: string;
   displayName: string;
+  /** Rôle d'adhésion (Story 39.4) : `ADMIN` ou `MEMBER`. Une partie de la famille `jdr` renvoie
+   *  toujours `MEMBER` — son pouvoir vient de `ownerId`, pas de ce rôle. */
+  role: MembershipRole;
   /** Renseigné uniquement lorsque le demandeur est le MJ de la partie (AD-2) — omis pour tout autre membre. */
   email?: string;
   joinedAt: string;
