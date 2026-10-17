@@ -327,6 +327,7 @@ async function createFixture(
         useValue: {
           list: vi.fn().mockResolvedValue(options.events ?? []),
           create: vi.fn(),
+          update: vi.fn(),
         },
       },
     ],
@@ -4650,6 +4651,7 @@ describe('PartieDetail — les conjonctions d’un groupe (Story 40.1)', () => {
       notePratique: null,
       capacity: null,
     },
+    participants: [],
     ...over,
   });
   const api = () => TestBed.inject(EventsApiService) as unknown as {
@@ -4852,4 +4854,490 @@ describe('PartieDetail — les conjonctions d’un groupe (Story 40.1)', () => {
     expect(document.body.querySelector('app-detail-surface')).toBeNull();
     expect(api().create).not.toHaveBeenCalled();
   });
+});
+
+// ─── Fenêtre d'une conjonction : consulter, modifier, fermer (Story 40.2) ────────────────────
+
+describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
+    vi.restoreAllMocks();
+  });
+
+  const HOST_ID = 'member-host';
+  const GUEST_ID = 'member-guest';
+  const tone = TONE_MAP['grimoire-emeraude'];
+  const groupe = (over: Partial<PartieDto> = {}) =>
+    makePartie({ gameSystemId: 'ralliement', kind: 'CAMPAGNE_EPISODIQUE', role: 'member', ...over });
+  const dayKey = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const j = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${j}`;
+  };
+  const card = (id: string, days: number, over: Partial<EventCardDto> = {}): EventCardDto => ({
+    id,
+    title: `Conjonction ${id}`,
+    hostId: HOST_ID,
+    hostDisplayName: 'Hélène Hôte',
+    seance: {
+      id: `s-${id}`,
+      date: dayKey(days),
+      slot: 'EVENING',
+      lieu: 'Lyon 3e',
+      heureRdv: '20:30',
+      notePratique: 'Apportez un jeu',
+      capacity: 8,
+    },
+    participants: [
+      { userId: HOST_ID, displayName: 'Hélène Hôte', isHost: true, isAdmin: false },
+      { userId: 'a1', displayName: 'Alice Admin', isHost: false, isAdmin: true },
+      { userId: GUEST_ID, displayName: 'Gaël Invité', isHost: false, isAdmin: false },
+    ],
+    ...over,
+  });
+  const api = () => TestBed.inject(EventsApiService) as unknown as {
+    list: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+  };
+  const settle = async (fixture: ComponentFixture<PartieDetail>) => {
+    for (let i = 0; i < 12; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+  };
+  const q = <T extends Element>(sel: string) => document.body.querySelector<T>(sel);
+  const cardEl = (el: HTMLElement, id: string) =>
+    el.querySelector<HTMLElement>(`button[data-event-id="${id}"]`)!;
+  const open = async (fixture: ComponentFixture<PartieDetail>, el: HTMLElement, id: string) => {
+    cardEl(el, id).click();
+    await settle(fixture);
+  };
+
+  it('le titre de la carte est un bouton natif nommé par le titre ; la carte reste un article lu en entier, sans gestionnaire de clavier', async () => {
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [card('a', 3)],
+    });
+    const button = cardEl(el, 'a');
+    expect(button.tagName).toBe('BUTTON');
+    expect(button.getAttribute('type')).toBe('button');
+    expect(button.textContent?.trim()).toBe('Conjonction a');
+    // La carte n'est plus un rôle « bouton » : date, badge et chip restent exposés aux lecteurs d'écran.
+    const article = button.closest('article')!;
+    expect(article.getAttribute('role')).toBeNull();
+    expect(article.getAttribute('tabindex')).toBeNull();
+    expect(article.getAttribute('aria-label')).toBeNull();
+    expect(article.querySelector('.event-card__date')).not.toBeNull();
+    expect(article.querySelector('.status-badge')).not.toBeNull();
+    expect(article.querySelector('.event-card__chip')).not.toBeNull();
+
+    // Entrée (à l'appui) et Espace (au relâchement) sont l'activation NATIVE du bouton : un « clic »
+    // ouvre la fenêtre ; aucune touche n'est interceptée par la carte.
+    const keydown = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    button.dispatchEvent(keydown);
+    expect(keydown.defaultPrevented).toBe(false);
+    expect(q('app-event-dialog')).toBeNull();
+    button.click();
+    await settle(fixture);
+    const panel = q('.detail-surface-panel');
+    expect(panel?.getAttribute('aria-label')).toBe('Conjonction a');
+    expect(panel?.classList).toContain('detail-surface-panel--wide');
+  });
+
+  it('ordre du contrat : titre + badge → situation → fiche → participants → pied', async () => {
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [card('a', 3)],
+    });
+    await open(fixture, el, 'a');
+
+    const order = ['.ed__title', '.ed__badge', '.ed__situation', '.ed__sheet', '.ed__participants', '.ed__footer'];
+    const nodes = order.map((sel) => q(sel)!);
+    for (let i = 1; i < nodes.length; i++) {
+      expect(
+        nodes[i - 1].compareDocumentPosition(nodes[i]) & Node.DOCUMENT_POSITION_FOLLOWING,
+        order[i],
+      ).toBeTruthy();
+    }
+    expect(q('.ed__title')?.textContent?.trim()).toBe('Conjonction a');
+    expect(q('.ed__badge')?.textContent?.trim()).toBe('Dans 3 jours');
+    // Panneau de situation : ma situation, puis date, heure et lieu en grand ; ni vote ni inscription.
+    expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+      tone['partie.ralliement_event_situation_registered'],
+    );
+    expect(q('.ed__big--date')?.textContent).toMatch(/ · soir$/);
+    expect(q('.ed__big--time')?.textContent?.trim()).toBe('Rendez-vous à 20:30');
+    expect(q('.ed__big--place')?.textContent?.trim()).toBe('Lyon 3e');
+    expect(q('.ed__situation button')).toBeNull();
+    // Le focus entre dans la fenêtre.
+    expect(q('.detail-surface-panel')!.contains(document.activeElement)).toBe(true);
+  });
+
+  it('un membre qui n’est pas inscrit lit « Pas inscrit·e » dans le panneau, sans bouton d’inscription ni de vote', async () => {
+    const { fixture, el } = await createFixture(groupe(), 'autre-membre', {
+      members: [],
+      events: [card('a', 3)],
+    });
+    await open(fixture, el, 'a');
+    expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+      tone['partie.ralliement_event_situation_none'],
+    );
+    expect(q('.ed__situation button')).toBeNull();
+    expect(q('.ed__actions button:not(.ed__close)')).toBeNull();
+  });
+
+  it('fiche : date, hôte, lieu, heure, « 8 places · 3 inscrits · 5 libres », infos pratiques', async () => {
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [card('a', 3)],
+    });
+    await open(fixture, el, 'a');
+
+    const rows = Array.from(document.body.querySelectorAll('.ed__row')).map((r) => [
+      r.querySelector('dt')?.textContent?.trim(),
+      r.querySelector('dd')?.textContent?.trim(),
+    ]);
+    expect(rows.map((r) => r[0])).toEqual([
+      tone['partie.ralliement_event_sheet_date'],
+      tone['partie.ralliement_event_sheet_host'],
+      tone['partie.ralliement_event_sheet_place'],
+      tone['partie.ralliement_event_sheet_time'],
+      tone['partie.ralliement_event_sheet_participation'],
+      tone['partie.ralliement_event_sheet_note'],
+    ]);
+    expect(rows[1][1]).toBe('Hélène Hôte');
+    expect(rows[3][1]).toBe('20:30');
+    expect(rows[4][1]).toBe('8 places · 3 inscrits · 5 libres');
+    expect(rows[5][1]).toBe('Apportez un jeu');
+  });
+
+  it('« Tous les membres » sans limite ; lieu, heure et infos vides : lignes omises', async () => {
+    const base = card('a', 3);
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [
+        {
+          ...base,
+          seance: { ...base.seance!, capacity: null, lieu: null, heureRdv: null, notePratique: null },
+        },
+      ],
+    });
+    await open(fixture, el, 'a');
+
+    expect(q('.ed__row--participation dd')?.textContent?.trim()).toBe('Tous les membres');
+    for (const row of ['place', 'time', 'note']) expect(q(`.ed__row--${row}`)).toBeNull();
+    expect(q('.ed__big--time')).toBeNull();
+    expect(q('.ed__big--place')).toBeNull();
+  });
+
+  it('participants : avatar 26 px + nom, la personne connectée cerclée et « vous » écrit, écu 14 px ET mot « Admin »', async () => {
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [card('a', 3)],
+    });
+    await open(fixture, el, 'a');
+
+    const chips = Array.from(document.body.querySelectorAll('app-participant-chip'));
+    expect(chips.map((c) => c.querySelector('.pc__name')?.textContent?.trim())).toEqual([
+      'Hélène Hôte',
+      'Alice Admin',
+      'Gaël Invité',
+    ]);
+    expect(chips[0].querySelector('.pc__avatar')?.textContent?.trim()).toBe('HH');
+    // L'administrateur : écu de 14 px à l'angle ET le mot « Admin », jamais le pictogramme seul.
+    const shield = chips[1].querySelector('svg.pc__shield');
+    expect(shield?.getAttribute('width')).toBe('14');
+    expect(shield?.getAttribute('height')).toBe('14');
+    expect(chips[1].querySelector('.pc__tag--admin')?.textContent?.trim()).toBe(
+      tone['partie.ralliement_admin_badge'],
+    );
+    // Les autres n'ont ni écu ni mot « Admin ».
+    for (const c of [chips[0], chips[2]]) {
+      expect(c.querySelector('svg')).toBeNull();
+      expect(c.querySelector('.pc__tag--admin')).toBeNull();
+    }
+    // La personne connectée (Gaël) : filet d'accent ET « (vous) » écrit.
+    expect(chips[2].querySelector('.pc--self')).not.toBeNull();
+    expect(chips[2].querySelector('.pc__tag--self')?.textContent?.trim()).toBe(
+      `(${tone['partie.ralliement_event_participant_self']})`,
+    );
+    expect(chips[0].querySelector('.pc--self')).toBeNull();
+    expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+      tone['partie.ralliement_event_situation_registered'],
+    );
+  });
+
+  it('« Refermer » ferme la fenêtre, rend le focus à la carte et laisse la liste intacte', async () => {
+    const back = vi.spyOn(history, 'back').mockImplementation(() => undefined);
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [card('a', 3), card('b', 6)],
+    });
+    const before = Array.from(el.querySelectorAll('app-event-card'));
+    await open(fixture, el, 'b');
+    expect(q('app-event-dialog')).not.toBeNull();
+
+    q<HTMLButtonElement>('.ed__close')!.click();
+    await settle(fixture);
+
+    expect(q('app-event-dialog')).toBeNull();
+    expect(document.activeElement).toBe(cardEl(el, 'b'));
+    // Les mêmes éléments de la liste : rien n'a été re-rendu (filtres et défilement préservés).
+    expect(Array.from(el.querySelectorAll('app-event-card'))).toEqual(before);
+    // L'entrée d'historique ajoutée à l'ouverture est retirée.
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it('Échap ferme la fenêtre et rend le focus à la carte', async () => {
+    vi.spyOn(history, 'back').mockImplementation(() => undefined);
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [card('a', 3)],
+    });
+    await open(fixture, el, 'a');
+
+    q('.detail-surface-panel')!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await settle(fixture);
+
+    expect(q('app-event-dialog')).toBeNull();
+    expect(document.activeElement).toBe(cardEl(el, 'a'));
+  });
+
+  it('le bouton retour du navigateur ferme la fenêtre (entrée d’historique propre) et rend le focus', async () => {
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [card('a', 3)],
+    });
+    const pushState = vi.spyOn(history, 'pushState');
+    await open(fixture, el, 'a');
+    // Une entrée de plus, même URL ; l'état du routeur existant est conservé.
+    expect(pushState).toHaveBeenCalledTimes(1);
+    expect(pushState.mock.calls[0][2]).toBeUndefined();
+    expect((history.state as Record<string, unknown>)['conjonctionDialog']).toBe('a');
+    expect(q('app-event-dialog')).not.toBeNull();
+
+    // « Retour » : le navigateur revient à l'entrée précédente, sans le marqueur de la fenêtre.
+    history.replaceState({}, '');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await settle(fixture);
+
+    expect(q('app-event-dialog')).toBeNull();
+    expect(document.activeElement).toBe(cardEl(el, 'a'));
+  });
+
+  it('temps réel : la fenêtre ouverte suit la liste vivante (participants, lieu) sans rechargement', async () => {
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [card('a', 3)],
+    });
+    await open(fixture, el, 'a');
+    expect(document.body.querySelectorAll('app-participant-chip').length).toBe(3);
+
+    const base = card('a', 3);
+    api().list.mockResolvedValue([
+      {
+        ...base,
+        title: 'Conjonction a (renommée)',
+        seance: { ...base.seance!, lieu: 'Paris 11e' },
+        participants: [...base.participants, { userId: 'n1', displayName: 'Nina Nouvelle', isHost: false, isAdmin: false }],
+      },
+    ]);
+    TestBed.inject(PartiesService).notifyChanged();
+    await settle(fixture);
+
+    expect(document.body.querySelectorAll('app-participant-chip').length).toBe(4);
+    expect(q('.ed__title')?.textContent?.trim()).toBe('Conjonction a (renommée)');
+    expect(q('.ed__row--place dd')?.textContent?.trim()).toBe('Paris 11e');
+    expect(q('.ed__row--participation dd')?.textContent?.trim()).toBe('8 places · 4 inscrits · 4 libres');
+  });
+
+  it('la conjonction ouverte disparaît de la liste : la fenêtre se referme', async () => {
+    vi.spyOn(history, 'back').mockImplementation(() => undefined);
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [card('a', 3), card('b', 5)],
+    });
+    await open(fixture, el, 'a');
+
+    api().list.mockResolvedValue([card('b', 5)]);
+    TestBed.inject(PartiesService).notifyChanged();
+    await settle(fixture);
+
+    expect(q('app-event-dialog')).toBeNull();
+  });
+
+  describe('pied : « Modifier » pour l’hôte seul, tant que la conjonction n’est pas passée', () => {
+    it('un autre membre n’a que « Refermer »', async () => {
+      const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+        members: [],
+        events: [card('a', 3)],
+      });
+      await open(fixture, el, 'a');
+      expect(q('.ed__edit')).toBeNull();
+      expect(q('.ed__close')?.textContent?.trim()).toBe(tone['partie.ralliement_event_close_btn']);
+    });
+
+    it('l’hôte voit « Modifier » puis « Refermer » ; plus de « Modifier » une fois passée', async () => {
+      const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+        members: [],
+        events: [card('a', 3), card('p', -3)],
+      });
+      await open(fixture, el, 'a');
+      const labels = Array.from(document.body.querySelectorAll('.ed__actions button')).map((b) =>
+        b.textContent?.trim(),
+      );
+      expect(labels).toEqual([
+        tone['partie.ralliement_event_edit_btn'],
+        tone['partie.ralliement_event_close_btn'],
+      ]);
+      expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_situation_host'],
+      );
+      q<HTMLButtonElement>('.ed__close')!.click();
+      await settle(fixture);
+
+      await open(fixture, el, 'p');
+      expect(q('.ed__edit')).toBeNull();
+      expect(q('.ed__close')).not.toBeNull();
+      expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_situation_host_past'],
+      );
+    });
+  });
+
+  describe('mode édition', () => {
+    const type = async (fixture: ComponentFixture<PartieDetail>, sel: string, value: string) => {
+      const input = q<HTMLInputElement | HTMLTextAreaElement>(sel)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+      await settle(fixture);
+    };
+
+    it('« Modifier » bascule la même fenêtre : champs préremplis, pied « Renoncer » · « Enregistrer »', async () => {
+      const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+        members: [],
+        events: [card('a', 3)],
+      });
+      await open(fixture, el, 'a');
+      q<HTMLButtonElement>('.ed__edit')!.click();
+      await settle(fixture);
+
+      expect(q('app-detail-surface')).not.toBeNull();
+      expect(q('.detail-surface-panel')?.getAttribute('aria-label')).toBe(
+        tone['partie.ralliement_event_edit_title'],
+      );
+      expect(q<HTMLInputElement>('.ec__name')!.value).toBe('Conjonction a');
+      expect(q<HTMLInputElement>('.ec__day')!.value).toBe(dayKey(3));
+      expect(q<HTMLInputElement>('.ec__place')!.value).toBe('Lyon 3e');
+      expect(q<HTMLInputElement>('.ec__time')!.value).toBe('20:30');
+      expect(q<HTMLInputElement>('.ec__places-count')!.value).toBe('8');
+      expect(q('.ed__situation')).toBeNull();
+      const labels = Array.from(document.body.querySelectorAll('.ed__actions button')).map((b) =>
+        b.textContent?.trim(),
+      );
+      expect(labels).toEqual([
+        tone['partie.ralliement_event_cancel_btn'],
+        tone['partie.ralliement_event_save_btn'],
+      ]);
+
+      // « Renoncer » revient à la fiche, rien n'est envoyé.
+      q<HTMLButtonElement>('.ed__cancel')!.click();
+      await settle(fixture);
+      expect(q('.ed__situation')).not.toBeNull();
+      expect(api().update).not.toHaveBeenCalled();
+    });
+
+    it('« Enregistrer » envoie le remplacement complet, revient à la fiche mise à jour et relit la liste', async () => {
+      const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+        members: [],
+        events: [card('a', 3)],
+      });
+      await open(fixture, el, 'a');
+      q<HTMLButtonElement>('.ed__edit')!.click();
+      await settle(fixture);
+      await type(fixture, '.ec__name', '  Soirée renommée ');
+      await type(fixture, '.ec__place', '');
+
+      const base = card('a', 3);
+      const updated: EventCardDto = {
+        ...base,
+        title: 'Soirée renommée',
+        seance: { ...base.seance!, lieu: null },
+      };
+      api().update.mockResolvedValue(updated);
+      api().list.mockResolvedValue([updated]);
+      const listCalls = api().list.mock.calls.length;
+      q<HTMLButtonElement>('.ed__save')!.click();
+      await settle(fixture);
+
+      expect(api().update).toHaveBeenCalledWith('party-1', 'a', {
+        title: 'Soirée renommée',
+        date: dayKey(3),
+        slot: 'EVENING',
+        lieu: null,
+        heureRdv: '20:30',
+        notePratique: 'Apportez un jeu',
+        capacity: 8,
+      });
+      expect(q('.ed__situation')).not.toBeNull();
+      expect(q('.ed__title')?.textContent?.trim()).toBe('Soirée renommée');
+      expect(q('.ed__row--place')).toBeNull();
+      expect(api().list.mock.calls.length).toBeGreaterThan(listCalls);
+      expect(titleOfCard(el, 'a')).toBe('Soirée renommée');
+    });
+
+    it('refus du serveur : message français dans la fenêtre, on reste en édition ; repli du thème sans texte', async () => {
+      const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+        members: [],
+        events: [card('a', 3)],
+      });
+      await open(fixture, el, 'a');
+      q<HTMLButtonElement>('.ed__edit')!.click();
+      await settle(fixture);
+
+      api().update.mockRejectedValueOnce({
+        error: { message: 'Le nombre de places ne peut pas être inférieur au nombre de participants actuels (3)' },
+      });
+      q<HTMLButtonElement>('.ed__save')!.click();
+      await settle(fixture);
+      expect(q('.ed__error')?.textContent?.trim()).toContain('participants actuels (3)');
+      expect(q('.ec__name')).not.toBeNull();
+
+      api().update.mockRejectedValueOnce({ status: 0 });
+      q<HTMLButtonElement>('.ed__save')!.click();
+      await settle(fixture);
+      expect(q('.ed__error')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_update_error'],
+      );
+    });
+
+    it('« Enregistrer » reste désactivé sans nom', async () => {
+      const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+        members: [],
+        events: [card('a', 3)],
+      });
+      await open(fixture, el, 'a');
+      q<HTMLButtonElement>('.ed__edit')!.click();
+      await settle(fixture);
+      await type(fixture, '.ec__name', '   ');
+      expect(q<HTMLButtonElement>('.ed__save')!.disabled).toBe(true);
+    });
+  });
+
+  it('aucun mot de JDR dans la fenêtre', async () => {
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [card('a', 3)],
+    });
+    await open(fixture, el, 'a');
+    expect(NON_JDR_BANNED_WORDS.test(q('app-event-dialog')?.textContent ?? '')).toBe(false);
+  });
+
+  const titleOfCard = (el: HTMLElement, id: string) =>
+    cardEl(el, id).textContent?.trim();
 });

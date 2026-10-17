@@ -1,33 +1,24 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
-import type { EventCardDto } from '@master-jdr/shared';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import type { EventCardDto, UpdateEventDto } from '@master-jdr/shared';
 import {
   PermissionService,
   RALLIEMENT_UNAVAILABLE_MESSAGE,
 } from '../permissions/permission.service';
-import {
-  PARTIE_SIGNALS_PORT,
-  type PartieSignalsPort,
-} from '../poll/ports/partie-signals.port';
+import { PARTIE_SIGNALS_PORT, type PartieSignalsPort } from '../poll/ports/partie-signals.port';
+import { parseDayKey, todayKeyUtc } from './day-key';
 import { CreateEventDto } from './dto/create-event.dto';
-import { EventsService } from './events.service';
+import { EventsService, type EventSeanceInput } from './events.service';
 
 /** Refus d'une clé de jour bien formée mais inexistante au calendrier (ex. `2026-02-31`). */
 export const INVALID_DAY_MESSAGE = "Cette date n'existe pas";
 /** Refus d'un jour passé : aujourd'hui est accepté. */
 export const PAST_DAY_MESSAGE = 'La date ne peut pas être passée';
-
-/** Clé `YYYY-MM-DD` du jour courant en UTC — même convention que le calendrier
- *  (`EventsService.recomputeNextSession` compare au début du jour courant en UTC). */
-function todayKeyUtc(now: Date = new Date()): string {
-  return now.toISOString().substring(0, 10);
-}
-
-/** Minuit UTC du jour `dayKey`, ou `null` si la clé ne désigne pas un vrai jour du calendrier. */
-function parseDayKey(dayKey: string): Date | null {
-  const [y, m, d] = dayKey.split('-').map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d));
-  return date.toISOString().substring(0, 10) === dayKey ? date : null;
-}
 
 /** Texte saisi nettoyé : espaces de bord retirés, chaîne vide → `null`. */
 function cleaned(value: string | null | undefined): string | null {
@@ -70,27 +61,65 @@ export class GroupEventsService {
       throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
     }
 
-    const date = parseDayKey(dto.date);
-    if (!date) throw new BadRequestException(INVALID_DAY_MESSAGE);
-    // Comparaison de clés de jour (UTC) : aujourd'hui est accepté, quel que soit le créneau.
-    if (dto.date < todayKeyUtc()) throw new BadRequestException(PAST_DAY_MESSAGE);
+    const seance = this.seanceInput(dto);
 
     const { event } = await this.events.createHosted(grant, userId, {
       title: dto.title.trim(),
-      seance: {
-        date,
-        slot: dto.slot,
-        lieu: cleaned(dto.lieu),
-        heureRdv: cleaned(dto.heureRdv),
-        notePratique: cleaned(dto.notePratique),
-        capacity: dto.capacity ?? null,
-      },
+      seance,
     });
     // Après validation et après `partie:{id}` (émis par `EventsService.create`) ; ne lève jamais.
     await this.partieSignals.notifyChanged(grant.partieId);
 
     const [card] = await this.events.listCards(grant, [event.id]);
     return card;
+  }
+
+  /**
+   * Story 40.2 : l'hôte corrige sa conjonction à venir — remplacement complet (mêmes champs et mêmes
+   * règles que la création, l'hôte est immuable). Le droit est décidé par `PermissionService` sur
+   * la cible `{ eventId }` (cellule de rôle + « hôte de l'événement ») ; la partie est celle de
+   * l'événement, jamais celle de la route : une route de la partie A ne touche pas l'événement de B
+   * (404). Le refus d'une conjonction passée, de la capacité sous les participants actuels et
+   * l'écriture elle-même (verrou de l'événement) sont dans `EventsService.updateHosted`.
+   */
+  async update(
+    partieId: string,
+    eventId: string,
+    userId: string,
+    dto: UpdateEventDto,
+  ): Promise<EventCardDto> {
+    const grant = await this.permissions.assert(userId, 'EVENT_UPDATE', { eventId });
+    if (grant.partieId !== partieId) throw new NotFoundException('Conjonction introuvable');
+    if (grant.partie.kind !== 'CAMPAGNE_EPISODIQUE') {
+      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
+    }
+
+    await this.events.updateHosted(grant, eventId, {
+      title: dto.title.trim(),
+      seance: this.seanceInput(dto),
+    });
+    // Après validation et après `partie:{id}` (émis par `EventsService.updateHosted`) ; ne lève jamais.
+    await this.partieSignals.notifyChanged(grant.partieId);
+
+    const [card] = await this.events.listCards(grant, [eventId]);
+    return card;
+  }
+
+  /** Règles de saisie d'une conjonction (création et modification) : jour réel, jamais passé
+   *  (aujourd'hui accepté, clés de jour UTC), textes nettoyés, capacité `null` = tous les membres. */
+  private seanceInput(dto: CreateEventDto): EventSeanceInput {
+    const date = parseDayKey(dto.date);
+    if (!date) throw new BadRequestException(INVALID_DAY_MESSAGE);
+    // Comparaison de clés de jour (UTC) : aujourd'hui est accepté, quel que soit le créneau.
+    if (dto.date < todayKeyUtc()) throw new BadRequestException(PAST_DAY_MESSAGE);
+    return {
+      date,
+      slot: dto.slot,
+      lieu: cleaned(dto.lieu),
+      heureRdv: cleaned(dto.heureRdv),
+      notePratique: cleaned(dto.notePratique),
+      capacity: dto.capacity ?? null,
+    };
   }
 
   /** Les conjonctions du groupe, passées comprises — tout membre du groupe les lit. */

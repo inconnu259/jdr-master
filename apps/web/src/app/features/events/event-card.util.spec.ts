@@ -4,6 +4,12 @@ import {
   eventBadge,
   eventDateLabel,
   eventSituation,
+  eventSituationTextKey,
+  frUnit,
+  initialsOf,
+  isHostOf,
+  isParticipantOf,
+  participationLine,
   isImminentEvent,
   isPastEvent,
   splitEvents,
@@ -26,6 +32,7 @@ const card = (id: string, date: string | null, over: Partial<EventCardDto> = {})
     notePratique: null,
     capacity: null,
   },
+  participants: [],
   ...over,
 });
 
@@ -120,5 +127,58 @@ describe('event-card.util (Story 40.1)', () => {
     );
     expect(upcoming.map((c) => c.id)).toEqual(['f-matin', 'f-aprem', 'f-soir']);
     expect(past.map((c) => c.id)).toEqual(['p-soir', 'p-matin']);
+  });
+
+  describe('Story 40.2', () => {
+    const withPeople = (capacity: number | null, n: number) =>
+      card('x', '2026-10-20', {
+        seance: { ...card('x', '2026-10-20').seance!, capacity },
+        participants: Array.from({ length: n }, (_, k) => ({
+          userId: k === 0 ? 'hote' : `u${k}`,
+          displayName: `P${k}`,
+          isHost: k === 0,
+          isAdmin: false,
+        })),
+      });
+
+    it('hôte et participants : « participe », les autres non', () => {
+      const c = withPeople(8, 3);
+      expect(isHostOf(c, 'hote')).toBe(true);
+      expect(isHostOf(c, 'u1')).toBe(false);
+      expect(isParticipantOf(c, 'u1')).toBe(true);
+      expect(isParticipantOf(c, 'étranger')).toBe(false);
+      expect(isParticipantOf(c, null)).toBe(false);
+      expect(eventSituation(c, 'u1', TODAY)).toEqual({
+        labelKey: 'partie.ralliement_event_chip_participating',
+        dotted: false,
+      });
+    });
+
+    it('texte du panneau de situation : hôte / inscrit / non inscrit, au présent ou à l’imparfait', () => {
+      const futur = withPeople(8, 2);
+      const passe = card('p', '2026-10-01', { participants: futur.participants });
+      expect(eventSituationTextKey(futur, 'hote', TODAY)).toBe('partie.ralliement_event_situation_host');
+      expect(eventSituationTextKey(futur, 'u1', TODAY)).toBe('partie.ralliement_event_situation_registered');
+      expect(eventSituationTextKey(futur, 'x', TODAY)).toBe('partie.ralliement_event_situation_none');
+      expect(eventSituationTextKey(passe, 'hote', TODAY)).toBe('partie.ralliement_event_situation_host_past');
+      expect(eventSituationTextKey(passe, 'u1', TODAY)).toBe('partie.ralliement_event_situation_registered_past');
+      expect(eventSituationTextKey(passe, 'x', TODAY)).toBe('partie.ralliement_event_situation_none_past');
+    });
+
+    it('participation : « 8 places · 5 inscrits · 3 libres » (l’hôte compte), accords du français, « Tous les membres »', () => {
+      expect(participationLine(withPeople(8, 5), TONE)).toBe('8 places · 5 inscrits · 3 libres');
+      expect(participationLine(withPeople(2, 1), TONE)).toBe('2 places · 1 inscrit · 1 libre');
+      expect(participationLine(withPeople(3, 3), TONE)).toBe('3 places · 3 inscrits · 0 libre');
+      expect(participationLine(withPeople(null, 4), TONE)).toBe('Tous les membres');
+      expect(frUnit('place|places', 0)).toBe('0 place');
+      expect(frUnit('place|places', 2)).toBe('2 places');
+    });
+
+    it('initiales : une ou deux lettres, majuscules', () => {
+      expect(initialsOf('Hélène Hôte')).toBe('HH');
+      expect(initialsOf('  léa ')).toBe('L');
+      expect(initialsOf('Jean de la Fontaine')).toBe('JF');
+      expect(initialsOf('')).toBe('?');
+    });
   });
 });

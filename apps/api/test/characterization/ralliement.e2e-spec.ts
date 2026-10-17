@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { EventsService } from '../../src/events/events.service';
 import { PartiesService } from '../../src/parties/parties.service';
@@ -1321,6 +1322,7 @@ describe('Ralliement — proposer une conjonction à date fixée (Story 40.1)', 
       notePratique: string | null;
       capacity: number | null;
     } | null;
+    participants: { userId: string; displayName: string; isHost: boolean; isAdmin: boolean }[];
   };
   type ErrorLike = { statusCode: number; message: string | string[] };
   type CalendarLike = { 'mes-seances': { seanceId: string }[] };
@@ -1401,6 +1403,10 @@ describe('Ralliement — proposer une conjonction à date fixée (Story 40.1)', 
         notePratique: 'On mange sur place.',
         capacity: null,
       },
+      // Story 40.2 : l'hôte est le premier (et ici le seul) participant.
+      participants: [
+        { userId: member.id, displayName: member.displayName, isHost: true, isAdmin: false },
+      ],
     });
 
     const events = await h.prisma.event.findMany({
@@ -1526,7 +1532,11 @@ describe('Ralliement — proposer une conjonction à date fixée (Story 40.1)', 
 
   it('calendrier : l’hôte non créateur voit sa conjonction dans son agenda et en est occupé ; les autres membres non', async () => {
     const day = isoDay(9);
-    const res = await propose(member, groupId, payload({ title: 'Agenda', date: day, slot: 'MORNING' }));
+    const res = await propose(
+      member,
+      groupId,
+      payload({ title: 'Agenda', date: day, slot: 'MORNING' }),
+    );
     expect(res.status).toBe(201);
     const card = body<CardLike>(res);
     const query = { from: isoDay(0), to: isoDay(30) };
@@ -1558,5 +1568,361 @@ describe('Ralliement — proposer une conjonction à date fixée (Story 40.1)', 
     expect(list).toHaveLength(await eventCount(groupId));
     const dates = list.map((c) => c.seance?.date ?? '');
     expect(dates).toEqual([...dates].sort());
+  });
+});
+
+// Story 40.2 — consulter et modifier une conjonction : la carte porte ses participants (hôte puis
+// inscrits, rôle admin lu en lot) ; l'hôte seul remplace sa conjonction à venir (PATCH), les autres
+// membres, les étrangers et les autres familles sont refusés sans rien écrire.
+describe('Ralliement — consulter et modifier une conjonction (Story 40.2)', () => {
+  let h: Harness;
+  let admin: TestUser;
+  let host: TestUser;
+  let guest: TestUser;
+  let stranger: TestUser;
+  let otherAdmin: TestUser;
+  let groupId: string;
+  let otherGroupId: string;
+
+  type CardLike = {
+    id: string;
+    title: string;
+    hostId: string | null;
+    seance: {
+      id: string;
+      date: string | null;
+      slot: string | null;
+      lieu: string | null;
+      heureRdv: string | null;
+      notePratique: string | null;
+      capacity: number | null;
+    } | null;
+    participants: { userId: string; displayName: string; isHost: boolean; isAdmin: boolean }[];
+  };
+  type ErrorLike = { statusCode: number; message: string | string[] };
+  type DatedPartieLike = PartieDtoLike & { nextSessionDate: string | null };
+
+  const HOST_ONLY = "Action réservée à l'hôte de la conjonction";
+  const PAST_DAY = 'La date ne peut pas être passée';
+  const PAST_EVENT = 'Cette conjonction est passée : elle ne peut plus être modifiée';
+
+  const payload = (over: Record<string, unknown> = {}) => ({
+    title: 'Soirée plateaux',
+    date: isoDay(6),
+    slot: 'EVENING',
+    ...over,
+  });
+  const propose = async (who: TestUser, partieId: string, over: Record<string, unknown> = {}) =>
+    body<CardLike>(
+      await who.agent.post(`/parties/${partieId}/events`).send(payload(over)).expect(201),
+    );
+  const edit = (who: TestUser, partieId: string, eventId: string, sent: Record<string, unknown>) =>
+    who.agent.patch(`/parties/${partieId}/events/${eventId}`).send(sent);
+  const stored = (eventId: string) =>
+    h.prisma.event.findUniqueOrThrow({ where: { id: eventId }, include: { seances: true } });
+  const inscribe = (seanceId: string, user: TestUser) =>
+    h.prisma.inscription.create({ data: { seanceId, userId: user.id } });
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, host, guest, stranger, otherAdmin] = await Promise.all([
+      h.createUser('edit-admin'),
+      h.createUser('edit-hote'),
+      h.createUser('edit-invite'),
+      h.createUser('edit-etranger'),
+      h.createUser('edit-autre-admin'),
+    ]);
+    ({ id: groupId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'edit', 'ralliement'));
+    await h.addMember(groupId, host);
+    await h.addMember(groupId, guest);
+    ({ id: otherGroupId } = await h.createPartie(
+      otherAdmin,
+      'CAMPAGNE_EPISODIQUE',
+      'edit-autre',
+      'ralliement',
+    ));
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it('participants : l’hôte d’abord, puis les inscrits par ordre d’inscription ; l’administrateur est signalé ; tout membre les lit, aucun étranger', async () => {
+    const card = await propose(host, groupId, { title: 'Avec inscrits', capacity: 6 });
+    await inscribe(card.seance!.id, guest);
+    await inscribe(card.seance!.id, admin);
+
+    const list = body<CardLike[]>(
+      await guest.agent.get(`/parties/${groupId}/events/list`).expect(200),
+    );
+    const read = list.find((c) => c.id === card.id)!;
+    expect(read.participants).toEqual([
+      { userId: host.id, displayName: host.displayName, isHost: true, isAdmin: false },
+      { userId: guest.id, displayName: guest.displayName, isHost: false, isAdmin: false },
+      { userId: admin.id, displayName: admin.displayName, isHost: false, isAdmin: true },
+    ]);
+    await stranger.agent.get(`/parties/${groupId}/events/list`).expect(403);
+  });
+
+  it('l’hôte modifie : 200 + carte, tout est remplacé, le rappel est ré-armé, la prochaine date recalculée, tous prévenus', async () => {
+    const card = await propose(host, groupId, {
+      title: 'À corriger',
+      lieu: 'Lyon',
+      heureRdv: '20:00',
+      notePratique: 'Ancienne note',
+      capacity: 5,
+    });
+    await h.prisma.seance.update({
+      where: { id: card.seance!.id },
+      data: { reminderSentAt: new Date() },
+    });
+    const newDay = isoDay(40);
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    let updated: CardLike;
+    try {
+      const res = await edit(
+        host,
+        groupId,
+        card.id,
+        payload({
+          title: '  Corrigée  ',
+          date: newDay,
+          slot: 'MORNING',
+          lieu: ' Paris ',
+          heureRdv: '09:30',
+          notePratique: null,
+          capacity: null,
+        }),
+      ).expect(200);
+      updated = body<CardLike>(res);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(emit).toHaveBeenCalledWith(userTopic(admin.id));
+      expect(emit).toHaveBeenCalledWith(userTopic(guest.id));
+    } finally {
+      emit.mockRestore();
+    }
+
+    expect(updated).toEqual({
+      id: card.id,
+      title: 'Corrigée',
+      hostId: host.id,
+      hostDisplayName: host.displayName,
+      seance: {
+        id: card.seance!.id,
+        date: newDay,
+        slot: 'MORNING',
+        lieu: 'Paris',
+        heureRdv: '09:30',
+        notePratique: null,
+        capacity: null,
+      },
+      participants: [
+        { userId: host.id, displayName: host.displayName, isHost: true, isAdmin: false },
+      ],
+    });
+    const event = await stored(card.id);
+    expect(event.title).toBe('Corrigée');
+    expect(event.ownerId).toBe(host.id); // l'hôte est immuable
+    const seance = event.seances[0];
+    expect(seance.startDate?.toISOString()).toBe(`${newDay}T00:00:00.000Z`);
+    expect(seance.endDate?.toISOString()).toBe(`${newDay}T00:00:00.000Z`);
+    expect([seance.startSlot, seance.endSlot]).toEqual(['MORNING', 'MORNING']);
+    expect(seance.inscriptionMax).toBeNull();
+    expect(seance.reminderSentAt).toBeNull();
+    // Un seul événement, une seule séance : remplacement, pas création.
+    expect(event.seances).toHaveLength(1);
+
+    // La prochaine date de la partie est celle de la plus proche conjonction à venir.
+    const partie = body<DatedPartieLike>(await admin.agent.get(`/parties/${groupId}`).expect(200));
+    const nearest = await h.prisma.seance.findFirstOrThrow({
+      where: { event: { partieId: groupId }, startDate: { not: null } },
+      orderBy: { startDate: 'asc' },
+    });
+    expect(partie.nextSessionDate).toBe(nearest.startDate!.toISOString());
+  });
+
+  it('groupe à une seule conjonction : la prochaine date de la partie suit exactement la date modifiée', async () => {
+    const { id: soloId } = await h.createPartie(
+      admin,
+      'CAMPAGNE_EPISODIQUE',
+      'edit-solo',
+      'ralliement',
+    );
+    const solo = await propose(admin, soloId, { title: 'Seule', date: isoDay(6) });
+    const nextDate = async () =>
+      body<DatedPartieLike>(await admin.agent.get(`/parties/${soloId}`).expect(200))
+        .nextSessionDate;
+    expect(await nextDate()).toBe(`${isoDay(6)}T00:00:00.000Z`);
+
+    await edit(admin, soloId, solo.id, payload({ title: 'Seule', date: isoDay(40) })).expect(200);
+
+    expect(await nextDate()).toBe(`${isoDay(40)}T00:00:00.000Z`);
+  });
+
+  it('même jour et même créneau : le rappel déjà envoyé n’est pas ré-armé', async () => {
+    const card = await propose(host, groupId, { title: 'Stable' });
+    const sentAt = new Date('2026-01-01T10:00:00.000Z');
+    await h.prisma.seance.update({
+      where: { id: card.seance!.id },
+      data: { reminderSentAt: sentAt },
+    });
+
+    await edit(
+      host,
+      groupId,
+      card.id,
+      payload({ title: 'Stable renommée', date: card.seance!.date }),
+    ).expect(200);
+
+    const seance = (await stored(card.id)).seances[0];
+    expect(seance.reminderSentAt?.toISOString()).toBe(sentAt.toISOString());
+  });
+
+  describe('refus (rien n’est écrit)', () => {
+    let card: CardLike;
+    beforeAll(async () => {
+      card = await propose(host, groupId, { title: 'Intouchable', capacity: 4, lieu: 'Nantes' });
+    });
+    const untouched = async () => {
+      const event = await stored(card.id);
+      expect(event.title).toBe('Intouchable');
+      expect(event.seances[0].lieu).toBe('Nantes');
+      expect(event.seances[0].inscriptionMax).toBe(4);
+    };
+
+    it('un autre membre, y compris l’administrateur du groupe : 403 « réservée à l’hôte »', async () => {
+      for (const who of [guest, admin]) {
+        const res = await edit(who, groupId, card.id, payload({ title: 'Piraté' }));
+        expect(res.status).toBe(403);
+        expect(body<ErrorLike>(res).message).toBe(HOST_ONLY);
+      }
+      await untouched();
+    });
+
+    it('un étranger : 403 « pas accès » ; le membre d’un autre groupe aussi', async () => {
+      for (const who of [stranger, otherAdmin]) {
+        const res = await edit(who, groupId, card.id, payload({ title: 'Piraté' }));
+        expect(res.status).toBe(403);
+        expect(body<ErrorLike>(res).message).toBe(NO_ACCESS);
+      }
+      await untouched();
+    });
+
+    it('l’événement d’un autre groupe par la route du sien : 404, rien n’est écrit des deux côtés', async () => {
+      const foreign = await propose(otherAdmin, otherGroupId, { title: 'Autre groupe' });
+      // L'hôte de B est aussi membre de A : l'événement de B ne s'atteint pas par la route de A.
+      await h.addMember(groupId, otherAdmin);
+      try {
+        const res = await edit(otherAdmin, groupId, foreign.id, payload({ title: 'Détourné' }));
+        expect(res.status).toBe(404);
+      } finally {
+        await h.prisma.membership.deleteMany({
+          where: { partieId: groupId, userId: otherAdmin.id },
+        });
+      }
+      expect((await stored(foreign.id)).title).toBe('Autre groupe');
+      // Un membre de A, étranger à B, est refusé avant même d'atteindre la route.
+      const asMember = await edit(host, otherGroupId, foreign.id, payload({ title: 'Détourné' }));
+      expect(asMember.status).toBe(403);
+      expect((await stored(foreign.id)).title).toBe('Autre groupe');
+      await untouched();
+    });
+
+    it('un événement inconnu : 404', async () => {
+      await edit(host, groupId, randomUUID(), payload()).expect(404);
+    });
+
+    it('une partie de JDR : 403 pour le MJ comme pour le joueur', async () => {
+      const { id: jdrId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'edit-jdr');
+      await h.addMember(jdrId, guest);
+      const scenario = body<{ id: string }>(
+        await admin.agent
+          .post(`/parties/${jdrId}/scenarios`)
+          .send({ title: 'Scénario' })
+          .expect(201),
+      );
+      for (const who of [admin, guest]) {
+        const res = await edit(who, jdrId, scenario.id, payload({ title: 'Piraté' }));
+        expect(res.status).toBe(403);
+      }
+      expect((await stored(scenario.id)).title).toBe('Scénario');
+    });
+
+    it('une rencontre isolée (ONE_SHOT) : 403 « indisponible », même à son administrateur', async () => {
+      const { id: isoleeId } = await h.createPartie(admin, 'ONE_SHOT', 'edit-isolee', 'ralliement');
+      const event = await h.prisma.event.findFirstOrThrow({ where: { partieId: isoleeId } });
+      const res = await edit(admin, isoleeId, event.id, payload({ title: 'Piraté' }));
+      expect(res.status).toBe(403);
+      expect(body<ErrorLike>(res).message).toBe(UNAVAILABLE);
+      expect((await stored(event.id)).title).toBe(event.title);
+    });
+
+    it('une conjonction passée : 400 français, rien n’est écrit', async () => {
+      const past = await propose(host, groupId, { title: 'Hier' });
+      const day = new Date(`${isoDay(-2)}T00:00:00.000Z`);
+      await h.prisma.seance.update({
+        where: { id: past.seance!.id },
+        data: { startDate: day, endDate: day },
+      });
+
+      const res = await edit(host, groupId, past.id, payload({ title: 'Trop tard' }));
+      expect(res.status).toBe(400);
+      expect(body<ErrorLike>(res).message).toBe(PAST_EVENT);
+      expect((await stored(past.id)).title).toBe('Hier');
+    });
+
+    it('une nouvelle date passée ou inexistante : 400 français', async () => {
+      const res = await edit(host, groupId, card.id, payload({ title: 'Passé', date: isoDay(-1) }));
+      expect(res.status).toBe(400);
+      expect(body<ErrorLike>(res).message).toBe(PAST_DAY);
+      await edit(host, groupId, card.id, payload({ date: '2031-02-31' })).expect(400);
+      await untouched();
+    });
+
+    it('une saisie invalide : 400 sans message anglais ; le créneau FULL_DAY et l’hôte en corps sont refusés', async () => {
+      for (const over of [
+        { heureRdv: '20h30' },
+        { title: '   ' },
+        { slot: 'FULL_DAY' },
+        { capacity: 1 },
+      ]) {
+        const res = await edit(host, groupId, card.id, payload(over));
+        expect(res.status).toBe(400);
+        const message = body<ErrorLike>(res).message;
+        const text = Array.isArray(message) ? message.join(' ') : message;
+        expect(text).not.toMatch(/must be|should not|is not/i);
+      }
+      // L'hôte est immuable : aucun champ ne le désigne (propriété inconnue refusée).
+      await edit(host, groupId, card.id, payload({ ownerId: guest.id })).expect(400);
+      await untouched();
+    });
+  });
+
+  it('capacité : sous les participants actuels (hôte + inscrits) → 400 ; égale → acceptée ; sans limite → acceptée', async () => {
+    const card = await propose(host, groupId, { title: 'Quota', capacity: 6 });
+    await inscribe(card.seance!.id, guest);
+    await inscribe(card.seance!.id, admin);
+    // 3 participants : l'hôte et deux inscrits.
+
+    const tooSmall = await edit(host, groupId, card.id, payload({ title: 'Quota', capacity: 2 }));
+    expect(tooSmall.status).toBe(400);
+    expect(String(body<ErrorLike>(tooSmall).message)).toMatch(/participants actuels \(3\)/);
+    expect((await stored(card.id)).seances[0].inscriptionMax).toBe(6);
+
+    const exact = await edit(
+      host,
+      groupId,
+      card.id,
+      payload({ title: 'Quota', capacity: 3 }),
+    ).expect(200);
+    expect(body<CardLike>(exact).seance?.capacity).toBe(3);
+    const open = await edit(
+      host,
+      groupId,
+      card.id,
+      payload({ title: 'Quota', capacity: null }),
+    ).expect(200);
+    expect(body<CardLike>(open).seance?.capacity).toBeNull();
   });
 });

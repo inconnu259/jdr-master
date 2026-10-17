@@ -8,7 +8,11 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
-import type { CreateEventDto as CreateEventPayload, EventSlot } from '@master-jdr/shared';
+import type {
+  CreateEventDto as CreateEventPayload,
+  EventSlot,
+  UpdateEventDto as UpdateEventPayload,
+} from '@master-jdr/shared';
 
 /** `HH:MM` en 24 h, heures et minutes paddées — même règle que les informations pratiques d'une
  *  séance (Story 36.5) : la valeur n'est jamais reparsée en aval, c'est ici qu'on garantit sa forme. */
@@ -67,3 +71,10 @@ export class CreateEventDto implements CreateEventPayload {
   @Min(2, { message: 'Des places limitées en comptent au moins 2, hôte compris' })
   capacity?: number | null;
 }
+
+/**
+ * Modification d'une conjonction (Story 40.2, `PATCH /parties/:id/events/:eventId`) : remplacement
+ * complet, MÊMES champs et MÊMES règles que la création — l'hôte reste immuable (aucun champ ne le
+ * désigne).
+ */
+export class UpdateEventDto extends CreateEventDto implements UpdateEventPayload {}

@@ -6,6 +6,7 @@ import {
   ACTION_CAPABILITY,
   ADMIN_ONLY_MESSAGE,
   CAPABILITY_UNAVAILABLE_MESSAGE,
+  HOST_ONLY_MESSAGE,
   JDR_POLICY,
   MJ_ONLY_MESSAGE,
   NO_ACCESS_MESSAGE,
@@ -177,6 +178,8 @@ const JDR_NOBODY: PermissionAction[] = [
   // Story 40.1 : proposer / lister les conjonctions d'un groupe — n'existe pas en JDR.
   'EVENT_CREATE',
   'EVENT_LIST',
+  // Story 40.2 : modifier une conjonction — n'existe pas en JDR.
+  'EVENT_UPDATE',
 ];
 
 describe('PermissionService', () => {
@@ -490,6 +493,9 @@ describe('PermissionService', () => {
       'EVENT_CREATE',
       'EVENT_LIST',
     ];
+    /** Story 40.2 : la cellule de rôle est ouverte à l'admin ET au membre, mais l'action vise un
+     *  événement (`{ eventId }`) et n'est accordée qu'à son hôte — testée à part, sur cette cible. */
+    const RALLIEMENT_HOST_ONLY: PermissionAction[] = ['EVENT_UPDATE'];
     /** Modifier la partie, la clore, la rouvrir, la brûler (Story 39.1), inviter et retirer un
      *  membre (Story 39.3) : admin seul. */
     const RALLIEMENT_ADMIN_ONLY: PermissionAction[] = [
@@ -511,7 +517,10 @@ describe('PermissionService', () => {
     ];
     /** Tout le reste : aucun rôle. */
     const RALLIEMENT_NOBODY: PermissionAction[] = ACTIONS.filter(
-      (a) => !RALLIEMENT_VIEW.includes(a) && !RALLIEMENT_ADMIN_ONLY.includes(a),
+      (a) =>
+        !RALLIEMENT_VIEW.includes(a) &&
+        !RALLIEMENT_ADMIN_ONLY.includes(a) &&
+        !RALLIEMENT_HOST_ONLY.includes(a),
     );
 
     beforeEach(() => {
@@ -529,6 +538,7 @@ describe('PermissionService', () => {
     it('RALLIEMENT_POLICY est exactement la politique écrite en dur', () => {
       const expected: Record<string, string[]> = {};
       for (const action of RALLIEMENT_VIEW) expected[action] = ['admin', 'member'];
+      for (const action of RALLIEMENT_HOST_ONLY) expected[action] = ['admin', 'member'];
       for (const action of RALLIEMENT_ADMIN_ONLY) expected[action] = ['admin'];
       for (const action of RALLIEMENT_NOBODY) expected[action] = [];
       expect(RALLIEMENT_POLICY).toEqual(expected);
@@ -583,6 +593,63 @@ describe('PermissionService', () => {
         await expect(refusal).rejects.toThrow(NO_ACCESS_MESSAGE);
       },
     );
+
+    // Story 40.2 — EVENT_UPDATE : cellule de rôle ouverte, règle « hôte » décidée dans assert().
+    describe('EVENT_UPDATE — hôte de la conjonction seul', () => {
+      const event = (ownerId: string | null) => ({ id: 'ev-1', ownerId, partie: RALLIEMENT });
+
+      it('accordé à l’hôte, qu’il soit membre ou administrateur', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(MEMBRE));
+        await expect(service.assert(MEMBRE, 'EVENT_UPDATE', { eventId: 'ev-1' })).resolves.toEqual(
+          objectLike({ partieId: 'R', role: 'member' }),
+        );
+        prisma.event.findUnique.mockResolvedValue(event(ADMIN));
+        await expect(service.assert(ADMIN, 'EVENT_UPDATE', { eventId: 'ev-1' })).resolves.toEqual(
+          objectLike({ partieId: 'R', role: 'admin' }),
+        );
+      });
+
+      it('refusé à un autre membre — 403 « réservée à l’hôte »', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(ADMIN));
+        const refusal = service.assert(MEMBRE, 'EVENT_UPDATE', { eventId: 'ev-1' });
+        await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(refusal).rejects.toThrow(HOST_ONLY_MESSAGE);
+      });
+
+      it('refusé à un administrateur qui n’est pas l’hôte — 403 « réservée à l’hôte »', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(MEMBRE));
+        await expect(service.assert(ADMIN, 'EVENT_UPDATE', { eventId: 'ev-1' })).rejects.toThrow(
+          HOST_ONLY_MESSAGE,
+        );
+      });
+
+      it('refusé à tous quand l’hôte a disparu (ownerId null)', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(null));
+        await expect(service.assert(ADMIN, 'EVENT_UPDATE', { eventId: 'ev-1' })).rejects.toThrow(
+          HOST_ONLY_MESSAGE,
+        );
+      });
+
+      it('refusé sur une cible sans événement (partie) — jamais accordé faute d’hôte', async () => {
+        await expect(service.assert(ADMIN, 'EVENT_UPDATE', { partieId: 'R' })).rejects.toThrow(
+          HOST_ONLY_MESSAGE,
+        );
+      });
+
+      it('refusé à un étranger — 403 « pas accès » (avant la règle hôte)', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(MEMBRE));
+        await expect(service.assert(STRANGER, 'EVENT_UPDATE', { eventId: 'ev-1' })).rejects.toThrow(
+          NO_ACCESS_MESSAGE,
+        );
+      });
+
+      it('événement inconnu → 404', async () => {
+        prisma.event.findUnique.mockResolvedValue(null);
+        await expect(
+          service.assert(ADMIN, 'EVENT_UPDATE', { eventId: 'zzz' }),
+        ).rejects.toBeInstanceOf(NotFoundException);
+      });
+    });
 
     it('un propriétaire sans ligne de membership compte comme admin, jamais mj', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie('R', OWNER_SANS_LIGNE, 'ralliement'));

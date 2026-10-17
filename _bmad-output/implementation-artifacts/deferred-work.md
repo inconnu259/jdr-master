@@ -362,3 +362,12 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-40-1-proposer-une-conjonction-a-date-fixee.md`
   summary: A closed group (closedAt set, TERMINEE) still accepts new conjonctions; no write guard on closed parties exists app-wide.
   evidence: Unverified medium — settle by deciding whether a closed party (JDR or ralliement) refuses new events/scenarios, then guard in PermissionService or the services.
+- source_spec: `_bmad-output/implementation-artifacts/spec-40-2-consulter-et-modifier-une-conjonction-dans-sa-fenetre.md`
+  summary: `updateHosted` (Event row lock) and `inscrire` (Seance row lock) do not serialize, so a capacity cut can race a sign-up and end below the headcount.
+  evidence: Unreachable in ralliement until 40.3 opens `SEANCE_INSCRIBE`; 40.3 must take the Event lock (epic decision) in sign-up, reservation and capacity writes, Partie lock first.
+- source_spec: `_bmad-output/implementation-artifacts/spec-40-2-consulter-et-modifier-une-conjonction-dans-sa-fenetre.md`
+  summary: The edit form silently rewrites a `FULL_DAY` slot to EVENING and cannot save a conjonction without a date.
+  evidence: Unreachable now (40.1 writes only the three slots); reachable once 40.5 poll `chooseDate` writes a slot or clears the date — decide then how edit treats poll-driven dates.
+- source_spec: `_bmad-output/implementation-artifacts/spec-40-2-consulter-et-modifier-une-conjonction-dans-sa-fenetre.md`
+  summary: A PATCH on an event deleted since the dialog opened answers « Scénario introuvable », a JDR word, in the group dialog.
+  evidence: Message comes from `PermissionService.resolveTarget` (historic); events cannot be deleted before epic 42 cancellation — map it to « Conjonction introuvable » there.

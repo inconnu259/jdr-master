@@ -100,6 +100,9 @@ export const ADMIN_ONLY_MESSAGE = 'Action réservée aux administrateurs de la p
  *  ralliement n'a ni scénario, ni personnage, ni XP… */
 export const RALLIEMENT_UNAVAILABLE_MESSAGE =
   "Cette action n'est pas disponible pour ce type de partie";
+/** Refus d'une action réservée à l'hôte d'une conjonction (Story 40.2) : un autre membre du groupe,
+ *  administrateur compris, ne la modifie pas. */
+export const HOST_ONLY_MESSAGE = "Action réservée à l'hôte de la conjonction";
 /** Refus opposé à quelqu'un qui n'a aucun rôle sur la partie. */
 export const NO_ACCESS_MESSAGE = "Vous n'avez pas accès à cette partie";
 /** Refus d'une action de couche 3 sur une partie dont le système ne déclare pas la capacité. */
@@ -193,6 +196,7 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
   // JDR crée et lit ses événements par ses scénarios.
   EVENT_CREATE: NOBODY,
   EVENT_LIST: NOBODY,
+  EVENT_UPDATE: NOBODY,
   // Invitations : le MJ invite, liste et révoque (l'invitant est toujours le propriétaire, la
   // propriété d'une partie étant immuable).
   INVITATION_CREATE: OWNER_ONLY,
@@ -287,6 +291,9 @@ export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly Parti
   // rencontre isolée (`ONE_SHOT`) est posé dans le service (`GroupEventsService`).
   EVENT_CREATE: ADMIN_AND_MEMBERS,
   EVENT_LIST: ADMIN_AND_MEMBERS,
+  // Story 40.2 : modifier une conjonction. Tout membre passe la cellule ; la règle « hôte de
+  // l'événement » est décidée plus bas, dans `assert()` (HOST_ONLY_ACTIONS) — jamais ailleurs.
+  EVENT_UPDATE: ADMIN_AND_MEMBERS,
   // Invitations (Story 39.3) : l'administrateur invite, liste et révoque ; un simple membre n'a que
   // la lecture de la liste des membres. La cellule vaut pour la famille entière (l'invitation à
   // usage unique, épopée 41, n'a pas encore d'interface : l'UI reste réservée aux groupes).
@@ -320,6 +327,13 @@ export const ACTION_CAPABILITY: Readonly<Partial<Record<PermissionAction, GameSy
     GROUP_ROLE_ASSIGN: 'groupRoles',
     ANNOUNCEMENT_CREATE: 'announcements',
   };
+
+/** Actions réservées à l'HÔTE de l'événement visé (Story 40.2) : au-delà de la cellule de rôle de la
+ *  politique, l'appelant doit être le propriétaire de l'événement. Décidé ICI et nulle part ailleurs —
+ *  aucun code hors de `permissions/` ne lit `ownerId` pour un droit. */
+const HOST_ONLY_ACTIONS: ReadonlySet<PermissionAction> = new Set<PermissionAction>([
+  'EVENT_UPDATE',
+]);
 
 /** Politique applicable à une famille. Un système inconnu du registre retombe sur la politique
  *  `jdr`. */
@@ -393,7 +407,7 @@ export class PermissionService {
     action: PermissionAction,
     target: PermissionTarget,
   ): Promise<PartieGrant> {
-    const { partie, resolved } = await this.resolveTarget(target);
+    const { partie, resolved, eventOwnerId } = await this.resolveTarget(target);
     const role = await this.roleIn(partie, userId);
     if (role === null) throw new ForbiddenException(NO_ACCESS_MESSAGE);
     const family = familyOf(partie.gameSystemId);
@@ -407,6 +421,11 @@ export class PermissionService {
         );
       }
       throw new ForbiddenException(MJ_ONLY_MESSAGE);
+    }
+    // Story 40.2 : l'hôte de l'événement visé seul (cible `{ eventId }` obligatoire ; une cible sans
+    // événement, ou un événement sans hôte — compte supprimé —, n'ouvre rien).
+    if (HOST_ONLY_ACTIONS.has(action) && (eventOwnerId == null || eventOwnerId !== userId)) {
+      throw new ForbiddenException(HOST_ONLY_MESSAGE);
     }
     const capability = ACTION_CAPABILITY[action];
     if (capability !== undefined && !hasCapability(partie.gameSystemId, capability)) {
@@ -510,9 +529,12 @@ export class PermissionService {
 
   /** Résout la partie de la cible (et ce qu'elle désigne), 404 avec le message historique de la
    *  cible si elle n'existe pas. */
-  private async resolveTarget(
-    target: PermissionTarget,
-  ): Promise<{ partie: Partie; resolved: ResolvedTarget }> {
+  private async resolveTarget(target: PermissionTarget): Promise<{
+    partie: Partie;
+    resolved: ResolvedTarget;
+    /** Propriétaire (hôte) de l'événement visé — lu pour les seules règles « hôte » de `assert()`. */
+    eventOwnerId?: string | null;
+  }> {
     if (target.partieId !== undefined) {
       const partie = await this.prisma.partie.findUnique({ where: { id: target.partieId } });
       if (!partie) throw new NotFoundException('Partie introuvable');
@@ -525,7 +547,11 @@ export class PermissionService {
       });
       // Message historique : dans le JDR, un événement est toujours un scénario.
       if (!event) throw new NotFoundException('Scénario introuvable');
-      return { partie: event.partie, resolved: { partieId: event.partie.id, eventId: event.id } };
+      return {
+        partie: event.partie,
+        resolved: { partieId: event.partie.id, eventId: event.id },
+        eventOwnerId: event.ownerId,
+      };
     }
     if (target.characterId !== undefined) {
       const character = await this.prisma.character.findUnique({

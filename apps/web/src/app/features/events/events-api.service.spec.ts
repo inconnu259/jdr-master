@@ -15,6 +15,7 @@ describe('EventsApiService (Story 40.1)', () => {
     hostId: 'u1',
     hostDisplayName: 'Léa',
     seance: null,
+    participants: [],
   };
 
   beforeEach(() => {
@@ -41,6 +42,17 @@ describe('EventsApiService (Story 40.1)', () => {
     const p = service.create('p1', dto);
     const req = http.expectOne(`${API}/parties/p1/events`);
     expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual(dto);
+    req.flush(card);
+    expect(await p).toEqual(card);
+  });
+
+  it('update → PATCH /parties/:id/events/:eventId avec le payload complet (Story 40.2)', async () => {
+    const dto = { title: 'Catane', date: '2031-10-10', slot: 'MORNING' as const, capacity: 6 };
+    const p = service.update('p1', 'e1', dto);
+    const req = http.expectOne(`${API}/parties/p1/events/e1`);
+    expect(req.request.method).toBe('PATCH');
     expect(req.request.withCredentials).toBe(true);
     expect(req.request.body).toEqual(dto);
     req.flush(card);

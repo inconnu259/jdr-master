@@ -1,4 +1,4 @@
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, inject, input, output } from '@angular/core';
 import type { EventCardDto } from '@master-jdr/shared';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { fillTone } from '../../../core/theme/tone-format';
@@ -16,7 +16,9 @@ import {
  * omise s'il est vide), « Ma situation » + chip. Rien de plus sur la carte ; l'état est TOUJOURS
  * écrit (badge, chip), jamais porté par la seule couleur ou la seule épaisseur du filet.
  *
- * Rendu pur, non cliquable à ce stade (la fenêtre de détail arrive avec la Story 40.2).
+ * Story 40.2 : la carte s'ouvre au clic n'importe où sur elle, à Entrée et à Espace : son titre est
+ * un bouton natif (nom accessible = titre) étiré sur toute la carte. Elle émet `open` avec ce bouton,
+ * que l'onglet retrouve à la fermeture pour lui rendre le focus. Rendu pur sinon : aucune donnée n'est lue ni écrite ici.
  */
 @Component({
   selector: 'app-event-card',
@@ -31,6 +33,12 @@ export class EventCard {
   /** Clé `YYYY-MM-DD` du jour courant, figée par l'écran parent (une seule source par écran). */
   readonly todayKey = input.required<string>();
   readonly currentUserId = input<string | null>(null);
+  /** Demande d'ouverture de la fenêtre de détail ; porte le bouton de la carte (retour du focus). */
+  readonly open = output<HTMLElement>();
+
+  protected activate(event: Event): void {
+    this.open.emit(event.currentTarget as HTMLElement);
+  }
 
   protected readonly past = computed(() => isPastEvent(this.card(), this.todayKey()));
   protected readonly imminent = computed(() => isImminentEvent(this.card(), this.todayKey()));

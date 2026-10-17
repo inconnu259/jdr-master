@@ -35,7 +35,11 @@ export function isImminentEvent(card: EventCardDto, todayKey: string): boolean {
  * (teinte `soon`, intensité `near`, PLEIN au palier `imminent` — « Aujourd'hui » / « Demain ») ;
  * « À venir » au-delà ou sans date. Le libellé est toujours écrit : la teinte le double.
  */
-export function eventBadge(card: EventCardDto, todayKey: string, tone: EventTone): StatusBadgeState {
+export function eventBadge(
+  card: EventCardDto,
+  todayKey: string,
+  tone: EventTone,
+): StatusBadgeState {
   if (isPastEvent(card, todayKey)) {
     return { tone: 'done', labelKey: 'status.scenario_passe', draft: false };
   }
@@ -74,8 +78,18 @@ export function eventDateLabel(card: EventCardDto, tone: EventTone): string {
   return slot ? `${date} · ${SLOT_LABELS[slot].toLocaleLowerCase('fr-FR')}` : date;
 }
 
-/** Ligne « Ma situation » : l'hôte participe (« J'y étais » une fois passée) ; tout autre membre
- *  n'est pas inscrit (chip pointillée) — l'inscription arrive avec la Story 40.3. */
+/** Story 40.2 : la personne est l'hôte de la conjonction. */
+export function isHostOf(card: EventCardDto, userId: string | null | undefined): boolean {
+  return !!userId && card.hostId === userId;
+}
+
+/** Story 40.2 : la personne participe — l'hôte, ou un inscrit de la liste des participants. */
+export function isParticipantOf(card: EventCardDto, userId: string | null | undefined): boolean {
+  return !!userId && (isHostOf(card, userId) || card.participants.some((p) => p.userId === userId));
+}
+
+/** Ligne « Ma situation » : l'hôte et les inscrits participent (« J'y étais » une fois passée) ; tout
+ *  autre membre n'est pas inscrit (chip pointillée) — l'inscription arrive avec la Story 40.3. */
 export interface EventSituation {
   labelKey:
     | 'partie.ralliement_event_chip_participating'
@@ -89,11 +103,57 @@ export function eventSituation(
   currentUserId: string | null | undefined,
   todayKey: string,
 ): EventSituation {
-  const isHost = !!currentUserId && card.hostId === currentUserId;
-  if (!isHost) return { labelKey: 'partie.ralliement_event_chip_not_registered', dotted: true };
+  if (!isParticipantOf(card, currentUserId)) {
+    return { labelKey: 'partie.ralliement_event_chip_not_registered', dotted: true };
+  }
   return isPastEvent(card, todayKey)
     ? { labelKey: 'partie.ralliement_event_chip_was_there', dotted: false }
     : { labelKey: 'partie.ralliement_event_chip_participating', dotted: false };
+}
+
+/** Texte du panneau de situation de la fenêtre de détail (Story 40.2) : la situation de la personne,
+ *  au présent ou à l'imparfait selon que la conjonction est passée. Pas de vote, pas d'inscription à
+ *  ce palier. */
+export function eventSituationTextKey(
+  card: EventCardDto,
+  currentUserId: string | null | undefined,
+  todayKey: string,
+): string {
+  const past = isPastEvent(card, todayKey);
+  const who = isHostOf(card, currentUserId)
+    ? 'host'
+    : isParticipantOf(card, currentUserId)
+      ? 'registered'
+      : 'none';
+  return `partie.ralliement_event_situation_${who}${past ? '_past' : ''}`;
+}
+
+/** Accord français d'une unité portée par le registre (`'place|places'`) : 0 et 1 au singulier. */
+export function frUnit(spec: string, n: number): string {
+  const [one, many] = spec.split('|');
+  return `${n} ${n <= 1 ? one : (many ?? one)}`;
+}
+
+/** Participation de la fiche : « 8 places · 5 inscrits · 3 libres » (l'hôte compte parmi les
+ *  inscrits) ou « Tous les membres » quand la conjonction n'a pas de limite. */
+export function participationLine(card: EventCardDto, tone: EventTone): string {
+  const capacity = card.seance?.capacity ?? null;
+  if (capacity === null) return tone['partie.ralliement_event_participation_all'];
+  const taken = card.participants.length;
+  return [
+    frUnit(tone['partie.ralliement_event_unit_place'], capacity),
+    frUnit(tone['partie.ralliement_event_unit_registered'], taken),
+    frUnit(tone['partie.ralliement_event_unit_free'], Math.max(0, capacity - taken)),
+  ].join(' · ');
+}
+
+/** Initiales d'un nom affiché (une ou deux lettres) pour le disque d'avatar. */
+export function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  const first = Array.from(words[0])[0] ?? '?';
+  const last = words.length > 1 ? (Array.from(words[words.length - 1])[0] ?? '') : '';
+  return (first + last).toLocaleUpperCase('fr-FR');
 }
 
 /** Ordre des créneaux d'une même journée. */

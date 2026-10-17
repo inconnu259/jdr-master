@@ -1,0 +1,125 @@
+<app-detail-surface
+  [title]="windowTitle()"
+  [custom]="true"
+  [hasHeader]="true"
+  [hasFooter]="true"
+  [wide]="true"
+  [portal]="true"
+  [openToken]="1"
+  (closed)="closed.emit()"
+>
+  <div detail-header class="ed__head">
+    <h2 class="ed__title" [id]="uid + '-title'">{{ windowTitle() }}</h2>
+    @if (!editing()) {
+      <app-status-badge class="ed__badge" [state]="badge()" />
+    }
+  </div>
+
+  @if (editing()) {
+    <app-event-form [prefill]="card()" (submitted)="save()" />
+  } @else {
+    <!-- Panneau de situation : ma situation, puis date, heure et lieu en grand. Ni vote ni
+         inscription à ce palier. -->
+    <section class="ed__situation" [attr.aria-labelledby]="uid + '-situation'">
+      <h3 class="ed__situation-label" [id]="uid + '-situation'">
+        {{ theme.tone()['partie.ralliement_event_situation'] }}
+      </h3>
+      <p class="ed__situation-text">{{ situationText() }}</p>
+      <p class="ed__big ed__big--date">{{ dateLabel() }}</p>
+      @if (timeText(); as time) {
+        <p class="ed__big ed__big--time">{{ time }}</p>
+      }
+      @if (card().seance?.lieu; as lieu) {
+        <p class="ed__big ed__big--place">{{ lieu }}</p>
+      }
+    </section>
+
+    <!-- Fiche : les lignes facultatives vides sont omises. -->
+    <section class="ed__sheet" [attr.aria-labelledby]="uid + '-sheet'">
+      <h3 class="ed__section-title" [id]="uid + '-sheet'">
+        {{ theme.tone()['partie.ralliement_event_sheet_heading'] }}
+      </h3>
+      <dl class="ed__dl">
+        <div class="ed__row ed__row--date">
+          <dt>{{ theme.tone()['partie.ralliement_event_sheet_date'] }}</dt>
+          <dd>{{ dateLabel() }}</dd>
+        </div>
+        <div class="ed__row ed__row--host">
+          <dt>{{ theme.tone()['partie.ralliement_event_sheet_host'] }}</dt>
+          <dd>{{ card().hostDisplayName ?? '—' }}</dd>
+        </div>
+        @if (card().seance?.lieu; as lieu) {
+          <div class="ed__row ed__row--place">
+            <dt>{{ theme.tone()['partie.ralliement_event_sheet_place'] }}</dt>
+            <dd>{{ lieu }}</dd>
+          </div>
+        }
+        @if (card().seance?.heureRdv; as time) {
+          <div class="ed__row ed__row--time">
+            <dt>{{ theme.tone()['partie.ralliement_event_sheet_time'] }}</dt>
+            <dd>{{ time }}</dd>
+          </div>
+        }
+        <div class="ed__row ed__row--participation">
+          <dt>{{ theme.tone()['partie.ralliement_event_sheet_participation'] }}</dt>
+          <dd>{{ participation() }}</dd>
+        </div>
+        @if (card().seance?.notePratique; as note) {
+          <div class="ed__row ed__row--note">
+            <dt>{{ theme.tone()['partie.ralliement_event_sheet_note'] }}</dt>
+            <dd>{{ note }}</dd>
+          </div>
+        }
+      </dl>
+    </section>
+
+    <section class="ed__participants" [attr.aria-labelledby]="uid + '-participants'">
+      <h3 class="ed__section-title" [id]="uid + '-participants'">
+        {{ theme.tone()['partie.ralliement_event_participants_heading'] }}
+      </h3>
+      @if (card().participants.length === 0) {
+        <p class="ed__empty">{{ theme.tone()['partie.ralliement_event_participants_empty'] }}</p>
+      } @else {
+        <ul class="ed__people">
+          @for (p of card().participants; track p.userId) {
+            <li>
+              <app-participant-chip [participant]="p" [self]="p.userId === currentUserId()" />
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+
+  <div detail-footer class="ed__footer">
+    @if (error(); as message) {
+      <p class="ed__error" role="alert">{{ message }}</p>
+    }
+    <div class="ed__actions">
+      @if (editing()) {
+        <button mat-stroked-button type="button" class="ed__cancel" (click)="cancelEdit()">
+          {{ theme.tone()['partie.ralliement_event_cancel_btn'] }}
+        </button>
+        <button
+          mat-flat-button
+          type="button"
+          class="ed__save"
+          [disabled]="!canSave()"
+          [attr.aria-busy]="busy()"
+          (click)="save()"
+        >
+          {{ theme.tone()['partie.ralliement_event_save_btn'] }}
+        </button>
+      } @else {
+        @if (canEdit()) {
+          <button mat-stroked-button type="button" class="ed__edit" (click)="startEdit()">
+            {{ theme.tone()['partie.ralliement_event_edit_btn'] }}
+          </button>
+        }
+        <button mat-flat-button type="button" class="ed__close" (click)="closed.emit()">
+          {{ theme.tone()['partie.ralliement_event_close_btn'] }}
+        </button>
+      }
+    </div>
+  </div>
+</app-detail-surface>

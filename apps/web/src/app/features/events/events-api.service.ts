@@ -1,11 +1,11 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import type { CreateEventDto, EventCardDto } from '@master-jdr/shared';
+import type { CreateEventDto, EventCardDto, UpdateEventDto } from '@master-jdr/shared';
 import { API_BASE } from '../../core/api-base';
 
 /**
- * Conjonctions d'un groupe de ralliement (Story 40.1) — accès HTTP seul, aucun état.
+ * Conjonctions d'un groupe de ralliement (Stories 40.1 et 40.2) — accès HTTP seul, aucun état.
  *
  * 🚨 La liste vit sur `GET /parties/:id/events/list` : `GET /parties/:id/events` est le flux temps
  * réel (SSE) de la partie. Le rafraîchissement en direct ne passe PAS par un nouveau handler
@@ -30,6 +30,16 @@ export class EventsApiService {
   create(partieId: string, dto: CreateEventDto): Promise<EventCardDto> {
     return firstValueFrom(
       this.http.post<EventCardDto>(`${API_BASE}/parties/${partieId}/events`, dto, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  /** Story 40.2 : l'hôte remplace sa conjonction (`PATCH /parties/:id/events/:eventId`) — renvoie
+   *  la carte à jour, participants compris. */
+  update(partieId: string, eventId: string, dto: UpdateEventDto): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.patch<EventCardDto>(`${API_BASE}/parties/${partieId}/events/${eventId}`, dto, {
         withCredentials: true,
       }),
     );

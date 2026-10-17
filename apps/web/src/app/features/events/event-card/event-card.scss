@@ -8,6 +8,7 @@
 
 .event-card {
   --event-card-tone: var(--jdr-status-soon, #ff7ad9);
+  position: relative;
   box-sizing: border-box;
   height: 100%;
   display: flex;
@@ -19,6 +20,40 @@
   border: 1px solid var(--event-card-tone);
   border-left-width: 3px;
   background: var(--mat-sys-surface-container, transparent);
+}
+
+/* Story 40.2 : la carte s'ouvre — le titre est un bouton natif étiré sur toute la carte (::after).
+   L'anneau de focus est dessiné sur la carte entière, jamais retiré. */
+.event-card {
+  cursor: pointer;
+
+  &:has(.event-card__open:focus-visible) {
+    outline: 2px solid var(--jdr-accent-1, var(--mat-sys-primary));
+    outline-offset: 2px;
+  }
+}
+
+.event-card__open {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+
+  &:focus-visible {
+    outline: none;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
 }
 
 .event-card--imminent {

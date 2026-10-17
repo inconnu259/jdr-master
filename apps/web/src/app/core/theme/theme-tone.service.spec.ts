@@ -959,6 +959,23 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_event_badge_today',
     'partie.ralliement_event_badge_tomorrow',
     'partie.ralliement_event_no_date',
+    // Story 40.2 : fenêtre de détail d’une conjonction — boutons, étiquettes de fiche, titres de
+    // section et unités de la ligne de participation verbatim du contrat d’UI ; le titre du mode
+    // édition, le panneau de situation, l’heure de rendez-vous, « vous » et les replis d’erreur
+    // ont une voix
+    'partie.ralliement_event_close_btn',
+    'partie.ralliement_event_edit_btn',
+    'partie.ralliement_event_save_btn',
+    'partie.ralliement_event_sheet_date',
+    'partie.ralliement_event_sheet_host',
+    'partie.ralliement_event_sheet_place',
+    'partie.ralliement_event_sheet_participation',
+    'partie.ralliement_event_sheet_note',
+    'partie.ralliement_event_participants_heading',
+    'partie.ralliement_event_participants_empty',
+    'partie.ralliement_event_unit_place',
+    'partie.ralliement_event_unit_registered',
+    'partie.ralliement_event_unit_free',
     // Gabarits structurels et libellés techniques
     'partie.signal_more_count',
     'parties.detail_link_expires_short',
@@ -1369,6 +1386,52 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     for (const key of ['partie.ralliement_event_create_error', 'partie.ralliement_event_list_error']) {
       expect(new Set(THEMES.map((theme) => TONE_MAP[theme][key])).size, key).toBe(THEMES.length);
     }
+  });
+
+  // Story 40.2 : la fenêtre de détail d'une conjonction. Boutons, étiquettes de fiche et unités sont
+  // identiques ; le nom de la rencontre, le panneau de situation, l'heure et « vous » ont une voix.
+  it('Story 40.2 : la fenêtre de détail garde les mots du contrat et prend la voix du thème, sans mot de JDR', () => {
+    const neutres: Record<string, string> = {
+      'partie.ralliement_event_close_btn': 'Refermer',
+      'partie.ralliement_event_edit_btn': 'Modifier',
+      'partie.ralliement_event_save_btn': 'Enregistrer',
+      'partie.ralliement_event_cancel_btn': 'Renoncer',
+      'partie.ralliement_admin_badge': 'Admin',
+    };
+    for (const [key, attendu] of Object.entries(neutres)) {
+      for (const theme of THEMES) expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(attendu);
+    }
+    const voix = [
+      'partie.ralliement_event_edit_title',
+      'partie.ralliement_event_update_error',
+      'partie.ralliement_event_sheet_heading',
+      'partie.ralliement_event_situation_host',
+      'partie.ralliement_event_situation_host_past',
+      'partie.ralliement_event_situation_registered',
+      'partie.ralliement_event_situation_registered_past',
+      'partie.ralliement_event_situation_none',
+      'partie.ralliement_event_situation_none_past',
+    ];
+    for (const key of voix) {
+      const valeurs = THEMES.map((theme) => TONE_MAP[theme][key]);
+      expect(new Set(valeurs).size, key).toBe(THEMES.length);
+    }
+    // « Rendez-vous à » reste commun au Grimoire et à l'Atelier ; seule la forêt dit « Retrouvailles ».
+    expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_panel_time']).toBe('Retrouvailles à {time}');
+    expect(TONE_MAP['grimoire-emeraude']['partie.ralliement_event_edit_title']).toBe(
+      'Modifier la conjonction',
+    );
+    expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_edit_title']).toBe('Modifier la halte');
+    expect(TONE_MAP['atelier-cuivre']['partie.ralliement_event_edit_title']).toBe('Modifier la réunion');
+    for (const theme of THEMES) {
+      expect(TONE_MAP[theme]['partie.ralliement_event_panel_time'], theme).toContain('{time}');
+      for (const key of ['place', 'registered', 'free']) {
+        expect(TONE_MAP[theme][`partie.ralliement_event_unit_${key}`], theme).toMatch(/^[^|]+\|[^|]+$/);
+      }
+    }
+    expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_situation_host']).toBe(
+      'Tu es l’hôte de cette halte.',
+    );
   });
 
   // Story 39.3 : variantes « groupe » des outils d'invitation et de l'écran d'un lien d'invitation.

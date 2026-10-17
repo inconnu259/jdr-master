@@ -26,6 +26,7 @@
             [card]="card"
             [todayKey]="todayKey"
             [currentUserId]="currentUserId()"
+            (open)="openDialog(card, $event)"
           />
         }
       </div>
@@ -44,6 +45,7 @@
             [card]="card"
             [todayKey]="todayKey"
             [currentUserId]="currentUserId()"
+            (open)="openDialog(card, $event)"
           />
         }
       </div>
@@ -62,5 +64,16 @@
     [partieId]="partieId()"
     (created)="onCreated($event)"
     (closed)="closeCreate()"
+  />
+}
+
+@if (selectedCard(); as selected) {
+  <app-event-dialog
+    [partieId]="partieId()"
+    [card]="selected"
+    [todayKey]="todayKey"
+    [currentUserId]="currentUserId()"
+    (saved)="onSaved($event)"
+    (closed)="closeDialog()"
   />
 }

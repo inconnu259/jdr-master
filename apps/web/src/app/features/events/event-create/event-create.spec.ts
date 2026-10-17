@@ -38,6 +38,7 @@ const CARD: EventCardDto = {
   hostId: 'u1',
   hostDisplayName: 'Léa',
   seance: null,
+  participants: [],
 };
 
 describe('EventCreate — fenêtre de création d’une conjonction (Story 40.1)', () => {

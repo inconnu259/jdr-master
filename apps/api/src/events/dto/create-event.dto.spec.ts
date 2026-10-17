@@ -66,13 +66,18 @@ describe('CreateEventDto (Story 40.1)', () => {
       notePratique: 'x'.repeat(201),
     });
     expect(properties).toEqual(['lieu', 'notePratique']);
-    expect(await check({ ...valid, lieu: 'x'.repeat(80), notePratique: 'x'.repeat(200) })).toHaveLength(0);
+    expect(
+      await check({ ...valid, lieu: 'x'.repeat(80), notePratique: 'x'.repeat(200) }),
+    ).toHaveLength(0);
   });
 
-  it.each([1, 0, -3, 2.5])('places limitées à %s → refusées (au moins 2, hôte compris)', async (capacity) => {
-    const { properties } = await errorsOf({ ...valid, capacity });
-    expect(properties).toEqual(['capacity']);
-  });
+  it.each([1, 0, -3, 2.5])(
+    'places limitées à %s → refusées (au moins 2, hôte compris)',
+    async (capacity) => {
+      const { properties } = await errorsOf({ ...valid, capacity });
+      expect(properties).toEqual(['capacity']);
+    },
+  );
 
   it('places limitées à 2 → valide', async () => {
     expect(await check({ ...valid, capacity: 2 })).toHaveLength(0);

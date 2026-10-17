@@ -8,6 +8,7 @@ import { Prisma, type Event, type Seance } from '@prisma/client';
 import type {
   DaySlot,
   EventCardDto,
+  EventParticipantDto,
   MyCalendarOpenInscriptionEntry,
   MyCalendarSeanceEntry,
   PartieKind,
@@ -30,6 +31,7 @@ import {
 } from '../permissions/scenario-visibility';
 import type { SeanceDatePort } from '../poll/ports/seance-date.port';
 import { PrismaService } from '../prisma/prisma.service';
+import { todayKeyUtc } from './day-key';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
 /** Données de base d'un événement (Story 37.3, AD-3). `ownerId` = propriétaire de la partie pour le
@@ -84,6 +86,9 @@ export interface NextSession {
   nextSessionDate: Date | null;
   nextSessionSlot: DaySlot | null;
 }
+
+/** Refus de modifier une conjonction dont le jour est passé (Story 40.2). */
+export const PAST_EVENT_MESSAGE = 'Cette conjonction est passée : elle ne peut plus être modifiée';
 
 const FROZEN_ROSTER_MESSAGE = 'Cette séance a déjà une date validée — les inscriptions sont figées';
 
@@ -239,8 +244,9 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
   /**
    * Cartes des événements de la partie de l'autorisation (conjonctions d'un groupe) : projection
    * EXPLICITE — identifiant, titre, hôte (identifiant + nom affiché) et séance unique (date, créneau,
-   * lieu, heure, note pratique, capacité). Une seule lecture groupée (relations comprises), jamais
-   * une requête par événement. `eventIds` restreint la lecture (carte d'un événement tout juste
+   * lieu, heure, note pratique, capacité) et participants (Story 40.2 : l'hôte d'abord, puis les
+   * inscrits par ordre d'inscription, avec leur rôle de groupe). Trois lectures groupées au plus
+   * (événements, inscriptions, appartenances), jamais une requête par événement. `eventIds` restreint la lecture (carte d'un événement tout juste
    * créé). Ordre : date croissante, les événements sans date en dernier, puis création.
    */
   async listCards(grant: PartieGrant, eventIds?: string[]): Promise<EventCardDto[]> {
@@ -273,6 +279,8 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       },
     });
 
+    const participantsBySeance = await this.participantsOf(grant.partieId, events);
+
     const cards = events.map((e): EventCardDto => {
       const s = e.seances[0];
       return {
@@ -291,6 +299,7 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
               capacity: s.inscriptionMax ?? null,
             }
           : null,
+        participants: s ? (participantsBySeance.get(s.id) ?? []) : [],
       };
     });
     // Tri stable (création déjà ordonnée par la requête) : par date puis créneau (matin <
@@ -304,6 +313,152 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       const sb = b.seance?.slot ? SLOT_ORDER[b.seance.slot] : -1;
       return sa - sb;
     });
+  }
+
+  /** Participants de chaque séance (Story 40.2), en deux lectures pour TOUS les événements : les
+   *  inscriptions (ordre d'inscription) puis les appartenances au groupe (rôle). L'hôte vient en
+   *  premier ; un inscrit qui serait aussi l'hôte n'est listé qu'une fois. Un ancien membre (plus de
+   *  ligne d'appartenance) reste listé, sans le drapeau administrateur. */
+  private async participantsOf(
+    partieId: string,
+    events: {
+      ownerId: string | null;
+      owner: { displayName: string } | null;
+      seances: { id: string }[];
+    }[],
+  ): Promise<Map<string, EventParticipantDto[]>> {
+    const result = new Map<string, EventParticipantDto[]>();
+    const seanceIds = events.flatMap((e) => e.seances.map((s) => s.id));
+    if (seanceIds.length === 0) return result;
+
+    const inscriptions = await this.prisma.inscription.findMany({
+      where: { seanceId: { in: seanceIds } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { seanceId: true, userId: true, user: { select: { displayName: true } } },
+    });
+    const userIds = new Set<string>(inscriptions.map((i) => i.userId));
+    for (const e of events) if (e.ownerId) userIds.add(e.ownerId);
+    const memberships = await this.prisma.membership.findMany({
+      where: { partieId, userId: { in: [...userIds] } },
+      select: { userId: true, role: true },
+    });
+    const adminIds = new Set(memberships.filter((m) => m.role === 'ADMIN').map((m) => m.userId));
+
+    const inscritsBySeance = new Map<string, typeof inscriptions>();
+    for (const i of inscriptions) {
+      const list = inscritsBySeance.get(i.seanceId) ?? [];
+      list.push(i);
+      inscritsBySeance.set(i.seanceId, list);
+    }
+    for (const e of events) {
+      const s = e.seances[0];
+      if (!s) continue;
+      const participants: EventParticipantDto[] = [];
+      if (e.ownerId && e.owner) {
+        participants.push({
+          userId: e.ownerId,
+          displayName: e.owner.displayName,
+          isHost: true,
+          isAdmin: adminIds.has(e.ownerId),
+        });
+      }
+      for (const i of inscritsBySeance.get(s.id) ?? []) {
+        if (i.userId === e.ownerId) continue;
+        participants.push({
+          userId: i.userId,
+          displayName: i.user.displayName,
+          isHost: false,
+          isAdmin: adminIds.has(i.userId),
+        });
+      }
+      result.set(s.id, participants);
+    }
+    return result;
+  }
+
+  // ─── Modification d'une conjonction (Story 40.2) ─────────────────────────────────────────────
+
+  /**
+   * L'hôte corrige sa conjonction : remplacement complet du titre et de la séance unique (date,
+   * créneau, lieu, heure, note pratique, capacité). L'autorisation `EVENT_UPDATE` (hôte de
+   * l'événement) est celle de l'appelant ; l'événement doit appartenir à sa partie (404 sinon).
+   *
+   * Tout est écrit dans UNE transaction sous `SELECT … FOR UPDATE` sur la ligne de la partie puis sur
+   * celle de l'événement (même schéma que `inscrire`, partie d'abord comme les autres écrivains) : une conjonction déjà passée est refusée (400, jour UTC strictement
+   * avant aujourd'hui), de même qu'une capacité inférieure aux participants actuels (hôte compris).
+   * Le rappel de la veille est ré-armé si le jour ou le créneau change ; la prochaine date de la
+   * partie est recalculée dans la même transaction. `partie:{id}` est émis après validation.
+   * La nouvelle date n'est PAS contrôlée ici (règle de saisie de l'appelant).
+   */
+  async updateHosted(
+    grant: PartieGrant,
+    eventId: string,
+    input: { title: string; seance: EventSeanceInput },
+  ): Promise<void> {
+    await this.assertEventInGrant(grant, eventId);
+    await this.prisma.$transaction(async (tx) => {
+      // Ordre des verrous commun à tous les écrivains (createInTx, leave) : la PARTIE d'abord, puis
+      // l'événement — jamais l'inverse, sans quoi deux transactions s'interbloqueraient. Le recalcul
+      // de la prochaine date reprend ensuite le verrou de la partie, déjà tenu.
+      await tx.$queryRaw`SELECT "id" FROM "Partie" WHERE "id" = ${grant.partieId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
+      const event = await tx.event.findUnique({
+        where: { id: eventId },
+        select: {
+          ownerId: true,
+          seances: {
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take: 1,
+            select: { id: true, startDate: true, startSlot: true },
+          },
+        },
+      });
+      const seance = event?.seances[0];
+      if (!event || !seance) throw new NotFoundException('Conjonction introuvable');
+
+      const currentDay = seance.startDate?.toISOString().substring(0, 10) ?? null;
+      if (currentDay !== null && currentDay < todayKeyUtc()) {
+        throw new BadRequestException(PAST_EVENT_MESSAGE);
+      }
+
+      // Participants actuels = l'hôte + les inscrits (un hôte éventuellement inscrit n'est compté
+      // qu'une fois).
+      const inscrits = await tx.inscription.count({
+        where: {
+          seanceId: seance.id,
+          ...(event.ownerId ? { userId: { not: event.ownerId } } : {}),
+        },
+      });
+      const participants = inscrits + (event.ownerId ? 1 : 0);
+      const { capacity } = input.seance;
+      if (capacity !== null && capacity < participants) {
+        throw new BadRequestException(
+          `Le nombre de places ne peut pas être inférieur au nombre de participants actuels (${participants})`,
+        );
+      }
+
+      await tx.event.update({ where: { id: eventId }, data: { title: input.title } });
+      const dateChanged =
+        currentDay !== input.seance.date.toISOString().substring(0, 10) ||
+        seance.startSlot !== input.seance.slot;
+      await tx.seance.update({
+        where: { id: seance.id },
+        data: {
+          startDate: input.seance.date,
+          startSlot: input.seance.slot,
+          endDate: input.seance.date,
+          endSlot: input.seance.slot,
+          lieu: input.seance.lieu,
+          heureRdv: input.seance.heureRdv,
+          notePratique: input.seance.notePratique,
+          inscriptionMax: capacity,
+          // Nouvelle date → le rappel de la veille est ré-armé (Story 37.9).
+          ...(dateChanged ? { reminderSentAt: null } : {}),
+        },
+      });
+      await this.recalculateNextSessionInTx(tx, grant.partieId);
+    });
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
   }
 
   // ─── Appartenance à la partie de l'autorisation ──────────────────────────────────────────────

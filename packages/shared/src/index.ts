@@ -330,6 +330,8 @@ export type PermissionAction =
   // groupe. Couche 2, aucune capacité requise ; fermées à tous en JDR (le JDR passe par ses scénarios).
   | 'EVENT_CREATE'
   | 'EVENT_LIST'
+  // Story 40.2 : modifier une conjonction — son hôte seul (règle décidée dans `PermissionService`).
+  | 'EVENT_UPDATE'
   // Invitations et liens d'invitation (couche 2, aucune capacité requise)
   | 'INVITATION_CREATE'
   | 'INVITATION_READ'
@@ -708,6 +710,10 @@ export interface CreateEventDto {
   capacity?: number | null;
 }
 
+/** Payload de modification d'une conjonction (PATCH /parties/:id/events/:eventId, Story 40.2) :
+ *  remplacement COMPLET, mêmes champs et mêmes règles que la création (l'hôte est immuable). */
+export type UpdateEventDto = CreateEventDto;
+
 /** La séance unique d'une conjonction, telle que projetée pour sa carte (Story 40.1). `date` est la
  *  clé `YYYY-MM-DD` du début de sa plage (`null` tant qu'elle n'est pas fixée) ; `capacity` `null` =
  *  « Tous les membres ». */
@@ -721,14 +727,25 @@ export interface EventCardSeanceDto {
   capacity: number | null;
 }
 
+/** Un participant d'une conjonction (Story 40.2) : l'hôte d'abord (`isHost`), puis les inscrits par
+ *  ordre d'inscription. `isAdmin` = `Membership.role` du groupe (jamais un droit sur l'événement). */
+export interface EventParticipantDto {
+  userId: string;
+  displayName: string;
+  isHost: boolean;
+  isAdmin: boolean;
+}
+
 /** Carte d'une conjonction (GET /parties/:id/events/list, Story 40.1) — projection explicite :
- *  l'hôte (immuable, `null` si son compte a disparu) et la séance unique. */
+ *  l'hôte (immuable, `null` si son compte a disparu), la séance unique et, depuis la Story 40.2, ses
+ *  participants (hôte en premier, puis les inscrits). */
 export interface EventCardDto {
   id: string;
   title: string;
   hostId: string | null;
   hostDisplayName: string | null;
   seance: EventCardSeanceDto | null;
+  participants: EventParticipantDto[];
 }
 
 // ─── Epic 9 : Annonces MJ ──────────────────────────────────────────────────

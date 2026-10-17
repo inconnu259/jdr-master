@@ -266,6 +266,28 @@ describe('Droits sur une partie et ses événements (Story 37.6)', () => {
     expect(await h.prisma.event.count({ where: { partieId: partieA } })).toBe(before);
   });
 
+  // Story 40.2 : modifier une conjonction n'existe pas en JDR — PATCH /parties/:id/events/:eventId est
+  // fermé au MJ comme au joueur (politique `NOBODY`) sur un événement qui est ici un scénario ; un
+  // étranger reçoit « pas accès », et l'événement d'une autre partie ne s'atteint pas par la route de
+  // la sienne. Le scénario reste intact.
+  it('conjonctions : PATCH /parties/:id/events/:eventId refusé sur une partie de JDR (403), sans écriture', async () => {
+    const sent = { title: 'Détourné', date: isoDay(10), slot: 'EVENING' };
+    const url = (partieId: string, eventId: string) => `/parties/${partieId}/events/${eventId}`;
+    for (const who of [mjA, joueurA]) {
+      const res = await who.agent.patch(url(partieA, scenarioA.id)).send(sent).expect(403);
+      expect(body<ErrorLike>(res).message).toBe(MJ_ONLY_MESSAGE);
+    }
+    const asStranger = await etranger.agent
+      .patch(url(partieA, scenarioA.id))
+      .send(sent)
+      .expect(403);
+    expect(body<ErrorLike>(asStranger).message).toBe(NO_ACCESS_MESSAGE);
+    // Le MJ de B ne passe pas par la route de B pour atteindre l'événement de A.
+    await mjB.agent.patch(url(partieB, scenarioA.id)).send(sent).expect(403);
+    const event = await h.prisma.event.findUniqueOrThrow({ where: { id: scenarioA.id } });
+    expect(event.title).toBe('Scénario A');
+  });
+
   describe('capacités JDR, invitations et favoris (Story 37.7)', () => {
     let joueurB: TestUser;
     let ami: TestUser;

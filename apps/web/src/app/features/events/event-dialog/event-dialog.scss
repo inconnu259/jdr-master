@@ -1,0 +1,134 @@
+/* Story 40.2 — fenêtre d'une conjonction (EventDialog, contrat UX : DESIGN §7.7). Colonne unique :
+   situation, fiche, participants. Cibles tactiles de 44 px au pied. État toujours écrit, jamais porté
+   par la couleur seule. Aucune animation ajoutée. */
+:host {
+  display: contents;
+}
+
+.ed__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  /* Place du bouton de fermeture, posé en haut à droite par la surface. */
+  padding-right: 48px;
+}
+
+.ed__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.ed__situation {
+  margin: 4px 0 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--jdr-accent-1, var(--mat-sys-primary));
+  background: color-mix(in srgb, var(--jdr-accent-1, var(--mat-sys-primary)) 8%, transparent);
+}
+
+.ed__situation-label {
+  margin: 0 0 2px;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--jdr-text-muted, var(--mat-sys-on-surface-variant));
+}
+
+.ed__situation-text {
+  margin: 0 0 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.ed__big {
+  margin: 0;
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.ed__big--time,
+.ed__big--place {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.ed__section-title {
+  margin: 0 0 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.ed__sheet,
+.ed__participants {
+  margin-bottom: 16px;
+}
+
+.ed__dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.ed__row {
+  display: grid;
+  grid-template-columns: minmax(120px, 30%) 1fr;
+  gap: 4px 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  font-size: 0.875rem;
+
+  @media (max-width: 519px) {
+    grid-template-columns: 1fr;
+  }
+
+  dt {
+    color: var(--jdr-text-muted, var(--mat-sys-on-surface-variant));
+  }
+
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.ed__people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ed__empty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--jdr-text-muted, var(--mat-sys-on-surface-variant));
+}
+
+.ed__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ed__error {
+  margin: 0;
+  color: var(--mat-sys-error);
+  font-size: 0.875rem;
+}
+
+.ed__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+
+  button {
+    min-height: 44px;
+  }
+}
