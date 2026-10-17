@@ -133,7 +133,7 @@
           <button
             type="button"
             class="ec__step ec__step--less"
-            [disabled]="places() <= 2"
+            [disabled]="places() <= minPlaces()"
             [attr.aria-label]="theme.tone()['partie.ralliement_event_places_less']"
             (click)="decrement()"
           >
@@ -143,7 +143,7 @@
             class="ec__places-count"
             type="number"
             inputmode="numeric"
-            min="2"
+            [attr.min]="minPlaces()"
             [attr.aria-label]="theme.tone()['partie.ralliement_event_places_count_aria']"
             [value]="places()"
             (change)="setPlaces($any($event.target))"
@@ -163,4 +163,42 @@
       </div>
     }
   </div>
+
+  <!-- Story 40.4 : réserver une place à des membres (création, places limitées). Pastilles à cocher ;
+       l'état coché est écrit (coche + aria-pressed), jamais porté par la couleur seule. -->
+  @if (canReserve()) {
+    <div class="ec__field ec__reserve">
+      <span class="ec__label" [id]="uid + '-reserve'">{{
+        theme.tone()['partie.ralliement_event_reserve_label']
+      }}</span>
+      @if (candidates().length === 0) {
+        <span class="ec__places-hint ec__reserve-none">{{
+          theme.tone()['partie.ralliement_event_reserve_none']
+        }}</span>
+      } @else {
+        <ul class="ec__chips" [attr.aria-labelledby]="uid + '-reserve'">
+          @for (m of candidates(); track m.userId) {
+            <li>
+              <button
+                type="button"
+                class="ec__chip"
+                [class.ec__chip--on]="isReserved(m.userId)"
+                [attr.aria-pressed]="isReserved(m.userId)"
+                [attr.aria-label]="chipAria(m)"
+                [disabled]="chipDisabled(m.userId)"
+                (click)="toggleReserved(m.userId)"
+              >
+                @if (isReserved(m.userId)) {
+                  <span aria-hidden="true">✓ </span>
+                }{{ m.displayName }}
+              </button>
+            </li>
+          }
+        </ul>
+        <span class="ec__places-hint ec__reserve-hint">{{
+          theme.tone()['partie.ralliement_event_reserve_hint']
+        }}</span>
+      }
+    </div>
+  }
 </form>

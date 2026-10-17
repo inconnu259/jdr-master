@@ -293,6 +293,9 @@ export type PermissionAction =
   | 'SEANCE_POLL_CREATE'
   | 'SEANCE_INSCRIBE'
   | 'SEANCE_UNSUBSCRIBE'
+  // Story 40.4 : réserver une place à un membre / retirer une réservation — l'hôte seul (règle
+  // décidée dans `PermissionService`), groupe de ralliement seulement.
+  | 'SEANCE_RESERVE'
   // Vote de date
   | 'POLL_READ'
   | 'POLL_VOTE'
@@ -501,7 +504,9 @@ export type PartySignalCode =
   | 'AUCUNE_DATE_NI_VOTE'
   | 'RAPPORT_FIN_MANQUANT'
   | 'PROCHAINE_SEANCE_CONNUE'
-  | 'PARTIE_TERMINEE';
+  | 'PARTIE_TERMINEE'
+  // Story 40.4 : une place est réservée à l'utilisateur dans une conjonction à venir d'un groupe.
+  | 'RESERVATION_A_CONFIRMER';
 
 /** Réponse de `GET /me/party-signals` — une entrée par partie de l'utilisateur, jamais une entrée
  *  absente (`signals: []` si aucun signal actif). `role`/`status` sont dupliqués depuis `PartieDto`
@@ -696,6 +701,11 @@ export interface UpdateScenarioDto {
  *  `FULL_DAY`, jamais vide. */
 export type EventSlot = Exclude<DaySlot, 'FULL_DAY'>;
 
+/** Statut d'une inscription (colonne `Inscription.status`, Story 40.4) — union FERMÉE. `RESERVED` :
+ *  place réservée par l'hôte, pas encore acceptée (elle compte dans la capacité et n'expire jamais) ;
+ *  `CONFIRMED` : inscription confirmée (défaut — toutes les lignes du JDR). */
+export type InscriptionStatus = 'RESERVED' | 'CONFIRMED';
+
 /** Payload de création d'une conjonction à date fixée (POST /parties/:id/events, Story 40.1).
  *  `date` est une clé `YYYY-MM-DD` (aujourd'hui accepté, jamais avant) ; `heureRdv` est une
  *  ÉTIQUETTE `"HH:MM"`, jamais un instant. `capacity` : `null` (ou absent) = « Tous les membres »,
@@ -708,6 +718,14 @@ export interface CreateEventDto {
   heureRdv?: string | null;
   notePratique?: string | null;
   capacity?: number | null;
+  /** Story 40.4 : membres à qui l'hôte réserve une place d'emblée (distincts, jamais l'hôte, places
+   *  limitées seulement, au plus `capacity − 1`). Ignoré par la modification. */
+  reservedUserIds?: string[];
+}
+
+/** Payload de réservation d'une place (POST /scenarios/seances/:id/reservations, Story 40.4). */
+export interface ReservePlaceDto {
+  userId: string;
 }
 
 /** Payload de modification d'une conjonction (PATCH /parties/:id/events/:eventId, Story 40.2) :
@@ -725,15 +743,21 @@ export interface EventCardSeanceDto {
   heureRdv: string | null;
   notePratique: string | null;
   capacity: number | null;
+  /** Story 40.4 : places prises = l'hôte + TOUTES les lignes d'inscription, `RESERVED` comprises —
+   *  servi à tous pour que « Complet » et « libres » soient justes sans révéler qui tient une place
+   *  en attente. */
+  placesTaken: number;
 }
 
 /** Un participant d'une conjonction (Story 40.2) : l'hôte d'abord (`isHost`), puis les inscrits par
- *  ordre d'inscription. `isAdmin` = `Membership.role` du groupe (jamais un droit sur l'événement). */
+ *  ordre d'inscription. `isAdmin` = `Membership.role` du groupe (jamais un droit sur l'événement).
+ *  Story 40.4 : `status` — une ligne `RESERVED` n'est servie qu'à l'hôte de la conjonction. */
 export interface EventParticipantDto {
   userId: string;
   displayName: string;
   isHost: boolean;
   isAdmin: boolean;
+  status: InscriptionStatus;
 }
 
 /** Carte d'une conjonction (GET /parties/:id/events/list, Story 40.1) — projection explicite :
@@ -746,6 +770,8 @@ export interface EventCardDto {
   hostDisplayName: string | null;
   seance: EventCardSeanceDto | null;
   participants: EventParticipantDto[];
+  /** Story 40.4 : la ligne d'inscription de la personne qui lit (`null` : aucune — l'hôte non plus). */
+  myInscription: InscriptionStatus | null;
 }
 
 // ─── Epic 9 : Annonces MJ ──────────────────────────────────────────────────

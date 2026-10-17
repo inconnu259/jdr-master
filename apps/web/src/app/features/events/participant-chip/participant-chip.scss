@@ -58,3 +58,17 @@
   font-weight: 600;
   color: var(--mat-sys-on-surface);
 }
+
+/* Story 40.4 — place réservée en attente (vue de l'hôte) : contour pointillé et avatar estompé ; le
+   texte reste à pleine lecture (couleur de surface normale, jamais estompée) et écrit l'état. */
+.pc--pending {
+  border: 2px dotted var(--jdr-text-muted, var(--mat-sys-outline));
+}
+
+.pc__avatar--faded {
+  opacity: 0.5;
+}
+
+.pc__name--pending {
+  color: var(--mat-sys-on-surface);
+}

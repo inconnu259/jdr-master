@@ -1,6 +1,6 @@
 import type { PartieDto } from '@master-jdr/shared';
 import { PartySignalsService } from './party-signals.service';
-import { objectLike } from '../common/test-utils/jest-typed';
+import { callArg, objectLike } from '../common/test-utils/jest-typed';
 import { VISIBLE_POLL_WHERE } from '../permissions/scenario-visibility';
 
 describe('PartySignalsService', () => {
@@ -12,6 +12,7 @@ describe('PartySignalsService', () => {
     event: { groupBy: jest.Mock; findMany: jest.Mock };
     seance: { findMany: jest.Mock };
     sessionPoll: { findMany: jest.Mock };
+    inscription: { findMany: jest.Mock };
   };
   let parties: { listForUser: jest.Mock };
 
@@ -47,6 +48,8 @@ describe('PartySignalsService', () => {
       },
       seance: { findMany: jest.fn().mockResolvedValue([]) },
       sessionPoll: { findMany: jest.fn().mockResolvedValue([]) },
+      // Story 40.4 : places réservées à l'utilisateur ([] par défaut — aucune réservation).
+      inscription: { findMany: jest.fn().mockResolvedValue([]) },
     };
     parties = { listForUser: jest.fn().mockResolvedValue([]) };
     service = new PartySignalsService(prisma as any, parties as any);
@@ -81,6 +84,76 @@ describe('PartySignalsService', () => {
 
     const map = await service.getSignals('u1');
     expect(map['p1']).toEqual({ role: 'mj', status: 'EN_COURS', signals: [] });
+  });
+
+  describe('RESERVATION_A_CONFIRMER (Story 40.4)', () => {
+    const groupe = (over: Partial<PartieDto> = {}) =>
+      makePartie({
+        id: 'g1',
+        name: 'Les Fidèles',
+        kind: 'CAMPAGNE_EPISODIQUE',
+        gameSystemId: 'ralliement',
+        role: 'member',
+        status: 'EN_COURS',
+        ...over,
+      });
+    const reservedIn = (...partieIds: string[]) =>
+      partieIds.map((partieId) => ({ seance: { event: { partieId } } }));
+
+    it('une entrée pour le groupe où une place est réservée, lue en UNE requête groupée sur les inscriptions RESERVED à venir', async () => {
+      prisma.inscription.findMany.mockResolvedValue(reservedIn('g1'));
+      parties.listForUser.mockImplementation((_u: string, role?: string) =>
+        Promise.resolve(role === undefined ? [groupe(), makePartie({ id: 'autre' })] : []),
+      );
+      // Milieu de journée : « à venir » démarre au DÉBUT du jour UTC courant, pas à l'instant présent.
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date('2026-10-17T15:42:09.000Z'));
+
+      let map: Awaited<ReturnType<typeof service.getSignals>>;
+      try {
+        map = await service.getSignals('u1');
+      } finally {
+        jest.useRealTimers();
+      }
+
+      expect(map['g1']).toEqual({
+        role: 'player',
+        status: 'EN_COURS',
+        signals: ['RESERVATION_A_CONFIRMER'],
+      });
+      expect(map['autre']).toBeUndefined();
+      expect(prisma.inscription.findMany).toHaveBeenCalledTimes(1);
+      const where = callArg<{ where: Record<string, unknown> }>(prisma.inscription.findMany).where;
+      expect(where).toEqual(
+        objectLike({
+          userId: 'u1',
+          status: 'RESERVED',
+          seance: { startDate: { gte: new Date('2026-10-17T00:00:00.000Z') } },
+        }),
+      );
+    });
+
+    it('deux places réservées dans un même groupe : un seul signal ; sans réservation, ni lecture de la liste complète ni entrée', async () => {
+      prisma.inscription.findMany.mockResolvedValue(reservedIn('g1', 'g1'));
+      parties.listForUser.mockImplementation((_u: string, role?: string) =>
+        Promise.resolve(role === undefined ? [groupe()] : []),
+      );
+      expect((await service.getSignals('u1'))['g1'].signals).toEqual(['RESERVATION_A_CONFIRMER']);
+
+      prisma.inscription.findMany.mockResolvedValue([]);
+      parties.listForUser.mockClear();
+      expect(await service.getSignals('u1')).toEqual({});
+      expect(parties.listForUser).not.toHaveBeenCalledWith('u1');
+    });
+
+    it('un groupe terminé ne porte plus de signal d’action', async () => {
+      prisma.inscription.findMany.mockResolvedValue(reservedIn('g1'));
+      parties.listForUser.mockImplementation((_u: string, role?: string) =>
+        Promise.resolve(role === undefined ? [groupe({ status: 'TERMINEE' })] : []),
+      );
+
+      expect((await service.getSignals('u1'))['g1']).toBeUndefined();
+    });
   });
 
   it('PERSONNAGE_A_CREER (joueur) : actif si aucun Character pour cette partie sur un système avec module', async () => {

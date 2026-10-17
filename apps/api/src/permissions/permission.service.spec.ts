@@ -180,6 +180,8 @@ const JDR_NOBODY: PermissionAction[] = [
   'EVENT_LIST',
   // Story 40.2 : modifier une conjonction — n'existe pas en JDR.
   'EVENT_UPDATE',
+  // Story 40.4 : réserver une place à un membre — n'existe pas en JDR.
+  'SEANCE_RESERVE',
 ];
 
 describe('PermissionService', () => {
@@ -498,7 +500,7 @@ describe('PermissionService', () => {
     ];
     /** Story 40.2 : la cellule de rôle est ouverte à l'admin ET au membre, mais l'action vise un
      *  événement (`{ eventId }`) et n'est accordée qu'à son hôte — testée à part, sur cette cible. */
-    const RALLIEMENT_HOST_ONLY: PermissionAction[] = ['EVENT_UPDATE'];
+    const RALLIEMENT_HOST_ONLY: PermissionAction[] = ['EVENT_UPDATE', 'SEANCE_RESERVE'];
     /** Modifier la partie, la clore, la rouvrir, la brûler (Story 39.1), inviter et retirer un
      *  membre (Story 39.3) : admin seul. */
     const RALLIEMENT_ADMIN_ONLY: PermissionAction[] = [
@@ -651,6 +653,83 @@ describe('PermissionService', () => {
         await expect(
           service.assert(ADMIN, 'EVENT_UPDATE', { eventId: 'zzz' }),
         ).rejects.toBeInstanceOf(NotFoundException);
+      });
+    });
+
+    // Story 40.4 — SEANCE_RESERVE : cellule de rôle ouverte, règle « hôte » décidée dans assert() sur
+    // une cible `{ seanceId }` (l'hôte est celui de l'événement de la séance).
+    describe('SEANCE_RESERVE — hôte de la conjonction seul, cible séance', () => {
+      const seance = (ownerId: string | null) => ({
+        id: 'se-1',
+        event: { id: 'ev-1', ownerId, partie: RALLIEMENT },
+      });
+
+      it('accordé à l’hôte de l’événement de la séance, qu’il soit membre ou administrateur', async () => {
+        prisma.seance.findUnique.mockResolvedValue(seance(MEMBRE));
+        await expect(
+          service.assert(MEMBRE, 'SEANCE_RESERVE', { seanceId: 'se-1' }),
+        ).resolves.toEqual(
+          objectLike({
+            partieId: 'R',
+            role: 'member',
+            target: { partieId: 'R', eventId: 'ev-1', seanceId: 'se-1' },
+          }),
+        );
+        prisma.seance.findUnique.mockResolvedValue(seance(ADMIN));
+        await expect(
+          service.assert(ADMIN, 'SEANCE_RESERVE', { seanceId: 'se-1' }),
+        ).resolves.toEqual(objectLike({ partieId: 'R', role: 'admin' }));
+      });
+
+      it('refusé à un autre membre — 403 « réservée à l’hôte »', async () => {
+        prisma.seance.findUnique.mockResolvedValue(seance(ADMIN));
+        const refusal = service.assert(MEMBRE, 'SEANCE_RESERVE', { seanceId: 'se-1' });
+        await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(refusal).rejects.toThrow(HOST_ONLY_MESSAGE);
+      });
+
+      it('refusé à un administrateur qui n’est pas l’hôte — 403 « réservée à l’hôte »', async () => {
+        prisma.seance.findUnique.mockResolvedValue(seance(MEMBRE));
+        await expect(service.assert(ADMIN, 'SEANCE_RESERVE', { seanceId: 'se-1' })).rejects.toThrow(
+          HOST_ONLY_MESSAGE,
+        );
+      });
+
+      it('refusé à tous quand l’hôte a disparu (ownerId null)', async () => {
+        prisma.seance.findUnique.mockResolvedValue(seance(null));
+        await expect(service.assert(ADMIN, 'SEANCE_RESERVE', { seanceId: 'se-1' })).rejects.toThrow(
+          HOST_ONLY_MESSAGE,
+        );
+      });
+
+      it('refusé sur une cible sans événement (partie) — jamais accordé faute d’hôte', async () => {
+        await expect(service.assert(ADMIN, 'SEANCE_RESERVE', { partieId: 'R' })).rejects.toThrow(
+          HOST_ONLY_MESSAGE,
+        );
+      });
+
+      it('refusé à un étranger — 403 « pas accès » (avant la règle hôte)', async () => {
+        prisma.seance.findUnique.mockResolvedValue(seance(MEMBRE));
+        await expect(
+          service.assert(STRANGER, 'SEANCE_RESERVE', { seanceId: 'se-1' }),
+        ).rejects.toThrow(NO_ACCESS_MESSAGE);
+      });
+
+      it('séance inconnue → 404', async () => {
+        prisma.seance.findUnique.mockResolvedValue(null);
+        await expect(
+          service.assert(ADMIN, 'SEANCE_RESERVE', { seanceId: 'zzz' }),
+        ).rejects.toBeInstanceOf(NotFoundException);
+      });
+
+      it('JDR : refusé même au propriétaire (le MJ) — la réservation n’existe pas', async () => {
+        prisma.seance.findUnique.mockResolvedValue({
+          id: 'se-1',
+          event: { id: 'ev-1', ownerId: MJ, partie: PARTIE_A },
+        });
+        await expect(
+          service.assert(MJ, 'SEANCE_RESERVE', { seanceId: 'se-1' }),
+        ).rejects.toBeInstanceOf(ForbiddenException);
       });
     });
 

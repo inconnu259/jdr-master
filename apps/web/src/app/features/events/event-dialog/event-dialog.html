@@ -41,6 +41,32 @@
           {{ theme.tone()['partie.ralliement_event_situation_full'] }}
         </p>
       }
+      @if (showRespond()) {
+        <!-- Story 40.4 : une place est réservée pour moi — l'accepter ou la décliner (la décliner la
+             rend aux autres). -->
+        <div class="ed__respond">
+          <button
+            mat-flat-button
+            type="button"
+            class="ed__accept"
+            [disabled]="busy()"
+            [attr.aria-busy]="busy()"
+            (click)="accept()"
+          >
+            {{ theme.tone()['partie.ralliement_event_accept_btn'] }}
+          </button>
+          <button
+            mat-stroked-button
+            type="button"
+            class="ed__decline"
+            [disabled]="busy()"
+            [attr.aria-busy]="busy()"
+            (click)="decline()"
+          >
+            {{ theme.tone()['partie.ralliement_event_decline_btn'] }}
+          </button>
+        </div>
+      }
       <p class="ed__big ed__big--date">{{ dateLabel() }}</p>
       @if (timeText(); as time) {
         <p class="ed__big ed__big--time">{{ time }}</p>
@@ -98,13 +124,54 @@
       } @else {
         <ul class="ed__people">
           @for (p of card().participants; track p.userId) {
-            <li>
+            <li class="ed__person">
               <app-participant-chip [participant]="p" [self]="p.userId === currentUserId()" />
+              @if (canReserve() && isPending(p)) {
+                <button
+                  mat-stroked-button
+                  type="button"
+                  class="ed__unreserve"
+                  [disabled]="busy()"
+                  [attr.aria-label]="unreserveAria(p)"
+                  (click)="unreserve(p)"
+                >
+                  {{ theme.tone()['partie.ralliement_event_unreserve_btn'] }}
+                </button>
+              }
             </li>
           }
         </ul>
       }
     </section>
+
+    @if (canReserve()) {
+      <!-- Story 40.4 : l'hôte réserve des places à des membres, tant que la conjonction n'est pas passée. -->
+      <section class="ed__reserve" [attr.aria-labelledby]="uid + '-reserve'">
+        <h3 class="ed__section-title" [id]="uid + '-reserve'">
+          {{ theme.tone()['partie.ralliement_event_reserve_label'] }}
+        </h3>
+        @if (candidates().length === 0) {
+          <p class="ed__empty">{{ theme.tone()['partie.ralliement_event_reserve_none'] }}</p>
+        } @else {
+          <ul class="ed__candidates">
+            @for (m of candidates(); track m.userId) {
+              <li>
+                <button
+                  type="button"
+                  class="ed__candidate"
+                  [disabled]="busy() || noPlaceLeft()"
+                  [attr.aria-label]="reserveAria(m)"
+                  (click)="reserve(m)"
+                >
+                  {{ m.displayName }}
+                </button>
+              </li>
+            }
+          </ul>
+          <p class="ed__hint">{{ theme.tone()['partie.ralliement_event_reserve_hint'] }}</p>
+        }
+      </section>
+    }
   }
 
   <div detail-footer class="ed__footer">

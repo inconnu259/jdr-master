@@ -1,4 +1,4 @@
-import type { DaySlot, EventCardDto } from '@master-jdr/shared';
+import type { DaySlot, EventCardDto, EventParticipantDto } from '@master-jdr/shared';
 import type { StatusBadgeState } from '../../core/status/status-derivation';
 import { daysBetweenKeys, imminenceIntensity } from '../../core/status/status-badge.model';
 import { fillTone } from '../../core/theme/tone-format';
@@ -30,11 +30,13 @@ export function isImminentEvent(card: EventCardDto, todayKey: string): boolean {
   return day !== null && day >= todayKey && imminenceIntensity(day, todayKey) === 'imminent';
 }
 
-/** Story 40.3 : toutes les places d'une conjonction à places limitées sont prises (l'hôte compte
- *  parmi les participants). « Tous les membres » (sans limite) n'est jamais complet. */
+/** Story 40.3 : toutes les places d'une conjonction à places limitées sont prises. Story 40.4 : les
+ *  places prises sont celles du serveur (`placesTaken` : l'hôte et TOUTES les lignes, réservées
+ *  comprises) — la liste des participants n'en montre pas forcément autant. « Tous les membres » (sans
+ *  limite) n'est jamais complet. */
 export function isFull(card: EventCardDto): boolean {
   const capacity = card.seance?.capacity ?? null;
-  return capacity !== null && card.participants.length >= capacity;
+  return capacity !== null && (card.seance?.placesTaken ?? 0) >= capacity;
 }
 
 /** Story 40.3 : la personne peut encore s'inscrire — conjonction avec séance, membre ni hôte ni inscrit, conjonction à venir
@@ -48,6 +50,8 @@ export function canSignUp(
     !!currentUserId &&
     card.seance !== null &&
     !isParticipantOf(card, currentUserId) &&
+    // Story 40.4 : qui tient une place réservée l'accepte ou la décline, il ne « s'inscrit » pas.
+    card.myInscription !== 'RESERVED' &&
     !isPastEvent(card, todayKey) &&
     !isFull(card)
   );
@@ -60,7 +64,13 @@ export function isFullForViewer(
   currentUserId: string | null | undefined,
   todayKey: string,
 ): boolean {
-  return isFull(card) && !isParticipantOf(card, currentUserId) && !isPastEvent(card, todayKey);
+  return (
+    isFull(card) &&
+    !isParticipantOf(card, currentUserId) &&
+    // Story 40.4 : la place réservée est la sienne — la conjonction n'est pas « complète » pour lui.
+    card.myInscription !== 'RESERVED' &&
+    !isPastEvent(card, todayKey)
+  );
 }
 
 /** Story 40.3 : un inscrit (jamais l'hôte, qui garde sa place) peut se désinscrire tant que la
@@ -143,9 +153,46 @@ export function isHostOf(card: EventCardDto, userId: string | null | undefined):
   return !!userId && card.hostId === userId;
 }
 
-/** Story 40.2 : la personne participe — l'hôte, ou un inscrit de la liste des participants. */
+/** Story 40.2 : la personne participe — l'hôte, ou un inscrit de la liste des participants. Story
+ *  40.4 : une place seulement réservée (statut `RESERVED`, que l'hôte est seul à voir dans la liste)
+ *  n'est pas une participation. */
 export function isParticipantOf(card: EventCardDto, userId: string | null | undefined): boolean {
-  return !!userId && (isHostOf(card, userId) || card.participants.some((p) => p.userId === userId));
+  return (
+    !!userId &&
+    (isHostOf(card, userId) ||
+      card.participants.some((p) => p.userId === userId && p.status === 'CONFIRMED'))
+  );
+}
+
+/** Story 40.4 : la personne tient une place réservée, pas encore acceptée. */
+export function hasReservedPlace(card: EventCardDto): boolean {
+  return card.myInscription === 'RESERVED';
+}
+
+/** Story 40.4 : la personne peut accepter ou décliner sa place réservée — tant que la conjonction
+ *  n'est pas passée (le serveur refuse après). */
+export function canRespondToReservation(card: EventCardDto, todayKey: string): boolean {
+  return card.seance !== null && hasReservedPlace(card) && !isPastEvent(card, todayKey);
+}
+
+/** Story 40.4 : l'hôte gère les réservations de sa conjonction à places limitées tant qu'elle n'est
+ *  pas passée. */
+export function canManageReservations(
+  card: EventCardDto,
+  currentUserId: string | null | undefined,
+  todayKey: string,
+): boolean {
+  return (
+    card.seance !== null &&
+    card.seance.capacity !== null &&
+    isHostOf(card, currentUserId) &&
+    !isPastEvent(card, todayKey)
+  );
+}
+
+/** Story 40.4 : une place réservée, en attente de réponse, parmi les participants (vue de l'hôte). */
+export function isPendingParticipant(participant: EventParticipantDto): boolean {
+  return participant.status === 'RESERVED';
 }
 
 /** Ligne « Ma situation » : l'hôte et les inscrits participent (« J'y étais » une fois passée) ; tout
@@ -153,6 +200,7 @@ export function isParticipantOf(card: EventCardDto, userId: string | null | unde
 export interface EventSituation {
   labelKey:
     | 'partie.ralliement_event_chip_participating'
+    | 'partie.ralliement_event_chip_reserved'
     | 'partie.ralliement_event_chip_was_there'
     | 'partie.ralliement_event_chip_not_registered';
   dotted: boolean;
@@ -163,6 +211,11 @@ export function eventSituation(
   currentUserId: string | null | undefined,
   todayKey: string,
 ): EventSituation {
+  // Story 40.4 : « Place réservée » tant que la conjonction est à venir ; une fois passée, une place
+  // jamais acceptée n'a pas été une participation.
+  if (hasReservedPlace(card) && !isPastEvent(card, todayKey)) {
+    return { labelKey: 'partie.ralliement_event_chip_reserved', dotted: false };
+  }
   if (!isParticipantOf(card, currentUserId)) {
     return { labelKey: 'partie.ralliement_event_chip_not_registered', dotted: true };
   }
@@ -184,7 +237,9 @@ export function eventSituationTextKey(
     ? 'host'
     : isParticipantOf(card, currentUserId)
       ? 'registered'
-      : 'none';
+      : hasReservedPlace(card)
+        ? 'reserved'
+        : 'none';
   return `partie.ralliement_event_situation_${who}${past ? '_past' : ''}`;
 }
 
@@ -194,15 +249,18 @@ export function frUnit(spec: string, n: number): string {
   return `${n} ${n <= 1 ? one : (many ?? one)}`;
 }
 
-/** Participation de la fiche : « 8 places · 5 inscrits · 3 libres » (l'hôte compte parmi les
- *  inscrits) ou « Tous les membres » quand la conjonction n'a pas de limite. */
+/** Participation de la fiche : « 8 places · 5 inscrits · 3 libres » ou « Tous les membres » quand la
+ *  conjonction n'a pas de limite. Story 40.4 : « inscrits » = l'hôte + les inscriptions CONFIRMÉES (une
+ *  place réservée n'est pas une inscription), « libres » = capacité − places prises (réservées
+ *  comprises : une place tenue n'est pas libre). */
 export function participationLine(card: EventCardDto, tone: EventTone): string {
   const capacity = card.seance?.capacity ?? null;
   if (capacity === null) return tone['partie.ralliement_event_participation_all'];
-  const taken = card.participants.length;
+  const registered = card.participants.filter((p) => !isPendingParticipant(p)).length;
+  const taken = card.seance?.placesTaken ?? registered;
   return [
     frUnit(tone['partie.ralliement_event_unit_place'], capacity),
-    frUnit(tone['partie.ralliement_event_unit_registered'], taken),
+    frUnit(tone['partie.ralliement_event_unit_registered'], registered),
     frUnit(tone['partie.ralliement_event_unit_free'], Math.max(0, capacity - taken)),
   ].join(' · ');
 }

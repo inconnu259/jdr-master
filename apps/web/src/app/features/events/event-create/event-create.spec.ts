@@ -4,7 +4,9 @@ import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
-import type { EventCardDto } from '@master-jdr/shared';
+import type { EventCardDto, PartieMemberDto } from '@master-jdr/shared';
+import { AuthService } from '../../../core/auth/auth.service';
+import { PartiesService } from '../../../core/parties/parties.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { TONE_MAP } from '../../../core/theme/tones';
 import { EventsApiService } from '../events-api.service';
@@ -39,23 +41,43 @@ const CARD: EventCardDto = {
   hostDisplayName: 'Léa',
   seance: null,
   participants: [],
+  myInscription: null,
 };
+
+const member = (userId: string, displayName: string): PartieMemberDto => ({
+  userId,
+  pseudo: displayName.toLowerCase(),
+  displayName,
+  role: 'MEMBER',
+  joinedAt: '2026-01-01T00:00:00.000Z',
+});
+/** L'hôte (u1) figure parmi les membres du groupe : il ne doit jamais être proposé. */
+const MEMBERS = [member('u1', 'Léa'), member('u2', 'Zoé'), member('u3', 'Sam'), member('u4', 'Max')];
 
 describe('EventCreate — fenêtre de création d’une conjonction (Story 40.1)', () => {
   let api: { create: ReturnType<typeof vi.fn>; list: ReturnType<typeof vi.fn> };
+  let parties: { members: ReturnType<typeof vi.fn> };
 
   afterEach(() => {
     TestBed.resetTestingModule();
     document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
   });
 
-  async function mount() {
+  async function mount(members: PartieMemberDto[] | Error = MEMBERS) {
     api = { create: vi.fn().mockResolvedValue(CARD), list: vi.fn() };
+    parties = {
+      members:
+        members instanceof Error
+          ? vi.fn().mockRejectedValue(members)
+          : vi.fn().mockResolvedValue(members),
+    };
     await TestBed.configureTestingModule({
       imports: [Host],
       providers: [
         provideNoopAnimations(),
         { provide: EventsApiService, useValue: api },
+        { provide: PartiesService, useValue: parties },
+        { provide: AuthService, useValue: { currentUser: signal({ id: 'u1' }) } },
         { provide: ThemeToneService, useValue: { tone: signal(TONE) } },
         {
           provide: BreakpointObserver,
@@ -218,6 +240,119 @@ describe('EventCreate — fenêtre de création d’une conjonction (Story 40.1)
       TONE['partie.ralliement_event_create_error'],
     );
     expect(fixture.componentInstance.created()).toEqual(CARD);
+  });
+
+  describe('réserver une place à des membres (Story 40.4)', () => {
+    const chips = () =>
+      Array.from(document.body.querySelectorAll<HTMLButtonElement>('.ec__chip'));
+    const chipOf = (name: string) =>
+      chips().find((b) => (b.textContent ?? '').includes(name))!;
+    const limited = TONE['partie.ralliement_event_participation_limited'];
+
+    it('le sélecteur n’apparaît qu’avec des places limitées ; l’hôte n’est jamais proposé ; aide « rendue aux autres si déclinée »', async () => {
+      const { q, toggle } = await mount();
+      expect(parties.members).toHaveBeenCalledWith('g1');
+      expect(q('.ec__reserve')).toBeNull();
+
+      await toggle('.ec__participation', limited);
+
+      expect(q('.ec__reserve')).not.toBeNull();
+      expect(q('.ec__reserve .ec__label')?.textContent?.trim()).toBe(
+        TONE['partie.ralliement_event_reserve_label'],
+      );
+      expect(chips().map((b) => (b.textContent ?? '').trim())).toEqual(['Zoé', 'Sam', 'Max']);
+      expect(q('.ec__reserve-hint')?.textContent?.trim()).toBe(
+        TONE['partie.ralliement_event_reserve_hint'],
+      );
+      // Chaque pastille dit son action en toutes lettres, avec le nom.
+      expect(chipOf('Zoé').getAttribute('aria-label')).toBe('Réserver une place à Zoé');
+    });
+
+    it('cocher des membres les envoie dans reservedUserIds ; l’état coché est écrit (coche + aria-pressed)', async () => {
+      const { q, type, click, toggle } = await mount();
+      await type('.ec__name', 'Réservée');
+      await type('.ec__day', dayKey(2));
+      await toggle('.ec__participation', limited);
+
+      await click('.ec__chip');
+      expect(chipOf('Zoé').getAttribute('aria-pressed')).toBe('true');
+      expect(chipOf('Zoé').textContent).toContain('✓');
+      expect(chipOf('Sam').getAttribute('aria-pressed')).toBe('false');
+      chipOf('Max').click();
+      await click('.ec__submit');
+
+      expect(api.create.mock.calls[0][1]).toEqual(
+        expect.objectContaining({ capacity: 4, reservedUserIds: ['u2', 'u4'] }),
+      );
+      expect(q('.ec__error')).toBeNull();
+    });
+
+    it('au plus « places − 1 » : au plafond les autres pastilles sont désactivées, le compteur ne passe pas sous réservées + 1', async () => {
+      const { q, click, toggle, settle } = await mount();
+      const press = async (name: string) => {
+        chipOf(name).click();
+        await settle();
+      };
+      await toggle('.ec__participation', limited);
+      for (let i = 0; i < 2; i++) await click('.ec__step--less');
+      expect(q<HTMLInputElement>('.ec__places-count')!.value).toBe('2');
+
+      // Deux places : l'hôte + une seule réservée possible, la seconde pastille est désactivée.
+      await press('Zoé');
+      expect(chipOf('Sam').disabled).toBe(true);
+      expect(q<HTMLButtonElement>('.ec__step--less')!.disabled).toBe(true);
+
+      await click('.ec__step--more');
+      await press('Sam');
+      // Deux places réservées + l'hôte : le compteur ne descend pas sous 3, le reste est désactivé.
+      expect(q<HTMLButtonElement>('.ec__step--less')!.disabled).toBe(true);
+      expect(q<HTMLInputElement>('.ec__places-count')!.value).toBe('3');
+      expect(chipOf('Max').disabled).toBe(true);
+
+      // Décocher libère le plafond : le compteur peut redescendre.
+      await press('Sam');
+      expect(q<HTMLButtonElement>('.ec__step--less')!.disabled).toBe(false);
+      await click('.ec__step--less');
+      expect(q<HTMLInputElement>('.ec__places-count')!.value).toBe('2');
+      expect(chipOf('Max').disabled).toBe(true);
+    });
+
+    it('repasser à « Tous les membres » abandonne la sélection : rien n’est envoyé', async () => {
+      const { q, type, click, toggle } = await mount();
+      await type('.ec__name', 'Ouverte');
+      await type('.ec__day', dayKey(2));
+      await toggle('.ec__participation', limited);
+      await click('.ec__chip');
+      await toggle('.ec__participation', TONE['partie.ralliement_event_participation_all']);
+      expect(q('.ec__reserve')).toBeNull();
+      await click('.ec__submit');
+
+      expect(api.create.mock.calls[0][1]).not.toHaveProperty('reservedUserIds');
+      expect(api.create.mock.calls[0][1]).toEqual(expect.objectContaining({ capacity: null }));
+    });
+
+    it('sans autre membre : « Aucun autre membre… » est écrit, aucune pastille', async () => {
+      const { q, toggle } = await mount([member('u1', 'Léa')]);
+      await toggle('.ec__participation', limited);
+
+      expect(chips()).toHaveLength(0);
+      expect(q('.ec__reserve-none')?.textContent?.trim()).toBe(
+        TONE['partie.ralliement_event_reserve_none'],
+      );
+    });
+
+    it('la liste des membres introuvable n’empêche pas de créer : sélecteur vide, création normale', async () => {
+      const { q, type, click, toggle } = await mount(new Error('réseau'));
+      await type('.ec__name', 'Sans liste');
+      await type('.ec__day', dayKey(2));
+      await toggle('.ec__participation', limited);
+
+      expect(chips()).toHaveLength(0);
+      expect(q('.ec__reserve-none')).not.toBeNull();
+      await click('.ec__submit');
+      expect(api.create).toHaveBeenCalledTimes(1);
+      expect(api.create.mock.calls[0][1]).not.toHaveProperty('reservedUserIds');
+    });
   });
 
   it('« Renoncer » ferme sans rien envoyer', async () => {

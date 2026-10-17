@@ -72,7 +72,7 @@ export class NotificationsService {
         // Story 40.3 : les inscrits d'une conjonction, lus avec la séance (jamais une requête par séance).
         inscriptions: {
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          select: { user: { select: { id: true, email: true } } },
+          select: { status: true, user: { select: { id: true, email: true } } },
         },
         event: {
           select: {

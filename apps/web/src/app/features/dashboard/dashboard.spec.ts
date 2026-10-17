@@ -1819,3 +1819,46 @@ describe('Dashboard — favori d’un ralliement (Story 38.5)', () => {
     expect(myPartiesSvc.refreshAll).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Dashboard — signal « place réservée » d’un groupe (Story 40.4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const reserved = (): Map<string, PartySignalsDto> =>
+    new Map([
+      [
+        'grp',
+        { role: 'player', status: 'EN_COURS', signals: ['RESERVATION_A_CONFIRMER'] },
+      ] as [string, PartySignalsDto],
+    ]);
+  const groupe = () => ({
+    ...makeRalliement('grp', 'member', 'CAMPAGNE_EPISODIQUE'),
+    status: 'EN_COURS' as const,
+  });
+
+  it('un groupe avec une place réservée porte le badge du thème, en tête de « ce qui t’attend »', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [groupe(), makeRalliement('calme', 'member', 'CAMPAGNE_EPISODIQUE')],
+      reserved(),
+    );
+    const root = fixture.nativeElement as HTMLElement;
+    const tile = tileOf(root, 'grp');
+    expect(textOf(tile)).toContain(GRIMOIRE_TONE['partie.signal_reservation_a_confirmer']);
+    // Un badge de signal écrit en toutes lettres (le libellé), teinte « à faire » comme le vote.
+    const badge = tile.querySelector('.signal-badge');
+    expect(textOf(badge)).toContain(GRIMOIRE_TONE['partie.signal_reservation_a_confirmer']);
+    expect(badge?.classList).not.toContain('signal-badge--soon');
+    expect(tileOf(root, 'calme').textContent).not.toContain(
+      GRIMOIRE_TONE['partie.signal_reservation_a_confirmer'],
+    );
+  });
+
+  it('mode liste : la sous-ligne porte rôle + libellé du signal (jamais la pastille seule)', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, [groupe()], reserved(), {
+      partiesViewMode: 'compact',
+    });
+    const sub = fixture.nativeElement.querySelector('.row__sub');
+    expect(sub.textContent).toContain(GRIMOIRE_TONE['partie.signal_reservation_a_confirmer']);
+  });
+});

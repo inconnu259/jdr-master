@@ -1402,11 +1402,19 @@ describe('Ralliement — proposer une conjonction à date fixée (Story 40.1)', 
         heureRdv: '20:30',
         notePratique: 'On mange sur place.',
         capacity: null,
+        placesTaken: 1,
       },
       // Story 40.2 : l'hôte est le premier (et ici le seul) participant.
       participants: [
-        { userId: member.id, displayName: member.displayName, isHost: true, isAdmin: false },
+        {
+          userId: member.id,
+          displayName: member.displayName,
+          isHost: true,
+          isAdmin: false,
+          status: 'CONFIRMED',
+        },
       ],
+      myInscription: null,
     });
 
     const events = await h.prisma.event.findMany({
@@ -1657,9 +1665,27 @@ describe('Ralliement — consulter et modifier une conjonction (Story 40.2)', ()
     );
     const read = list.find((c) => c.id === card.id)!;
     expect(read.participants).toEqual([
-      { userId: host.id, displayName: host.displayName, isHost: true, isAdmin: false },
-      { userId: guest.id, displayName: guest.displayName, isHost: false, isAdmin: false },
-      { userId: admin.id, displayName: admin.displayName, isHost: false, isAdmin: true },
+      {
+        userId: host.id,
+        displayName: host.displayName,
+        isHost: true,
+        isAdmin: false,
+        status: 'CONFIRMED',
+      },
+      {
+        userId: guest.id,
+        displayName: guest.displayName,
+        isHost: false,
+        isAdmin: false,
+        status: 'CONFIRMED',
+      },
+      {
+        userId: admin.id,
+        displayName: admin.displayName,
+        isHost: false,
+        isAdmin: true,
+        status: 'CONFIRMED',
+      },
     ]);
     await stranger.agent.get(`/parties/${groupId}/events/list`).expect(403);
   });
@@ -1716,10 +1742,18 @@ describe('Ralliement — consulter et modifier une conjonction (Story 40.2)', ()
         heureRdv: '09:30',
         notePratique: null,
         capacity: null,
+        placesTaken: 1,
       },
       participants: [
-        { userId: host.id, displayName: host.displayName, isHost: true, isAdmin: false },
+        {
+          userId: host.id,
+          displayName: host.displayName,
+          isHost: true,
+          isAdmin: false,
+          status: 'CONFIRMED',
+        },
       ],
+      myInscription: null,
     });
     const event = await stored(card.id);
     expect(event.title).toBe('Corrigée');
@@ -2227,5 +2261,532 @@ describe("Ralliement — s'inscrire à une conjonction et s'en désinscrire (Sto
       await admin.agent.get(`/parties/${groupId}/events/list`).expect(200),
     );
     expect(ids(list.find((c) => c.id === card.id)!)).toEqual([host.id, third.id, guest.id]);
+  });
+});
+
+describe('Ralliement — réserver une place à des membres (Story 40.4)', () => {
+  let h: Harness;
+  let admin: TestUser;
+  let host: TestUser;
+  let guest: TestUser;
+  let third: TestUser;
+  let fourth: TestUser;
+  let stranger: TestUser;
+  let otherAdmin: TestUser;
+  let groupId: string;
+  let otherGroupId: string;
+
+  type CardLike = {
+    id: string;
+    title: string;
+    hostId: string | null;
+    seance: {
+      id: string;
+      date: string | null;
+      capacity: number | null;
+      placesTaken: number;
+    } | null;
+    participants: { userId: string; isHost: boolean; status: string }[];
+    myInscription: string | null;
+  };
+  type ErrorLike = { statusCode: number; message: string | string[] };
+
+  const FULL = 'Cette conjonction est complète : plus aucune place disponible';
+  const PAST = 'Cette conjonction est passée : les inscriptions ne peuvent plus changer';
+  const HOST_ONLY = "Action réservée à l'hôte de la conjonction";
+  const RESERVATION_MAIL = 'conjonction-reservation';
+
+  const propose = (who: TestUser, over: Record<string, unknown> = {}) =>
+    who.agent
+      .post(`/parties/${groupId}/events`)
+      .send({ title: 'Soirée plateaux', date: isoDay(6), slot: 'EVENING', capacity: 4, ...over });
+  const create = async (who: TestUser, over: Record<string, unknown> = {}) => {
+    const res = await propose(who, over);
+    expect(res.status).toBe(201);
+    return body<CardLike>(res);
+  };
+  const reserve = (who: TestUser, seanceId: string, userId: string) =>
+    who.agent.post(`/scenarios/seances/${seanceId}/reservations`).send({ userId });
+  const unreserve = (who: TestUser, seanceId: string, userId: string) =>
+    who.agent.delete(`/scenarios/seances/${seanceId}/reservations/${userId}`);
+  const accept = (who: TestUser, seanceId: string) =>
+    who.agent.patch(`/scenarios/seances/${seanceId}/inscription/accept`);
+  const decline = (who: TestUser, seanceId: string) =>
+    who.agent.delete(`/scenarios/seances/${seanceId}/inscription`);
+  const signUp = (who: TestUser, seanceId: string) =>
+    who.agent.post(`/scenarios/seances/${seanceId}/inscription`);
+  const rows = async (seanceId: string) =>
+    (
+      await h.prisma.inscription.findMany({ where: { seanceId }, orderBy: { createdAt: 'asc' } })
+    ).map((i) => [i.userId, i.status]);
+  const listFor = async (who: TestUser) =>
+    body<CardLike[]>(await who.agent.get(`/parties/${groupId}/events/list`).expect(200));
+  const cardFor = async (who: TestUser, eventId: string) =>
+    (await listFor(who)).find((c) => c.id === eventId)!;
+  const signalsOf = async (who: TestUser) =>
+    body<Record<string, { signals: string[] }>>(
+      await who.agent.get('/me/party-signals').expect(200),
+    )[groupId]?.signals ?? [];
+  const mailsTo = (who: TestUser) =>
+    h.email.calls.filter((c) => c.to === who.email && c.template === RESERVATION_MAIL);
+  const message = (res: { body: unknown }) => (res.body as ErrorLike).message;
+  /** Efface les places encore seulement réservées à `who` par les scénarios précédents : le signal
+   *  d'accueil est par groupe, il faut partir d'une situation propre pour le lire. */
+  const clearReservations = (who: TestUser) =>
+    h.prisma.inscription.deleteMany({ where: { userId: who.id, status: 'RESERVED' } });
+  const calendarOf = async (who: TestUser) =>
+    body<{ 'mes-seances': { seanceId: string }[] }>(
+      await who.agent
+        .get('/me/calendar')
+        .query({ from: isoDay(0), to: isoDay(30) })
+        .expect(200),
+    )['mes-seances'].map((s) => s.seanceId);
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, host, guest, third, fourth, stranger, otherAdmin] = await Promise.all([
+      h.createUser('resa-admin'),
+      h.createUser('resa-hote'),
+      h.createUser('resa-invite'),
+      h.createUser('resa-tiers'),
+      h.createUser('resa-quatrieme'),
+      h.createUser('resa-etranger'),
+      h.createUser('resa-autre-admin'),
+    ]);
+    ({ id: groupId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'resa', 'ralliement'));
+    for (const who of [host, guest, third, fourth]) await h.addMember(groupId, who);
+    ({ id: otherGroupId } = await h.createPartie(
+      otherAdmin,
+      'CAMPAGNE_EPISODIQUE',
+      'resa-autre',
+      'ralliement',
+    ));
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it('l’hôte réserve : ligne RESERVED comptée dans la capacité, e-mail n°3, signal et direct pour la cible, pastille en attente pour l’hôte seul', async () => {
+    const card = await create(host, { title: 'Réservée' });
+    const seanceId = card.seance!.id;
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    let res: Response;
+    try {
+      res = await reserve(host, seanceId, guest.id).expect(201);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(emit).toHaveBeenCalledWith(userTopic(guest.id));
+    } finally {
+      emit.mockRestore();
+    }
+
+    expect(await rows(seanceId)).toEqual([[guest.id, 'RESERVED']]);
+    // Réponse = carte de l'hôte : la place en attente y figure, avec son statut.
+    const hostCard = body<CardLike>(res);
+    expect(hostCard.participants.map((p) => [p.userId, p.status])).toEqual([
+      [host.id, 'CONFIRMED'],
+      [guest.id, 'RESERVED'],
+    ]);
+    expect(hostCard.seance?.placesTaken).toBe(2);
+
+    // E-mail n°3 : un seul, vers la cible, au nom de l'hôte, lien vers la page du groupe.
+    const mails = mailsTo(guest);
+    expect(mails).toHaveLength(1);
+    expect(mails[0].data).toMatchObject({
+      hostName: host.displayName,
+      eventTitle: 'Réservée',
+      link: expect.stringContaining(`/parties/${groupId}`) as string,
+    });
+
+    // La cible : sa ligne et son signal d'accueil, que personne d'autre ne porte.
+    expect((await cardFor(guest, card.id)).myInscription).toBe('RESERVED');
+    expect(await signalsOf(guest)).toContain('RESERVATION_A_CONFIRMER');
+    expect(await signalsOf(third)).not.toContain('RESERVATION_A_CONFIRMER');
+
+    // Visibilité : un autre membre ne voit pas qui tient la place, mais « placesTaken » la compte.
+    const thirdCard = await cardFor(third, card.id);
+    expect(thirdCard.participants.map((p) => p.userId)).toEqual([host.id]);
+    expect(thirdCard.seance?.placesTaken).toBe(2);
+    expect(JSON.stringify(thirdCard)).not.toContain(guest.id);
+    expect(JSON.stringify(thirdCard)).not.toContain(guest.displayName);
+    // La personne réservée ne se voit pas non plus dans la liste (elle lit myInscription).
+    expect((await cardFor(guest, card.id)).participants.map((p) => p.userId)).toEqual([host.id]);
+    // L'hôte relit la même chose que dans la réponse.
+    expect((await cardFor(host, card.id)).participants.map((p) => p.userId)).toEqual([
+      host.id,
+      guest.id,
+    ]);
+  });
+
+  it('place tenue : une conjonction pleine de places réservées affiche « Complet » aux autres — 409, rien d’écrit', async () => {
+    const card = await create(host, { title: 'Tenue', capacity: 3 });
+    const seanceId = card.seance!.id;
+    await reserve(host, seanceId, guest.id).expect(201);
+    await signUp(third, seanceId).expect(201);
+
+    const refused = await signUp(fourth, seanceId);
+    expect(refused.status).toBe(409);
+    expect(message(refused)).toBe(FULL);
+    // Et l'hôte ne peut pas réserver au-delà de la capacité non plus.
+    const over = await reserve(host, seanceId, fourth.id);
+    expect(over.status).toBe(409);
+    expect(message(over)).toBe(FULL);
+    expect(await rows(seanceId)).toEqual([
+      [guest.id, 'RESERVED'],
+      [third.id, 'CONFIRMED'],
+    ]);
+    const full = await cardFor(fourth, card.id);
+    expect(full.seance).toMatchObject({ capacity: 3, placesTaken: 3 });
+  });
+
+  it('accepter : la ligne devient CONFIRMED, tout le monde voit l’inscrit·e, le signal s’efface, la personne est notifiée', async () => {
+    await clearReservations(guest);
+    const card = await create(host, { title: 'Acceptée' });
+    const seanceId = card.seance!.id;
+    await reserve(host, seanceId, guest.id).expect(201);
+    expect(await signalsOf(guest)).toContain('RESERVATION_A_CONFIRMER');
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    let res: Response;
+    try {
+      res = await accept(guest, seanceId).expect(200);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(emit).toHaveBeenCalledWith(userTopic(guest.id));
+    } finally {
+      emit.mockRestore();
+    }
+
+    expect(await rows(seanceId)).toEqual([[guest.id, 'CONFIRMED']]);
+    const own = body<CardLike>(res);
+    expect(own.myInscription).toBe('CONFIRMED');
+    expect(own.participants.map((p) => [p.userId, p.status])).toEqual([
+      [host.id, 'CONFIRMED'],
+      [guest.id, 'CONFIRMED'],
+    ]);
+    expect(await signalsOf(guest)).not.toContain('RESERVATION_A_CONFIRMER');
+    // Tous les membres le voient désormais inscrit·e.
+    expect((await cardFor(third, card.id)).participants.map((p) => p.userId)).toEqual([
+      host.id,
+      guest.id,
+    ]);
+    // Idempotent : accepter de nouveau ne change rien.
+    await accept(guest, seanceId).expect(200);
+    expect(await rows(seanceId)).toEqual([[guest.id, 'CONFIRMED']]);
+    // La séance devient la sienne dans son agenda (hôte + CONFIRMED seulement).
+    expect(await calendarOf(guest)).toContain(seanceId);
+  });
+
+  it('s’inscrire en tenant une place réservée la confirme (comme accepter) : la ligne passe CONFIRMED, la personne apparaît inscrite pour tous, sans nouvelle place prise', async () => {
+    const card = await create(host, { title: 'Inscrite d’office', capacity: 3 });
+    const seanceId = card.seance!.id;
+    await reserve(host, seanceId, guest.id).expect(201);
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    let res: Response;
+    try {
+      res = await signUp(guest, seanceId).expect(201);
+      expect(emit).toHaveBeenCalledWith(userTopic(guest.id));
+    } finally {
+      emit.mockRestore();
+    }
+
+    expect(await rows(seanceId)).toEqual([[guest.id, 'CONFIRMED']]);
+    const own = body<CardLike>(res);
+    expect(own.myInscription).toBe('CONFIRMED');
+    expect(own.seance?.placesTaken).toBe(2);
+    expect((await cardFor(third, card.id)).participants.map((p) => p.userId)).toEqual([
+      host.id,
+      guest.id,
+    ]);
+  });
+
+  it('calendrier : tant que la place est seulement réservée, la conjonction n’est ni dans l’agenda ni dans les indisponibilités de la cible', async () => {
+    const day = isoDay(11);
+    const card = await create(host, { title: 'Pas encore', date: day, slot: 'AFTERNOON' });
+    await reserve(host, card.seance!.id, guest.id).expect(201);
+
+    expect(await calendarOf(guest)).not.toContain(card.seance!.id);
+    const spans = await h.app.get(EventsService).occupiedSpansOf([guest.id, host.id]);
+    const wanted = [`${day}T00:00:00.000Z`, 'AFTERNOON'];
+    expect(spans.get(guest.id)!.map((s) => [s.date.toISOString(), s.slot])).not.toContainEqual(
+      wanted,
+    );
+    expect(spans.get(host.id)!.map((s) => [s.date.toISOString(), s.slot])).toContainEqual(wanted);
+  });
+
+  it('décliner : DELETE …/inscription supprime la ligne réservée, la place est de nouveau libre, la personne est notifiée', async () => {
+    await clearReservations(guest);
+    const card = await create(host, { title: 'Déclinée', capacity: 2 });
+    const seanceId = card.seance!.id;
+    await reserve(host, seanceId, guest.id).expect(201);
+    expect((await signUp(third, seanceId)).status).toBe(409);
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    try {
+      await decline(guest, seanceId).expect(200);
+      expect(emit).toHaveBeenCalledWith(userTopic(guest.id));
+    } finally {
+      emit.mockRestore();
+    }
+
+    expect(await rows(seanceId)).toEqual([]);
+    expect(await signalsOf(guest)).not.toContain('RESERVATION_A_CONFIRMER');
+    // La place est rendue aux autres.
+    await signUp(third, seanceId).expect(201);
+    expect(await rows(seanceId)).toEqual([[third.id, 'CONFIRMED']]);
+  });
+
+  it('retirer la réservation : l’hôte supprime la ligne RESERVED, la cible est notifiée ; une inscription confirmée n’est jamais retirée par cette voie', async () => {
+    await clearReservations(guest);
+    const card = await create(host, { title: 'Retirée' });
+    const seanceId = card.seance!.id;
+    await reserve(host, seanceId, guest.id).expect(201);
+    await signUp(third, seanceId).expect(201);
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    try {
+      const res = await unreserve(host, seanceId, guest.id).expect(200);
+      expect(body<CardLike>(res).participants.map((p) => p.userId)).toEqual([host.id, third.id]);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(emit).toHaveBeenCalledWith(userTopic(guest.id));
+    } finally {
+      emit.mockRestore();
+    }
+    expect(await rows(seanceId)).toEqual([[third.id, 'CONFIRMED']]);
+    expect(await signalsOf(guest)).not.toContain('RESERVATION_A_CONFIRMER');
+
+    // La personne confirmée reste inscrite ; retirer de nouveau est sans effet.
+    await unreserve(host, seanceId, third.id).expect(200);
+    await unreserve(host, seanceId, guest.id).expect(200);
+    expect(await rows(seanceId)).toEqual([[third.id, 'CONFIRMED']]);
+  });
+
+  describe('à la création', () => {
+    it('reservedUserIds : événement + séance + lignes RESERVED en une transaction, UN e-mail par membre, direct vers chacun', async () => {
+      const before = h.email.calls.length;
+      const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+      let card: CardLike;
+      try {
+        card = await create(host, {
+          title: 'Dès le départ',
+          capacity: 4,
+          reservedUserIds: [guest.id, third.id],
+        });
+        expect(emit).toHaveBeenCalledWith(userTopic(guest.id));
+        expect(emit).toHaveBeenCalledWith(userTopic(third.id));
+      } finally {
+        emit.mockRestore();
+      }
+
+      expect(await rows(card.seance!.id)).toEqual([
+        [guest.id, 'RESERVED'],
+        [third.id, 'RESERVED'],
+      ]);
+      expect(card.seance?.placesTaken).toBe(3);
+      expect(card.participants.map((p) => [p.userId, p.status])).toEqual([
+        [host.id, 'CONFIRMED'],
+        [guest.id, 'RESERVED'],
+        [third.id, 'RESERVED'],
+      ]);
+      const sent = h.email.calls.slice(before).filter((c) => c.template === RESERVATION_MAIL);
+      expect(sent.map((c) => c.to).sort()).toEqual([guest.email, third.email].sort());
+      expect(await signalsOf(third)).toContain('RESERVATION_A_CONFIRMER');
+    });
+
+    it.each([
+      ['places non limitées', () => ({ capacity: null, reservedUserIds: [guest.id] })],
+      ['l’hôte lui-même', () => ({ capacity: 4, reservedUserIds: [host.id] })],
+      ['une personne deux fois', () => ({ capacity: 4, reservedUserIds: [guest.id, guest.id] })],
+      [
+        'plus que capacité − 1',
+        () => ({ capacity: 3, reservedUserIds: [guest.id, third.id, fourth.id] }),
+      ],
+      ['un étranger au groupe', () => ({ capacity: 4, reservedUserIds: [stranger.id] })],
+      ['un membre d’un autre groupe', () => ({ capacity: 4, reservedUserIds: [otherAdmin.id] })],
+      ['un identifiant invalide', () => ({ capacity: 4, reservedUserIds: ['pas-un-uuid'] })],
+    ])('refus 400 (%s) : ni événement, ni ligne, ni e-mail', async (_label, extra) => {
+      const eventsBefore = await h.prisma.event.count({ where: { partieId: groupId } });
+      const mailsBefore = h.email.calls.length;
+
+      const res = await propose(host, { title: 'Refusée', ...extra() });
+
+      expect(res.status).toBe(400);
+      expect(await h.prisma.event.count({ where: { partieId: groupId } })).toBe(eventsBefore);
+      expect(h.email.calls).toHaveLength(mailsBefore);
+    });
+
+    it('capacité − 1 réservations exactement : acceptée, la conjonction est pleine', async () => {
+      const card = await create(host, {
+        title: 'Pleine d’emblée',
+        capacity: 3,
+        reservedUserIds: [guest.id, third.id],
+      });
+      const refused = await signUp(fourth, card.seance!.id);
+      expect(refused.status).toBe(409);
+      expect(message(refused)).toBe(FULL);
+    });
+  });
+
+  describe('refus (rien n’est écrit)', () => {
+    let seanceId: string;
+    beforeAll(async () => {
+      const card = await create(host, { title: 'Chasse gardée', capacity: 6 });
+      seanceId = card.seance!.id;
+      await reserve(host, seanceId, guest.id).expect(201);
+    });
+    const unchanged = async () => expect(await rows(seanceId)).toEqual([[guest.id, 'RESERVED']]);
+
+    it('un membre qui n’est pas l’hôte : 403 « réservée à l’hôte » — l’administrateur du groupe compris', async () => {
+      for (const who of [third, admin]) {
+        const res = await reserve(who, seanceId, fourth.id);
+        expect(res.status).toBe(403);
+        expect(message(res)).toBe(HOST_ONLY);
+        const del = await unreserve(who, seanceId, guest.id);
+        expect(del.status).toBe(403);
+        expect(message(del)).toBe(HOST_ONLY);
+      }
+      await unchanged();
+    });
+
+    it('un étranger et l’administrateur d’un autre groupe : 403 « pas accès »', async () => {
+      for (const who of [stranger, otherAdmin]) {
+        const res = await reserve(who, seanceId, fourth.id);
+        expect(res.status).toBe(403);
+        expect(message(res)).toBe(NO_ACCESS);
+        expect((await unreserve(who, seanceId, guest.id)).status).toBe(403);
+        expect((await accept(who, seanceId)).status).toBe(403);
+      }
+      await unchanged();
+    });
+
+    it('la séance d’un autre groupe : l’hôte de A reçoit 403 sur la séance de B (la partie est lue depuis la séance)', async () => {
+      const foreign = body<CardLike>(
+        await otherAdmin.agent
+          .post(`/parties/${otherGroupId}/events`)
+          .send({ title: 'Chez les autres', date: isoDay(8), slot: 'EVENING', capacity: 4 })
+          .expect(201),
+      );
+      const res = await reserve(host, foreign.seance!.id, guest.id);
+      expect(res.status).toBe(403);
+      expect(message(res)).toBe(NO_ACCESS);
+      expect(await rows(foreign.seance!.id)).toEqual([]);
+    });
+
+    it('la cible : pas membre → 400, l’hôte → 400, déjà réservée ou inscrite → 409', async () => {
+      const notMember = await reserve(host, seanceId, stranger.id);
+      expect(notMember.status).toBe(400);
+      expect(message(notMember)).toBe("Cette personne n'est pas membre du groupe");
+      const self = await reserve(host, seanceId, host.id);
+      expect(self.status).toBe(400);
+      const again = await reserve(host, seanceId, guest.id);
+      expect(again.status).toBe(409);
+      await signUp(third, seanceId).expect(201);
+      const registered = await reserve(host, seanceId, third.id);
+      expect(registered.status).toBe(409);
+      expect(message(registered)).toBe('Cette personne a déjà une place dans cette conjonction');
+      expect(await rows(seanceId)).toEqual([
+        [guest.id, 'RESERVED'],
+        [third.id, 'CONFIRMED'],
+      ]);
+    });
+
+    it('« Tous les membres » (sans limite) : 400, aucune ligne', async () => {
+      const open = await create(host, { title: 'Pour tous', capacity: null });
+      const res = await reserve(host, open.seance!.id, guest.id);
+      expect(res.status).toBe(400);
+      expect(await rows(open.seance!.id)).toEqual([]);
+    });
+
+    it('corps invalide : 400 ; séance inconnue : 404', async () => {
+      await host.agent
+        .post(`/scenarios/seances/${seanceId}/reservations`)
+        .send({ userId: 'pas-un-uuid' })
+        .expect(400);
+      await host.agent.post(`/scenarios/seances/${seanceId}/reservations`).send({}).expect(400);
+      await reserve(host, randomUUID(), guest.id).expect(404);
+      await unreserve(host, randomUUID(), guest.id).expect(404);
+      await accept(guest, randomUUID()).expect(404);
+    });
+
+    it('jour passé : réserver, retirer et accepter sont refusés (400 français), rien ne change', async () => {
+      const old = await create(host, { title: 'Hier', capacity: 5 });
+      await reserve(host, old.seance!.id, guest.id).expect(201);
+      const yesterday = new Date(`${isoDay(-2)}T00:00:00.000Z`);
+      await h.prisma.seance.update({
+        where: { id: old.seance!.id },
+        data: { startDate: yesterday, endDate: yesterday },
+      });
+
+      const late = await reserve(host, old.seance!.id, third.id);
+      expect(late.status).toBe(400);
+      expect(message(late)).toBe(PAST);
+      expect((await unreserve(host, old.seance!.id, guest.id)).status).toBe(400);
+      const lateAccept = await accept(guest, old.seance!.id);
+      expect(lateAccept.status).toBe(400);
+      expect(message(lateAccept)).toBe(PAST);
+      expect(await rows(old.seance!.id)).toEqual([[guest.id, 'RESERVED']]);
+    });
+
+    it('accepter sans place réservée : sans effet (200), aucune ligne créée', async () => {
+      const plain = await create(host, { title: 'Sans réservation' });
+      await accept(fourth, plain.seance!.id).expect(200);
+      expect(await rows(plain.seance!.id)).toEqual([]);
+    });
+
+    it('une rencontre isolée (ONE_SHOT) : 403 « indisponible », même à son administrateur', async () => {
+      const { id: isoleeId } = await h.createPartie(admin, 'ONE_SHOT', 'resa-isolee', 'ralliement');
+      const seance = await h.prisma.seance.findFirstOrThrow({
+        where: { event: { partieId: isoleeId } },
+      });
+      for (const res of [
+        await reserve(admin, seance.id, guest.id),
+        await unreserve(admin, seance.id, guest.id),
+        await accept(admin, seance.id),
+      ]) {
+        expect(res.status).toBe(403);
+        expect(message(res)).toBe(UNAVAILABLE);
+      }
+      expect(await rows(seance.id)).toEqual([]);
+    });
+  });
+
+  it('dernière place, réserver contre s’inscrire en même temps : exactement un gagne, l’autre reçoit « complet »', async () => {
+    const card = await create(host, { title: 'Course', capacity: 2 });
+    const seanceId = card.seance!.id;
+
+    const [a, b] = await Promise.all([reserve(host, seanceId, guest.id), signUp(third, seanceId)]);
+
+    expect([a.status, b.status].sort()).toEqual([201, 409]);
+    const loser = a.status === 409 ? a : b;
+    expect(message(loser)).toBe(FULL);
+    expect(await rows(seanceId)).toHaveLength(1);
+  });
+
+  it('plusieurs réservations et inscriptions en même temps : jamais plus de places que la capacité', async () => {
+    const card = await create(host, { title: 'Mêlée', capacity: 3 });
+    const seanceId = card.seance!.id;
+
+    const results = await Promise.all([
+      reserve(host, seanceId, guest.id),
+      reserve(host, seanceId, fourth.id),
+      signUp(third, seanceId),
+    ]);
+
+    expect(results.filter((r) => r.status === 201)).toHaveLength(2);
+    expect(results.filter((r) => r.status === 409)).toHaveLength(1);
+    expect(await rows(seanceId)).toHaveLength(2);
+  });
+
+  it('accepter et décliner en même temps : un seul état final cohérent (jamais une ligne à moitié)', async () => {
+    const card = await create(host, { title: 'Hésitation', capacity: 3 });
+    const seanceId = card.seance!.id;
+    await reserve(host, seanceId, guest.id).expect(201);
+
+    await Promise.all([accept(guest, seanceId), decline(guest, seanceId)]);
+
+    const final = await rows(seanceId);
+    expect(final.length).toBeLessThanOrEqual(1);
+    for (const [, status] of final) expect(['CONFIRMED', 'RESERVED']).toContain(status);
   });
 });

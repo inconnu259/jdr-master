@@ -3,6 +3,7 @@ import { testGrant } from '../common/test-utils/grant';
 import { callArg } from '../common/test-utils/jest-typed';
 import type { PermissionService } from '../permissions/permission.service';
 import { RALLIEMENT_UNAVAILABLE_MESSAGE } from '../permissions/permission.service';
+import type { EmailService } from '../email/email.service';
 import type { PartieSignalsPort } from '../poll/ports/partie-signals.port';
 import type { CreateEventDto } from './dto/create-event.dto';
 import type { EventsService } from './events.service';
@@ -24,6 +25,7 @@ const CARD = {
   hostDisplayName: 'Léa',
   seance: null,
   participants: [],
+  myInscription: null,
 };
 
 describe('GroupEventsService (Story 40.1)', () => {
@@ -33,9 +35,14 @@ describe('GroupEventsService (Story 40.1)', () => {
     updateHosted: jest.Mock;
     inscrireConjonction: jest.Mock;
     desinscrireConjonction: jest.Mock;
+    accepterReservation: jest.Mock;
+    reserverPlace: jest.Mock;
+    retirerReservation: jest.Mock;
+    reservationNotice: jest.Mock;
     listCards: jest.Mock;
   };
   let signals: { notifyChanged: jest.Mock };
+  let email: { sendMail: jest.Mock };
   let service: GroupEventsService;
   const order: string[] = [];
 
@@ -62,7 +69,33 @@ describe('GroupEventsService (Story 40.1)', () => {
         order.push('desinscrire');
         return Promise.resolve();
       }),
+      accepterReservation: jest.fn(() => {
+        order.push('accepter');
+        return Promise.resolve();
+      }),
+      reserverPlace: jest.fn(() => {
+        order.push('reserver');
+        return Promise.resolve();
+      }),
+      retirerReservation: jest.fn(() => {
+        order.push('retirer');
+        return Promise.resolve();
+      }),
+      reservationNotice: jest.fn().mockResolvedValue({
+        eventTitle: 'Catane',
+        hostName: 'Léa',
+        startDate: new Date('2026-11-14T00:00:00Z'),
+        startSlot: 'EVENING',
+        lieu: 'Lyon 3e',
+        recipients: [{ id: 'u2', email: 'u2@example.com' }],
+      }),
       listCards: jest.fn().mockResolvedValue([CARD]),
+    };
+    email = {
+      sendMail: jest.fn(() => {
+        order.push('email');
+        return Promise.resolve({ ok: true });
+      }),
     };
     signals = {
       notifyChanged: jest.fn(() => {
@@ -74,6 +107,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       permissions as unknown as PermissionService,
       events as unknown as EventsService,
       signals as unknown as PartieSignalsPort,
+      email as unknown as EmailService,
     );
   });
 
@@ -103,8 +137,59 @@ describe('GroupEventsService (Story 40.1)', () => {
       // Signaux de la liste d'accueil APRÈS l'écriture validée.
       expect(order).toEqual(['create', 'signals']);
       expect(signals.notifyChanged).toHaveBeenCalledWith('g1');
-      expect(callArg<string[]>(events.listCards, 0, 1)).toEqual(['e1']);
+      expect(callArg<string[]>(events.listCards, 0, 2)).toEqual(['e1']);
+      // La carte est celle de l'hôte (qui voit les places réservées en attente).
+      expect(callArg<string>(events.listCards, 0, 1)).toBe('u1');
       expect(card).toEqual(CARD);
+      expect(email.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('places réservées à la création (Story 40.4) : transmises à l’écriture, puis UN e-mail par membre, après le commit', async () => {
+      events.reservationNotice.mockResolvedValue({
+        eventTitle: 'Catane',
+        hostName: 'Léa',
+        startDate: new Date('2026-11-14T00:00:00Z'),
+        startSlot: 'EVENING',
+        lieu: 'Lyon 3e',
+        recipients: [
+          { id: 'u2', email: 'u2@example.com' },
+          { id: 'u3', email: 'u3@example.com' },
+        ],
+      });
+
+      await service.create('g1', 'u1', dto({ capacity: 4, reservedUserIds: ['u2', 'u3'] }));
+
+      const [, , input] = events.createHosted.mock.calls[0] as [
+        unknown,
+        unknown,
+        { seance: { reservedUserIds?: string[] } },
+      ];
+      expect(input.seance.reservedUserIds).toEqual(['u2', 'u3']);
+      expect(order).toEqual(['create', 'signals', 'email', 'email']);
+      expect(events.reservationNotice).toHaveBeenCalledWith('e1', ['u2', 'u3']);
+      expect(email.sendMail).toHaveBeenCalledTimes(2);
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'conjonction-reservation',
+        'u2@example.com',
+        expect.objectContaining({
+          hostName: 'Léa',
+          eventTitle: 'Catane',
+          lieu: 'Lyon 3e',
+          link: expect.stringContaining('/parties/g1') as string,
+        }),
+      );
+    });
+
+    it('un échec d’e-mail (envoi refusé ou lecture en erreur) est journalisé et ne remonte jamais', async () => {
+      email.sendMail.mockResolvedValue({ ok: false });
+      await expect(
+        service.create('g1', 'u1', dto({ capacity: 4, reservedUserIds: ['u2'] })),
+      ).resolves.toEqual(CARD);
+
+      events.reservationNotice.mockRejectedValue(new Error('base indisponible'));
+      await expect(
+        service.create('g1', 'u1', dto({ capacity: 4, reservedUserIds: ['u2'] })),
+      ).resolves.toEqual(CARD);
     });
 
     it('capacité absente = « tous les membres » (null)', async () => {
@@ -181,8 +266,20 @@ describe('GroupEventsService (Story 40.1)', () => {
       });
       expect(order).toEqual(['update', 'signals']);
       expect(signals.notifyChanged).toHaveBeenCalledWith('g1');
-      expect(callArg<string[]>(events.listCards, 0, 1)).toEqual(['e1']);
+      expect(callArg<string[]>(events.listCards, 0, 2)).toEqual(['e1']);
       expect(card).toEqual(CARD);
+    });
+
+    it('les places réservées d’une modification sont ignorées (réservation tardive = route dédiée)', async () => {
+      await service.update('g1', 'e1', 'u1', dto({ capacity: 4, reservedUserIds: ['u2'] }));
+
+      const [, , input] = events.updateHosted.mock.calls[0] as [
+        unknown,
+        unknown,
+        { seance: { reservedUserIds?: string[] } },
+      ];
+      expect(input.seance.reservedUserIds).toBeUndefined();
+      expect(email.sendMail).not.toHaveBeenCalled();
     });
 
     it('événement d’une autre partie que celle de la route → 404, rien n’est écrit', async () => {
@@ -242,7 +339,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       expect(events.inscrireConjonction).toHaveBeenCalledWith(grant, 'se1', 'u2');
       expect(order).toEqual(['inscrire', 'signals']);
       expect(signals.notifyChanged).toHaveBeenCalledWith('g1');
-      expect(callArg<string[]>(events.listCards, 0, 1)).toEqual(['e1']);
+      expect(callArg<string[]>(events.listCards, 0, 2)).toEqual(['e1']);
       expect(card).toEqual(CARD);
     });
 
@@ -287,12 +384,107 @@ describe('GroupEventsService (Story 40.1)', () => {
     });
   });
 
+  describe('reserver() / retirerReservation() / accepter() — Story 40.4', () => {
+    const grantSeance = (over: Record<string, unknown> = {}) =>
+      testGrant({ ...GROUPE, ...over }, 'member', { eventId: 'e1', seanceId: 'se1' });
+
+    it('reserver : écrit, signale, envoie UN e-mail « Répondre » vers la page du groupe, renvoie la carte de l’hôte', async () => {
+      const grant = grantSeance();
+
+      const card = await service.reserver(grant, 'u1', 'u2');
+
+      expect(events.reserverPlace).toHaveBeenCalledWith(grant, 'se1', 'u2');
+      expect(order).toEqual(['reserver', 'email', 'signals']);
+      expect(events.reservationNotice).toHaveBeenCalledWith('e1', ['u2']);
+      expect(email.sendMail).toHaveBeenCalledTimes(1);
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'conjonction-reservation',
+        'u2@example.com',
+        expect.objectContaining({
+          hostName: 'Léa',
+          eventTitle: 'Catane',
+          sessionDate: 'samedi 14 novembre (soir)',
+        }),
+      );
+      expect(signals.notifyChanged).toHaveBeenCalledWith('g1');
+      expect(callArg<string>(events.listCards, 0, 1)).toBe('u1');
+      expect(callArg<string[]>(events.listCards, 0, 2)).toEqual(['e1']);
+      expect(card).toEqual(CARD);
+    });
+
+    it('reserver : un refus de l’écriture (complet, déjà inscrit…) n’envoie aucun e-mail et ne signale rien', async () => {
+      events.reserverPlace.mockRejectedValue(new BadRequestException('complet'));
+
+      await expect(service.reserver(grantSeance(), 'u1', 'u2')).rejects.toThrow('complet');
+      expect(events.reservationNotice).not.toHaveBeenCalled();
+      expect(email.sendMail).not.toHaveBeenCalled();
+      expect(signals.notifyChanged).not.toHaveBeenCalled();
+    });
+
+    it('reserver : un e-mail en échec n’annule pas la réservation (journalisé, jamais remonté)', async () => {
+      email.sendMail.mockResolvedValue({ ok: false });
+
+      await expect(service.reserver(grantSeance(), 'u1', 'u2')).resolves.toEqual(CARD);
+      expect(signals.notifyChanged).toHaveBeenCalledWith('g1');
+    });
+
+    it('retirerReservation : retire puis signale, sans e-mail, renvoie la carte de l’hôte', async () => {
+      const grant = grantSeance();
+
+      const card = await service.retirerReservation(grant, 'u1', 'u2');
+
+      expect(events.retirerReservation).toHaveBeenCalledWith(grant, 'se1', 'u2');
+      expect(order).toEqual(['retirer', 'signals']);
+      expect(email.sendMail).not.toHaveBeenCalled();
+      expect(callArg<string>(events.listCards, 0, 1)).toBe('u1');
+      expect(card).toEqual(CARD);
+    });
+
+    it('accepter : confirme la place de l’appelant puis signale, sans e-mail, renvoie sa carte', async () => {
+      const grant = grantSeance();
+
+      const card = await service.accepter(grant, 'u2');
+
+      expect(events.accepterReservation).toHaveBeenCalledWith(grant, 'se1', 'u2');
+      expect(order).toEqual(['accepter', 'signals']);
+      expect(email.sendMail).not.toHaveBeenCalled();
+      expect(callArg<string>(events.listCards, 0, 1)).toBe('u2');
+      expect(card).toEqual(CARD);
+    });
+
+    it.each(['reserver', 'retirerReservation', 'accepter'] as const)(
+      '%s : rencontre isolée (ONE_SHOT) → 403 « indisponible », rien n’est écrit',
+      async (method) => {
+        const grant = grantSeance({ kind: 'ONE_SHOT' });
+        const refusal =
+          method === 'accepter'
+            ? service.accepter(grant, 'u2')
+            : service[method](grant, 'u1', 'u2');
+
+        await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(refusal).rejects.toThrow(RALLIEMENT_UNAVAILABLE_MESSAGE);
+        expect(events.reserverPlace).not.toHaveBeenCalled();
+        expect(events.retirerReservation).not.toHaveBeenCalled();
+        expect(events.accepterReservation).not.toHaveBeenCalled();
+        expect(email.sendMail).not.toHaveBeenCalled();
+      },
+    );
+
+    it('une autorisation qui ne vise pas de séance → 404, rien n’est écrit', async () => {
+      const grant = testGrant(GROUPE, 'member', { eventId: 'e1' });
+
+      await expect(service.reserver(grant, 'u1', 'u2')).rejects.toBeInstanceOf(NotFoundException);
+      expect(events.reserverPlace).not.toHaveBeenCalled();
+    });
+  });
+
   describe('list()', () => {
-    it('droit EVENT_LIST, puis les cartes de la partie de l’autorisation', async () => {
+    it('droit EVENT_LIST, puis les cartes de la partie de l’autorisation vues par l’appelant', async () => {
       const cards = await service.list('g1', 'u2');
 
       expect(permissions.assert).toHaveBeenCalledWith('u2', 'EVENT_LIST', { partieId: 'g1' });
       expect(events.listCards).toHaveBeenCalledTimes(1);
+      expect(callArg<string>(events.listCards, 0, 1)).toBe('u2');
       expect(cards).toEqual([CARD]);
     });
   });

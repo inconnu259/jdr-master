@@ -611,14 +611,23 @@ model Seance {
   inscriptions Inscription[]
 }
 
+/// Statut d'une inscription (Story 40.4) : `RESERVED` = place réservée par l'hôte d'une conjonction,
+/// pas encore acceptée (elle compte dans la capacité, n'expire jamais) ; `CONFIRMED` = inscription
+/// confirmée. Défaut `CONFIRMED` : toute ligne existante, et toute ligne du JDR, reste confirmée.
+enum InscriptionStatus {
+  RESERVED
+  CONFIRMED
+}
+
 /// Inscription à capacité limitée (Epic 8, Story 8.3 — campagne épisodique uniquement).
 model Inscription {
-  id        String   @id @default(uuid())
+  id        String            @id @default(uuid())
   seanceId  String
-  seance    Seance   @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+  seance    Seance            @relation(fields: [seanceId], references: [id], onDelete: Cascade)
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    InscriptionStatus @default(CONFIRMED)
+  createdAt DateTime          @default(now())
 
   @@unique([seanceId, userId])
 }

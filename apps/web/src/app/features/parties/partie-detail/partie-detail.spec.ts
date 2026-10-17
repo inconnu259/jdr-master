@@ -331,6 +331,10 @@ async function createFixture(
           // Story 40.3 : s'inscrire à une conjonction et s'en désinscrire.
           inscrire: vi.fn(),
           desinscrire: vi.fn(),
+          // Story 40.4 : accepter / réserver / retirer une place réservée.
+          accepter: vi.fn(),
+          reserver: vi.fn(),
+          retirerReservation: vi.fn(),
         },
       },
     ],
@@ -4653,8 +4657,10 @@ describe('PartieDetail — les conjonctions d’un groupe (Story 40.1)', () => {
       heureRdv: null,
       notePratique: null,
       capacity: null,
+      placesTaken: 1,
     },
     participants: [],
+    myInscription: null,
     ...over,
   });
   const api = () =>
@@ -4899,12 +4905,32 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
       heureRdv: '20:30',
       notePratique: 'Apportez un jeu',
       capacity: 8,
+      placesTaken: 3,
     },
     participants: [
-      { userId: HOST_ID, displayName: 'Hélène Hôte', isHost: true, isAdmin: false },
-      { userId: 'a1', displayName: 'Alice Admin', isHost: false, isAdmin: true },
-      { userId: GUEST_ID, displayName: 'Gaël Invité', isHost: false, isAdmin: false },
+      {
+        userId: HOST_ID,
+        displayName: 'Hélène Hôte',
+        isHost: true,
+        isAdmin: false,
+        status: 'CONFIRMED',
+      },
+      {
+        userId: 'a1',
+        displayName: 'Alice Admin',
+        isHost: false,
+        isAdmin: true,
+        status: 'CONFIRMED',
+      },
+      {
+        userId: GUEST_ID,
+        displayName: 'Gaël Invité',
+        isHost: false,
+        isAdmin: false,
+        status: 'CONFIRMED',
+      },
     ],
+    myInscription: null,
     ...over,
   });
   const api = () =>
@@ -4913,6 +4939,9 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
       update: ReturnType<typeof vi.fn>;
       inscrire: ReturnType<typeof vi.fn>;
       desinscrire: ReturnType<typeof vi.fn>;
+      accepter: ReturnType<typeof vi.fn>;
+      reserver: ReturnType<typeof vi.fn>;
+      retirerReservation: ReturnType<typeof vi.fn>;
     };
   const settle = async (fixture: ComponentFixture<PartieDetail>) => {
     for (let i = 0; i < 12; i++) {
@@ -5173,10 +5202,16 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
       {
         ...base,
         title: 'Conjonction a (renommée)',
-        seance: { ...base.seance!, lieu: 'Paris 11e' },
+        seance: { ...base.seance!, lieu: 'Paris 11e', placesTaken: 4 },
         participants: [
           ...base.participants,
-          { userId: 'n1', displayName: 'Nina Nouvelle', isHost: false, isAdmin: false },
+          {
+            userId: 'n1',
+            displayName: 'Nina Nouvelle',
+            isHost: false,
+            isAdmin: false,
+            status: 'CONFIRMED' as const,
+          },
         ],
       },
     ]);
@@ -5378,12 +5413,14 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
       displayName: name,
       isHost: false,
       isAdmin: false,
+      status: 'CONFIRMED',
     });
     /** La carte après l'inscription de NEWCOMER (réponse du serveur). */
     const withNewcomer = (id: string, days: number, over: Partial<EventCardDto> = {}) => {
       const base = card(id, days, over);
       return {
         ...base,
+        seance: { ...base.seance!, placesTaken: base.seance!.placesTaken + 1 },
         participants: [...base.participants, participant(NEWCOMER, 'Nora Nouvelle')],
       };
     };
@@ -5535,7 +5572,7 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
         const open7 = {
           ...base,
           participants: base.participants.slice(0, 2),
-          seance: { ...base.seance!, capacity: 3 },
+          seance: { ...base.seance!, capacity: 3, placesTaken: 2 },
         };
         const { fixture, el } = await createFixture(groupe(), NEWCOMER, {
           members: [],
@@ -5646,7 +5683,11 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
 
       const base = card('a', 3);
       api().list.mockResolvedValue([
-        { ...base, participants: [...base.participants, participant('n9', 'Noé Neuf')] },
+        {
+          ...base,
+          seance: { ...base.seance!, placesTaken: 4 },
+          participants: [...base.participants, participant('n9', 'Noé Neuf')],
+        },
       ]);
       TestBed.inject(PartiesService).notifyChanged();
       await settle(fixture);
@@ -5673,6 +5714,352 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
       await open(fixture, el, 'a');
       expect(NON_JDR_BANNED_WORDS.test(q('app-event-dialog')?.textContent ?? '')).toBe(false);
       expect(NON_JDR_BANNED_WORDS.test(el.textContent ?? '')).toBe(false);
+    });
+  });
+
+  // ─── Story 40.4 : réserver une place à des membres ─────────────────────────────────────────────────
+
+  describe('places réservées (Story 40.4)', () => {
+    const RESA_ID = 'membre-reserve';
+    const OUTSIDER_ID = 'membre-sans-place';
+    const ACCEPT = '.ed__accept';
+    const DECLINE = '.ed__decline';
+    const UNRESERVE = '.ed__unreserve';
+    const buttonLabels = (selector: string) =>
+      Array.from(document.body.querySelectorAll(selector)).map((b) => b.textContent?.trim());
+    const member = (userId: string, displayName: string): PartieMemberDto => ({
+      userId,
+      pseudo: displayName.toLowerCase(),
+      displayName,
+      role: 'MEMBER',
+      joinedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const MEMBERS: PartieMemberDto[] = [
+      member(HOST_ID, 'Hélène Hôte'),
+      member('a1', 'Alice Admin'),
+      member(GUEST_ID, 'Gaël Invité'),
+      member(RESA_ID, 'Sam Réservé'),
+      member('cand-1', 'Camille'),
+      member('cand-2', 'Dylan'),
+    ];
+    /** La conjonction vue de l'hôte : une place réservée à RESA_ID figure dans les participants. */
+    const hostView = (id: string, days: number, over: Partial<EventCardDto> = {}) => {
+      const base = card(id, days, over);
+      return {
+        ...base,
+        seance: { ...base.seance!, placesTaken: 4 },
+        participants: [
+          ...base.participants,
+          {
+            userId: RESA_ID,
+            displayName: 'Sam Réservé',
+            isHost: false,
+            isAdmin: false,
+            status: 'RESERVED' as const,
+          },
+        ],
+      };
+    };
+    /** La même conjonction vue de la personne réservée : sa place n'est pas listée, elle lit myInscription. */
+    const reservedView = (id: string, days: number, over: Partial<EventCardDto> = {}) => {
+      const base = card(id, days, over);
+      return {
+        ...base,
+        seance: { ...base.seance!, placesTaken: 4 },
+        myInscription: 'RESERVED' as const,
+      };
+    };
+
+    it('la personne réservée lit « Place réservée » (carte et fenêtre), « Accepter » / « Décliner », ni « S’inscrire » ni « Complet »', async () => {
+      const { fixture, el } = await createFixture(groupe(), RESA_ID, {
+        members: [],
+        events: [reservedView('a', 3, { seance: { ...card('a', 3).seance!, capacity: 4, placesTaken: 4 } })],
+      });
+      const chip = cardEl(el, 'a').closest('article')!.querySelector('.event-card__chip')!;
+      expect(chip.textContent?.trim()).toBe(tone['partie.ralliement_event_chip_reserved']);
+      expect(chip.classList).not.toContain('event-card__chip--dotted');
+      // La conjonction est pleine, mais cette place est la sienne : ni badge « Complet » ni bouton.
+      expect(cardEl(el, 'a').closest('article')!.querySelector('.status-badge')?.textContent?.trim()).toBe(
+        'Dans 3 jours',
+      );
+
+      await open(fixture, el, 'a');
+      expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_situation_reserved'],
+      );
+      expect(buttonLabels('.ed__respond button')).toEqual([
+        tone['partie.ralliement_event_accept_btn'],
+        tone['partie.ralliement_event_decline_btn'],
+      ]);
+      expect(q('.ed__signup')).toBeNull();
+      expect(q('.ed__full')).toBeNull();
+      expect(q('.ed__unsubscribe')).toBeNull();
+      // Sa place n'est pas listée parmi les participants ; aucun sélecteur de réservation.
+      expect(document.body.querySelectorAll('app-participant-chip').length).toBe(3);
+      expect(q('.ed__reserve')).toBeNull();
+      expect(NON_JDR_BANNED_WORDS.test(q('app-event-dialog')?.textContent ?? '')).toBe(false);
+    });
+
+    it('« Accepter » : un appel, la carte à jour remplace l’ancienne (chip « Je participe », boutons retirés)', async () => {
+      const { fixture, el } = await createFixture(groupe(), RESA_ID, {
+        members: [],
+        events: [reservedView('a', 3)],
+      });
+      await open(fixture, el, 'a');
+
+      const base = card('a', 3);
+      const accepted = {
+        ...base,
+        seance: { ...base.seance!, placesTaken: 4 },
+        participants: [
+          ...base.participants,
+          {
+            userId: RESA_ID,
+            displayName: 'Sam Réservé',
+            isHost: false,
+            isAdmin: false,
+            status: 'CONFIRMED' as const,
+          },
+        ],
+        myInscription: 'CONFIRMED' as const,
+      };
+      api().accepter.mockResolvedValue(accepted);
+      api().list.mockResolvedValue([accepted]);
+      q<HTMLButtonElement>(ACCEPT)!.click();
+      await settle(fixture);
+
+      expect(api().accepter).toHaveBeenCalledTimes(1);
+      expect(api().accepter).toHaveBeenCalledWith('s-a');
+      expect(q(ACCEPT)).toBeNull();
+      expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_situation_registered'],
+      );
+      expect(document.body.querySelectorAll('app-participant-chip').length).toBe(4);
+      expect(
+        cardEl(el, 'a').closest('article')!.querySelector('.event-card__chip')?.textContent?.trim(),
+      ).toBe(tone['partie.ralliement_event_chip_participating']);
+      // Il peut désormais se désinscrire.
+      expect(q('.ed__unsubscribe')).not.toBeNull();
+    });
+
+    it('« Décliner » : la désinscription est appelée, la place est rendue (chip « Pas inscrit·e »)', async () => {
+      const { fixture, el } = await createFixture(groupe(), RESA_ID, {
+        members: [],
+        events: [reservedView('a', 3)],
+      });
+      await open(fixture, el, 'a');
+
+      const freed = card('a', 3);
+      api().desinscrire.mockResolvedValue(freed);
+      api().list.mockResolvedValue([freed]);
+      q<HTMLButtonElement>(DECLINE)!.click();
+      await settle(fixture);
+
+      expect(api().desinscrire).toHaveBeenCalledTimes(1);
+      expect(api().desinscrire).toHaveBeenCalledWith('s-a');
+      expect(api().accepter).not.toHaveBeenCalled();
+      expect(q(DECLINE)).toBeNull();
+      expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_situation_none'],
+      );
+      expect(q('.event-card__chip--dotted')).not.toBeNull();
+    });
+
+    it('double clic sur « Accepter » : un seul appel (garde en vol) ; le refus du serveur s’affiche dans la fenêtre et les boutons redeviennent actifs', async () => {
+      const { fixture, el } = await createFixture(groupe(), RESA_ID, {
+        members: [],
+        events: [reservedView('a', 3)],
+      });
+      await open(fixture, el, 'a');
+      let reject!: (e: unknown) => void;
+      api().accepter.mockReturnValue(new Promise((_, r) => (reject = r)));
+
+      q<HTMLButtonElement>(ACCEPT)!.click();
+      await settle(fixture);
+      expect(q<HTMLButtonElement>(ACCEPT)!.disabled).toBe(true);
+      expect(q<HTMLButtonElement>(DECLINE)!.disabled).toBe(true);
+      q<HTMLButtonElement>(ACCEPT)!.click();
+      await settle(fixture);
+      expect(api().accepter).toHaveBeenCalledTimes(1);
+
+      reject({ status: 400, error: { message: 'Cette conjonction est passée : les inscriptions ne peuvent plus changer' } });
+      await settle(fixture);
+      expect(q('.ed__error')?.textContent?.trim()).toBe(
+        'Cette conjonction est passée : les inscriptions ne peuvent plus changer',
+      );
+      expect(q<HTMLButtonElement>(ACCEPT)!.disabled).toBe(false);
+    });
+
+    it('une conjonction passée : la place réservée n’offre plus de réponse, la chip dit « Pas inscrit·e »', async () => {
+      const { fixture, el } = await createFixture(groupe(), RESA_ID, {
+        members: [],
+        events: [reservedView('a', -2)],
+      });
+      expect(
+        cardEl(el, 'a').closest('article')!.querySelector('.event-card__chip')?.textContent?.trim(),
+      ).toBe(tone['partie.ralliement_event_chip_not_registered']);
+      await open(fixture, el, 'a');
+      expect(q(ACCEPT)).toBeNull();
+      expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_situation_reserved_past'],
+      );
+    });
+
+    it('l’hôte voit la réservation en attente : pastille pointillée, texte « invité·e, n’a pas encore accepté », action « Retirer la réservation »', async () => {
+      const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+        members: MEMBERS,
+        events: [hostView('a', 3)],
+      });
+      await open(fixture, el, 'a');
+
+      const pending = document.body.querySelector('.pc--pending')!;
+      expect(pending).not.toBeNull();
+      expect(pending.textContent).toContain('Sam Réservé — invité·e, n’a pas encore accepté');
+      expect(pending.querySelector('.pc__avatar--faded')).not.toBeNull();
+      // L'hôte compte quatre participants dont la réservation en attente ; « inscrits » n'en fait pas partie.
+      expect(document.body.querySelectorAll('app-participant-chip').length).toBe(4);
+      expect(q('.ed__row--participation dd')?.textContent?.trim()).toBe(
+        '8 places · 3 inscrits · 4 libres',
+      );
+      expect(buttonLabels(UNRESERVE)).toEqual([tone['partie.ralliement_event_unreserve_btn']]);
+      expect(q<HTMLButtonElement>(UNRESERVE)!.getAttribute('aria-label')).toBe(
+        'Retirer la réservation de Sam Réservé',
+      );
+    });
+
+    it('l’hôte retire la réservation : un appel, la carte à jour remplace l’ancienne', async () => {
+      const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+        members: MEMBERS,
+        events: [hostView('a', 3)],
+      });
+      await open(fixture, el, 'a');
+
+      const freed = card('a', 3);
+      api().retirerReservation.mockResolvedValue(freed);
+      api().list.mockResolvedValue([freed]);
+      q<HTMLButtonElement>(UNRESERVE)!.click();
+      await settle(fixture);
+
+      expect(api().retirerReservation).toHaveBeenCalledTimes(1);
+      expect(api().retirerReservation).toHaveBeenCalledWith('s-a', RESA_ID);
+      expect(q('.pc--pending')).toBeNull();
+      expect(q(UNRESERVE)).toBeNull();
+      expect(document.body.querySelectorAll('app-participant-chip').length).toBe(3);
+    });
+
+    it('l’hôte réserve : le sélecteur propose les membres sans place (ni l’hôte ni les participants), un clic appelle le serveur et met la carte à jour', async () => {
+      const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+        members: MEMBERS,
+        events: [hostView('a', 3, { seance: { ...hostView('a', 3).seance!, placesTaken: 4 } })],
+      });
+      await open(fixture, el, 'a');
+
+      expect(q('.ed__reserve .ed__section-title')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_reserve_label'],
+      );
+      expect(buttonLabels('.ed__candidate')).toEqual(['Camille', 'Dylan']);
+      expect(q('.ed__reserve .ed__hint')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_reserve_hint'],
+      );
+      expect(q<HTMLButtonElement>('.ed__candidate')!.getAttribute('aria-label')).toBe(
+        'Réserver une place à Camille',
+      );
+
+      const base = hostView('a', 3);
+      const reserved = {
+        ...base,
+        seance: { ...base.seance!, placesTaken: 5 },
+        participants: [
+          ...base.participants,
+          {
+            userId: 'cand-1',
+            displayName: 'Camille',
+            isHost: false,
+            isAdmin: false,
+            status: 'RESERVED' as const,
+          },
+        ],
+      };
+      api().reserver.mockResolvedValue(reserved);
+      api().list.mockResolvedValue([reserved]);
+      q<HTMLButtonElement>('.ed__candidate')!.click();
+      await settle(fixture);
+
+      expect(api().reserver).toHaveBeenCalledTimes(1);
+      expect(api().reserver).toHaveBeenCalledWith('s-a', 'cand-1');
+      expect(buttonLabels('.ed__candidate')).toEqual(['Dylan']);
+      expect(document.body.querySelectorAll('.pc--pending').length).toBe(2);
+    });
+
+    it('refus du serveur à la réservation (complet) : message français dans la fenêtre, le sélecteur reste utilisable', async () => {
+      const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+        members: MEMBERS,
+        events: [hostView('a', 3)],
+      });
+      await open(fixture, el, 'a');
+      api().reserver.mockRejectedValue({
+        status: 409,
+        error: { message: 'Cette conjonction est complète : plus aucune place disponible' },
+      });
+
+      q<HTMLButtonElement>('.ed__candidate')!.click();
+      await settle(fixture);
+
+      expect(q('.ed__error')?.textContent?.trim()).toBe(
+        'Cette conjonction est complète : plus aucune place disponible',
+      );
+      expect(q<HTMLButtonElement>('.ed__candidate')!.disabled).toBe(false);
+    });
+
+    it('conjonction pleine : les pastilles de réservation sont désactivées ; « Tous les membres », passée ou autre membre : aucun sélecteur', async () => {
+      const full = hostView('a', 3, {});
+      const fullCard = { ...full, seance: { ...full.seance!, capacity: 4, placesTaken: 4 } };
+      const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+        members: MEMBERS,
+        events: [
+          fullCard,
+          { ...card('b', 4), seance: { ...card('b', 4).seance!, capacity: null } },
+          hostView('c', -2),
+        ],
+      });
+      await open(fixture, el, 'a');
+      expect(Array.from(document.body.querySelectorAll<HTMLButtonElement>('.ed__candidate')).every((b) => b.disabled)).toBe(true);
+      q<HTMLButtonElement>('.ed__close')!.click();
+      await settle(fixture);
+
+      await open(fixture, el, 'b');
+      expect(q('.ed__reserve')).toBeNull();
+      q<HTMLButtonElement>('.ed__close')!.click();
+      await settle(fixture);
+
+      await open(fixture, el, 'c');
+      expect(q('.ed__reserve')).toBeNull();
+      expect(q(UNRESERVE)).toBeNull();
+    });
+
+    it('un autre membre ne voit ni la réservation, ni le sélecteur ; « Complet » vient de « placesTaken », sans révéler qui tient la place', async () => {
+      const base = card('a', 3);
+      const memberView = {
+        ...base,
+        seance: { ...base.seance!, capacity: 4, placesTaken: 4 },
+        participants: base.participants.slice(0, 3),
+      };
+      const { fixture, el } = await createFixture(groupe(), OUTSIDER_ID, {
+        members: MEMBERS,
+        events: [{ ...memberView, participants: base.participants.slice(0, 3) }],
+      });
+      expect(cardEl(el, 'a').closest('article')!.querySelector('.status-badge')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_badge_full'],
+      );
+      await open(fixture, el, 'a');
+      expect(q('.ed__full')).not.toBeNull();
+      expect(q('.ed__signup')).toBeNull();
+      expect(q('.pc--pending')).toBeNull();
+      expect(q('.ed__reserve')).toBeNull();
+      expect(document.body.textContent).not.toContain('Sam Réservé');
+      expect(q('.ed__row--participation dd')?.textContent?.trim()).toBe(
+        '4 places · 3 inscrits · 0 libre',
+      );
     });
   });
 

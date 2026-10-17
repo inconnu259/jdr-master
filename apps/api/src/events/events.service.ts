@@ -9,6 +9,7 @@ import type {
   DaySlot,
   EventCardDto,
   EventParticipantDto,
+  InscriptionStatus,
   MyCalendarOpenInscriptionEntry,
   MyCalendarSeanceEntry,
   PartieKind,
@@ -32,7 +33,7 @@ import {
 import type { SeanceDatePort } from '../poll/ports/seance-date.port';
 import { PrismaService } from '../prisma/prisma.service';
 import { todayKeyUtc } from './day-key';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 
 /** Données de base d'un événement (Story 37.3, AD-3). `ownerId` = propriétaire de la partie pour le
  *  JDR ; l'hôte pour une conjonction de groupe (Story 40.1). `seance` : données de la séance unique
@@ -56,6 +57,10 @@ export interface EventSeanceInput {
   heureRdv: string | null;
   notePratique: string | null;
   capacity: number | null;
+  /** Story 40.4 : membres à qui l'hôte réserve une place À LA CRÉATION (lignes `RESERVED`, même
+   *  transaction). Règles vérifiées sous le verrou de la partie par `createInTx` : places limitées,
+   *  distincts, jamais l'hôte, au plus `capacity − 1`, tous membres du groupe. */
+  reservedUserIds?: string[];
 }
 
 /** Rappel d'extension : écrit, dans la MÊME transaction, la ligne qui étend l'événement (le
@@ -95,6 +100,20 @@ export const PAST_ROSTER_MESSAGE =
   'Cette conjonction est passée : les inscriptions ne peuvent plus changer';
 /** Refus de s'inscrire à une conjonction dont toutes les places sont prises (Story 40.3). */
 export const FULL_EVENT_MESSAGE = 'Cette conjonction est complète : plus aucune place disponible';
+/** Refus de réserver une place quand la conjonction accueille « Tous les membres » (Story 40.4). */
+export const RESERVE_NOT_LIMITED_MESSAGE =
+  'Réserver une place suppose une conjonction à places limitées';
+/** Refus de réserver une place à l'hôte, qui occupe déjà la sienne (Story 40.4). */
+export const RESERVE_HOST_MESSAGE = "L'hôte occupe déjà une place de sa conjonction";
+/** Refus de réserver une place à quelqu'un qui n'est pas membre du groupe (Story 40.4). */
+export const RESERVE_NOT_MEMBER_MESSAGE = "Cette personne n'est pas membre du groupe";
+/** Refus de réserver une place à quelqu'un qui est déjà inscrit ou a déjà une place réservée (40.4). */
+export const RESERVE_ALREADY_MESSAGE = 'Cette personne a déjà une place dans cette conjonction';
+/** Refus de réserver à la création plus de places que la capacité n'en laisse à l'hôte (Story 40.4). */
+export const RESERVE_TOO_MANY_MESSAGE =
+  "Le nombre de places réservées ne peut pas dépasser le nombre de places moins celle de l'hôte";
+/** Refus de réserver la même personne deux fois dans une même demande (Story 40.4). */
+export const RESERVE_DUPLICATE_MESSAGE = 'Une même personne ne peut pas recevoir deux places';
 
 /** Destinataire d'un rappel : identité minimale, jamais plus que l'adresse à qui écrire. */
 export interface ReminderRecipient {
@@ -105,8 +124,9 @@ export interface ReminderRecipient {
 /** Séance due telle que lue par la tâche horaire : de quoi décider des destinataires de son rappel
  *  (Story 40.3). `gameSystemId` est lu avec le type de partie pour reconnaître un groupe. */
 export interface ReminderSeance {
-  /** Inscrits à la séance (lus avec la séance : aucune requête par séance). */
-  inscriptions?: { user: ReminderRecipient }[];
+  /** Inscrits à la séance (lus avec la séance : aucune requête par séance). Story 40.4 : un groupe ne
+   *  rappelle que les inscriptions confirmées — `status` absent compte comme confirmé (JDR). */
+  inscriptions?: { status?: InscriptionStatus; user: ReminderRecipient }[];
   event: {
     /** Hôte de l'événement (groupe de ralliement) ; absent si son compte a disparu. */
     owner?: ReminderRecipient | null;
@@ -121,6 +141,16 @@ export interface ReminderSeance {
   };
 }
 
+/** De quoi écrire l'e-mail d'une place réservée (Story 40.4), lu après le commit. */
+export interface ReservationNotice {
+  eventTitle: string;
+  hostName: string;
+  startDate: Date | null;
+  startSlot: DaySlot | null;
+  lieu: string | null;
+  recipients: ReminderRecipient[];
+}
+
 const FROZEN_ROSTER_MESSAGE = 'Cette séance a déjà une date validée — les inscriptions sont figées';
 
 /** Story 40.1 : un GROUPE de ralliement (`CAMPAGNE_EPISODIQUE` de la famille `ralliement`) — ses
@@ -128,6 +158,12 @@ const FROZEN_ROSTER_MESSAGE = 'Cette séance a déjà une date validée — les 
  *  (`ONE_SHOT`) garde la règle historique : tous les membres. */
 export function isRalliementGroup(partie: { kind: PartieKind; gameSystemId: string }): boolean {
   return partie.kind === 'CAMPAGNE_EPISODIQUE' && familyOf(partie.gameSystemId) === 'ralliement';
+}
+
+/** Story 40.4 : l'inscription participe vraiment (hôte mis à part) — tout sauf une place seulement
+ *  réservée. Un statut absent (lignes du JDR, qui ne connaît pas la réservation) compte comme confirmé. */
+function isConfirmed(inscription: { status?: InscriptionStatus }): boolean {
+  return inscription.status !== 'RESERVED';
 }
 
 /** Ordre des créneaux d'une même journée (tri des cartes, Story 40.1). */
@@ -185,6 +221,10 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       this.createInTx(tx, { ...input, partieId: grant.partieId }, extend),
     );
     this.realtimeEvents.emit(partieTopic(grant.partieId));
+    // Story 40.4 : chaque membre à qui une place est réservée d'emblée voit arriver sa situation.
+    for (const userId of input.seance?.reservedUserIds ?? []) {
+      this.realtimeEvents.emit(userTopic(userId));
+    }
     return created;
   }
 
@@ -227,7 +267,7 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       return { event, extension };
     }
     // Story 40.1 : séance datée d'emblée (conjonction à date fixée) — une plage d'un seul créneau.
-    await tx.seance.create({
+    const created = await tx.seance.create({
       data: {
         eventId: event.id,
         startDate: seance.date,
@@ -240,10 +280,60 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
         inscriptionMax: seance.capacity,
       },
     });
+    // Story 40.4 : places réservées à des membres, dans la MÊME transaction que l'événement.
+    await this.createReservationsInTx(tx, input, created.id, seance);
     // La date la plus proche de la partie peut changer : recalcul dans LA MÊME transaction (le
     // verrou de la partie est déjà tenu, pris par `assertCanAddEvent`).
     await this.recalculateNextSessionInTx(tx, input.partieId);
     return { event, extension };
+  }
+
+  /** Story 40.4 : écrit les lignes `RESERVED` demandées à la création d'une conjonction. Les règles sont
+   *  vérifiées ICI, dans la transaction (le verrou de la partie est déjà tenu) : places limitées,
+   *  personnes distinctes, jamais l'hôte, au plus `capacité − 1` (l'hôte occupe une place), toutes
+   *  membres du groupe. Un refus est un 400 qui annule la création entière. */
+  private async createReservationsInTx(
+    tx: Prisma.TransactionClient,
+    event: Pick<CreateEventInput, 'partieId' | 'ownerId'>,
+    seanceId: string,
+    seance: EventSeanceInput,
+  ): Promise<void> {
+    const ids = seance.reservedUserIds ?? [];
+    if (ids.length === 0) return;
+    if (seance.capacity === null) throw new BadRequestException(RESERVE_NOT_LIMITED_MESSAGE);
+    if (new Set(ids).size !== ids.length) throw new BadRequestException(RESERVE_DUPLICATE_MESSAGE);
+    if (event.ownerId && ids.includes(event.ownerId)) {
+      throw new BadRequestException(RESERVE_HOST_MESSAGE);
+    }
+    if (ids.length > seance.capacity - 1) throw new BadRequestException(RESERVE_TOO_MANY_MESSAGE);
+    await this.assertMembers(tx, event.partieId, ids);
+    // Horodatage croissant d'une milliseconde par personne : le tri par ordre d'inscription (puis
+    // identifiant) garde l'ordre choisi par l'hôte, au lieu de départager au hasard des lignes écrites
+    // dans le même instant.
+    const base = Date.now();
+    await tx.inscription.createMany({
+      data: ids.map((userId, i) => ({
+        seanceId,
+        userId,
+        status: 'RESERVED' as const,
+        createdAt: new Date(base + i),
+      })),
+    });
+  }
+
+  /** Toutes ces personnes sont des membres actuels du groupe (une seule lecture), sinon 400. */
+  private async assertMembers(
+    tx: Prisma.TransactionClient,
+    partieId: string,
+    userIds: string[],
+  ): Promise<void> {
+    const members = await tx.membership.findMany({
+      where: { partieId, userId: { in: userIds } },
+      select: { userId: true },
+    });
+    if (new Set(members.map((m) => m.userId)).size !== new Set(userIds).size) {
+      throw new BadRequestException(RESERVE_NOT_MEMBER_MESSAGE);
+    }
   }
 
   /** Titre/description d'un événement, dans la transaction de l'appelant (qui émet après). */
@@ -273,14 +363,24 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
   // ─── Cartes d'événements (Story 40.1) ───────────────────────────────────────────────────────
 
   /**
-   * Cartes des événements de la partie de l'autorisation (conjonctions d'un groupe) : projection
-   * EXPLICITE — identifiant, titre, hôte (identifiant + nom affiché) et séance unique (date, créneau,
-   * lieu, heure, note pratique, capacité) et participants (Story 40.2 : l'hôte d'abord, puis les
-   * inscrits par ordre d'inscription, avec leur rôle de groupe). Trois lectures groupées au plus
-   * (événements, inscriptions, appartenances), jamais une requête par événement. `eventIds` restreint la lecture (carte d'un événement tout juste
-   * créé). Ordre : date croissante, les événements sans date en dernier, puis création.
+   * Cartes des événements de la partie de l'autorisation (conjonctions d'un groupe), vues par
+   * `viewerId` : projection EXPLICITE — identifiant, titre, hôte (identifiant + nom affiché) et séance
+   * unique (date, créneau, lieu, heure, note pratique, capacité, places prises) et participants (Story
+   * 40.2 : l'hôte d'abord, puis les inscrits par ordre d'inscription, avec leur rôle de groupe).
+   * Trois lectures groupées au plus (événements, inscriptions, appartenances), jamais une requête par
+   * événement. `eventIds` restreint la lecture (carte d'un événement tout juste créé). Ordre : date
+   * croissante, les événements sans date en dernier, puis création.
+   *
+   * Story 40.4 — visibilité : une place RÉSERVÉE (en attente d'acceptation) n'est listée parmi les
+   * participants qu'à l'HÔTE de la conjonction ; pour tous les autres, `placesTaken` (hôte + toutes les
+   * lignes) rend « Complet » et « libres » justes sans révéler qui la tient, et `myInscription` dit
+   * l'état de la ligne de celui qui lit.
    */
-  async listCards(grant: PartieGrant, eventIds?: string[]): Promise<EventCardDto[]> {
+  async listCards(
+    grant: PartieGrant,
+    viewerId: string,
+    eventIds?: string[],
+  ): Promise<EventCardDto[]> {
     const events = await this.prisma.event.findMany({
       where: {
         partieId: grant.partieId,
@@ -310,10 +410,11 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       },
     });
 
-    const participantsBySeance = await this.participantsOf(grant.partieId, events);
+    const rosterBySeance = await this.rosterOf(grant.partieId, viewerId, events);
 
     const cards = events.map((e): EventCardDto => {
       const s = e.seances[0];
+      const roster = s ? rosterBySeance.get(s.id) : undefined;
       return {
         id: e.id,
         title: e.title,
@@ -328,9 +429,11 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
               heureRdv: s.heureRdv ?? null,
               notePratique: s.notePratique ?? null,
               capacity: s.inscriptionMax ?? null,
+              placesTaken: roster?.placesTaken ?? (e.ownerId ? 1 : 0),
             }
           : null,
-        participants: s ? (participantsBySeance.get(s.id) ?? []) : [],
+        participants: roster?.participants ?? [],
+        myInscription: roster?.myInscription ?? null,
       };
     });
     // Tri stable (création déjà ordonnée par la requête) : par date puis créneau (matin <
@@ -346,26 +449,52 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     });
   }
 
-  /** Participants de chaque séance (Story 40.2), en deux lectures pour TOUS les événements : les
+  /** Inscrits de chaque séance (Story 40.2), en deux lectures pour TOUS les événements : les
    *  inscriptions (ordre d'inscription) puis les appartenances au groupe (rôle). L'hôte vient en
    *  premier ; un inscrit qui serait aussi l'hôte n'est listé qu'une fois. Un ancien membre (plus de
-   *  ligne d'appartenance) reste listé, sans le drapeau administrateur. */
-  private async participantsOf(
+   *  ligne d'appartenance) reste listé, sans le drapeau administrateur.
+   *
+   *  Story 40.4 : `participants` n'inclut une ligne `RESERVED` que si `viewerId` est l'hôte de
+   *  l'événement ; `placesTaken` compte l'hôte et TOUTES les lignes ; `myInscription` est le statut de
+   *  la ligne de `viewerId`. */
+  private async rosterOf(
     partieId: string,
+    viewerId: string,
     events: {
       ownerId: string | null;
       owner: { displayName: string } | null;
       seances: { id: string }[];
     }[],
-  ): Promise<Map<string, EventParticipantDto[]>> {
-    const result = new Map<string, EventParticipantDto[]>();
+  ): Promise<
+    Map<
+      string,
+      {
+        participants: EventParticipantDto[];
+        placesTaken: number;
+        myInscription: InscriptionStatus | null;
+      }
+    >
+  > {
+    const result = new Map<
+      string,
+      {
+        participants: EventParticipantDto[];
+        placesTaken: number;
+        myInscription: InscriptionStatus | null;
+      }
+    >();
     const seanceIds = events.flatMap((e) => e.seances.map((s) => s.id));
     if (seanceIds.length === 0) return result;
 
     const inscriptions = await this.prisma.inscription.findMany({
       where: { seanceId: { in: seanceIds } },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: { seanceId: true, userId: true, user: { select: { displayName: true } } },
+      select: {
+        seanceId: true,
+        userId: true,
+        status: true,
+        user: { select: { displayName: true } },
+      },
     });
     const userIds = new Set<string>(inscriptions.map((i) => i.userId));
     for (const e of events) if (e.ownerId) userIds.add(e.ownerId);
@@ -384,6 +513,7 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     for (const e of events) {
       const s = e.seances[0];
       if (!s) continue;
+      const viewerIsHost = e.ownerId !== null && e.ownerId === viewerId;
       const participants: EventParticipantDto[] = [];
       if (e.ownerId && e.owner) {
         participants.push({
@@ -391,18 +521,26 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
           displayName: e.owner.displayName,
           isHost: true,
           isAdmin: adminIds.has(e.ownerId),
+          status: 'CONFIRMED',
         });
       }
+      let placesTaken = e.ownerId ? 1 : 0;
+      let myInscription: InscriptionStatus | null = null;
       for (const i of inscritsBySeance.get(s.id) ?? []) {
         if (i.userId === e.ownerId) continue;
+        placesTaken += 1;
+        if (i.userId === viewerId) myInscription = i.status;
+        // Une place réservée n'est visible que de l'hôte (qui la gère).
+        if (i.status === 'RESERVED' && !viewerIsHost) continue;
         participants.push({
           userId: i.userId,
           displayName: i.user.displayName,
           isHost: false,
           isAdmin: adminIds.has(i.userId),
+          status: i.status,
         });
       }
-      result.set(s.id, participants);
+      result.set(s.id, { participants, placesTaken, myInscription });
     }
     return result;
   }
@@ -757,18 +895,27 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
    */
   async inscrireConjonction(grant: PartieGrant, seanceId: string, userId: string): Promise<void> {
     await this.assertSeanceInGrant(grant, seanceId);
-    await this.prisma.$transaction(async (tx) => {
+    const confirmed = await this.prisma.$transaction(async (tx) => {
       const { seance, ownerId } = await this.lockedSeanceOfEvent(tx, seanceId);
       this.assertNotPast(seance.startDate);
 
       // Idempotence : l'hôte occupe déjà sa place, un inscrit reste inscrit — avant tout comptage,
       // pour qu'une conjonction pleine ne rejette jamais quelqu'un qui en fait déjà partie.
-      if (userId === ownerId) return;
+      if (userId === ownerId) return false;
       const existing = await tx.inscription.findUnique({
         where: { seanceId_userId: { seanceId, userId } },
-        select: { id: true },
+        select: { id: true, status: true },
       });
-      if (existing) return;
+      if (existing) {
+        // Story 40.4 : s'inscrire en tenant une place réservée vaut l'accepter (la place compte déjà
+        // dans la capacité) — même effet que `accepterReservation`, sous le même verrou.
+        if (existing.status !== 'RESERVED') return false;
+        await tx.inscription.updateMany({
+          where: { seanceId, userId, status: 'RESERVED' },
+          data: { status: 'CONFIRMED' },
+        });
+        return true;
+      }
 
       if (seance.inscriptionMax !== null) {
         const inscrits = await tx.inscription.count({
@@ -778,8 +925,10 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
         if (taken >= seance.inscriptionMax) throw new ConflictException(FULL_EVENT_MESSAGE);
       }
       await tx.inscription.create({ data: { seanceId, userId } });
+      return false;
     });
     this.realtimeEvents.emit(partieTopic(grant.partieId));
+    if (confirmed) this.realtimeEvents.emit(userTopic(userId));
   }
 
   /**
@@ -793,13 +942,140 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     userId: string,
   ): Promise<void> {
     await this.assertSeanceInGrant(grant, seanceId);
+    const removed = await this.prisma.$transaction(async (tx) => {
+      const { seance, ownerId } = await this.lockedSeanceOfEvent(tx, seanceId);
+      this.assertNotPast(seance.startDate);
+      if (userId === ownerId) return 0;
+      const { count } = await tx.inscription.deleteMany({ where: { seanceId, userId } });
+      return count;
+    });
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
+    // Story 40.4 : décliner une place réservée libère la place — la personne voit sa situation (et
+    // son signal) changer sur tous ses onglets.
+    if (removed > 0) this.realtimeEvents.emit(userTopic(userId));
+  }
+
+  // ─── Réservation de places (Story 40.4) ─────────────────────────────────────────────────────
+
+  /**
+   * L'hôte réserve une place de sa conjonction à un membre : une ligne `Inscription` de statut
+   * `RESERVED`. L'autorisation `SEANCE_RESERVE` (hôte de l'événement) est celle de l'appelant.
+   * Même transaction et même verrou `Event` que les inscriptions (`FOR UPDATE` posé AVANT tout
+   * comptage) : une réservation et une inscription concurrentes sur la dernière place n'en
+   * acceptent qu'une, l'autre reçoit 409.
+   *
+   * Règles, dans l'ordre : conjonction pas passée (400) ; places limitées (400 — « Tous les membres »
+   * n'a rien à réserver) ; la cible n'est pas l'hôte (400) ; elle est membre actuel du groupe (400) ;
+   * elle n'a pas déjà de ligne, réservée ou confirmée (409) ; il reste une place, la réservation
+   * comptant dans la capacité comme une inscription (409). Une place réservée ne périme jamais.
+   * Émet `partie:{id}` puis `user:{cible}` après validation ; les signaux de l'accueil et l'e-mail sont
+   * ceux de l'appelant.
+   */
+  async reserverPlace(grant: PartieGrant, seanceId: string, targetUserId: string): Promise<void> {
+    await this.assertSeanceInGrant(grant, seanceId);
     await this.prisma.$transaction(async (tx) => {
       const { seance, ownerId } = await this.lockedSeanceOfEvent(tx, seanceId);
       this.assertNotPast(seance.startDate);
-      if (userId === ownerId) return;
-      await tx.inscription.deleteMany({ where: { seanceId, userId } });
+      if (seance.inscriptionMax === null) {
+        throw new BadRequestException(RESERVE_NOT_LIMITED_MESSAGE);
+      }
+      if (targetUserId === ownerId) throw new BadRequestException(RESERVE_HOST_MESSAGE);
+      await this.assertMembers(tx, grant.partieId, [targetUserId]);
+      const existing = await tx.inscription.findUnique({
+        where: { seanceId_userId: { seanceId, userId: targetUserId } },
+        select: { id: true },
+      });
+      if (existing) throw new ConflictException(RESERVE_ALREADY_MESSAGE);
+      // Toute ligne compte (confirmée ou réservée), plus l'hôte qui occupe sa place sans ligne.
+      const rows = await tx.inscription.count({
+        where: { seanceId, ...(ownerId ? { userId: { not: ownerId } } : {}) },
+      });
+      if (rows + (ownerId ? 1 : 0) >= seance.inscriptionMax) {
+        throw new ConflictException(FULL_EVENT_MESSAGE);
+      }
+      await tx.inscription.create({ data: { seanceId, userId: targetUserId, status: 'RESERVED' } });
     });
     this.realtimeEvents.emit(partieTopic(grant.partieId));
+    this.realtimeEvents.emit(userTopic(targetUserId));
+  }
+
+  /**
+   * L'hôte retire la réservation d'un membre : la ligne `RESERVED` est supprimée, la place est libre.
+   * Même cadre, même verrou et même refus d'une conjonction passée (400) que la réservation.
+   * Idempotent : rien à retirer si la personne n'a pas de place réservée — une inscription
+   * CONFIRMÉE n'est jamais touchée par cette voie. Émet `partie:{id}` puis `user:{cible}`.
+   */
+  async retirerReservation(
+    grant: PartieGrant,
+    seanceId: string,
+    targetUserId: string,
+  ): Promise<void> {
+    await this.assertSeanceInGrant(grant, seanceId);
+    const removed = await this.prisma.$transaction(async (tx) => {
+      const { seance } = await this.lockedSeanceOfEvent(tx, seanceId);
+      this.assertNotPast(seance.startDate);
+      const { count } = await tx.inscription.deleteMany({
+        where: { seanceId, userId: targetUserId, status: 'RESERVED' },
+      });
+      return count;
+    });
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
+    if (removed > 0) this.realtimeEvents.emit(userTopic(targetUserId));
+  }
+
+  /**
+   * La personne à qui une place est réservée l'accepte : sa ligne passe de `RESERVED` à `CONFIRMED`
+   * (elle comptait déjà dans la capacité). Même cadre et même verrou que les autres écritures ; une
+   * conjonction passée est refusée (400). Idempotent : sans ligne, ou avec une ligne déjà confirmée,
+   * rien ne change. Émet `partie:{id}` puis `user:{userId}`.
+   */
+  async accepterReservation(grant: PartieGrant, seanceId: string, userId: string): Promise<void> {
+    await this.assertSeanceInGrant(grant, seanceId);
+    const accepted = await this.prisma.$transaction(async (tx) => {
+      const { seance } = await this.lockedSeanceOfEvent(tx, seanceId);
+      this.assertNotPast(seance.startDate);
+      const { count } = await tx.inscription.updateMany({
+        where: { seanceId, userId, status: 'RESERVED' },
+        data: { status: 'CONFIRMED' },
+      });
+      return count;
+    });
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
+    if (accepted > 0) this.realtimeEvents.emit(userTopic(userId));
+  }
+
+  /**
+   * De quoi écrire l'e-mail « une place vous est réservée » (Story 40.4) : titre de la conjonction,
+   * nom affiché de l'hôte, date et lieu, et pour chaque destinataire son identifiant et son adresse.
+   * Lecture seule, pour l'appelant qui envoie APRÈS le commit. `null` si la conjonction n'existe plus.
+   */
+  async reservationNotice(eventId: string, userIds: string[]): Promise<ReservationNotice | null> {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        title: true,
+        owner: { select: { displayName: true } },
+        seances: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: 1,
+          select: { startDate: true, startSlot: true, lieu: true },
+        },
+      },
+    });
+    if (!event) return null;
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, email: true },
+    });
+    const seance = event.seances[0];
+    return {
+      eventTitle: event.title,
+      hostName: event.owner?.displayName ?? 'Un membre du groupe',
+      startDate: seance?.startDate ?? null,
+      startSlot: seance?.startSlot ?? null,
+      lieu: seance?.lieu ?? null,
+      recipients: users,
+    };
   }
 
   /** Prend le verrou de ligne de l'événement de la séance, PUIS relit la séance et l'hôte : tout ce
@@ -837,8 +1113,8 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
 
   /**
    * Destinataires du rappel de la veille d'une séance (Story 40.3) — UNE définition, lue par la tâche
-   * horaire. Groupe de ralliement : l'hôte de l'événement + les inscrits (toute ligne est confirmée
-   * jusqu'à la Story 40.4). Toute autre famille garde ses destinataires : le propriétaire et les
+   * horaire. Groupe de ralliement : l'hôte de l'événement + les inscrits CONFIRMÉS (Story 40.4 : une
+   * place seulement réservée n'est pas une participation). Toute autre famille garde ses destinataires : le propriétaire et les
    * membres de la partie — le seul propriétaire quand la séance est celle d'un brouillon caché
    * (anti-spoil serveur). Dédoublonné par identifiant, l'ordre d'apparition est conservé.
    */
@@ -848,7 +1124,7 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     if (isRalliementGroup(partie)) {
       recipients = [
         ...(seance.event.owner ? [seance.event.owner] : []),
-        ...(seance.inscriptions ?? []).map((i) => i.user),
+        ...(seance.inscriptions ?? []).filter(isConfirmed).map((i) => i.user),
       ];
     } else {
       // Propriétaire absent (AD-5, compte supprimé) : seuls les membres restent destinataires.
@@ -972,7 +1248,7 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     const seances = await this.prisma.seance.findMany({
       where: { event: { partieId: { in: partieIds } } },
       include: {
-        inscriptions: { select: { userId: true } },
+        inscriptions: { select: { userId: true, status: true } },
         event: { select: { partieId: true, ownerId: true } },
       },
     });
@@ -988,7 +1264,8 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       const partie = partieById.get(seance.event.partieId);
       if (!partie) continue; // partie hors du périmètre résolu ci-dessus
 
-      const inscritIds = seance.inscriptions.map((i) => i.userId);
+      // Story 40.4 : une place seulement réservée n'engage personne — hôte + inscrits CONFIRMÉS.
+      const inscritIds = seance.inscriptions.filter(isConfirmed).map((i) => i.userId);
       let participantIds: Set<string>;
       if (isRalliementGroup(partie)) {
         // Story 40.1 : groupe de ralliement — hôte de l'événement + inscrits. Hôte absent (compte supprimé) : les inscrits.
@@ -1044,7 +1321,7 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       this.prisma.seance.findMany({
         where: { event: { partieId: { in: partieIds } } },
         include: {
-          inscriptions: { select: { userId: true } },
+          inscriptions: { select: { userId: true, status: true } },
           event: {
             select: {
               partieId: true,
@@ -1080,7 +1357,9 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       // (AD-9), sinon un membre non inscrit verrait listée comme sienne une séance à laquelle il
       // ne participe pas.
       const date = s.startDate;
-      const inscrit = s.inscriptions.some((i) => i.userId === userId);
+      // Story 40.4 : seule une inscription CONFIRMÉE rend la séance « mienne » (une place réservée
+      // pas encore acceptée n'engage pas le calendrier).
+      const inscrit = s.inscriptions.some((i) => i.userId === userId && isConfirmed(i));
       // Story 40.1 : dans un groupe de ralliement, la séance est « mienne » si j'en suis l'hôte
       // (propriétaire de l'événement) ou inscrit — jamais par un rôle de partie.
       const notMine = ralliementIds.has(partie.id)
@@ -1120,7 +1399,7 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
           scenarioTitle: s.event.title,
           inscriptionMin: s.inscriptionMin ?? 0,
           inscriptionMax: s.inscriptionMax,
-          inscritsCount: s.inscriptions.length,
+          inscritsCount: s.inscriptions.filter(isConfirmed).length,
           jeSuisInscrit: inscrit,
         });
       }

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EmailModule } from '../email/email.module';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
@@ -15,11 +16,13 @@ import { GroupEventsService } from './group-events.service';
  * (`PARTIE_SIGNALS_PORT`, fourni par le `PortsModule` global) — jamais `PartiesModule`/
  * `PartiesService`, qui importe ce module.
  *
+ * Story 40.4 : `EmailModule` (transverse) envoie l'e-mail « une place vous est réservée » après le commit.
+ *
  * Story 40.3 : `GroupEventsService` est exporté — les routes d'inscription partagées avec le JDR
  * (`scenarios/seances/:id/inscription`) y délèguent la branche « groupe ».
  */
 @Module({
-  imports: [PermissionsModule],
+  imports: [PermissionsModule, EmailModule],
   controllers: [EventsController],
   providers: [EventsService, GroupEventsService],
   exports: [EventsService, GroupEventsService],

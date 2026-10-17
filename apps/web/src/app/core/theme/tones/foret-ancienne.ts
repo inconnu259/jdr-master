@@ -434,6 +434,29 @@ export const foretAncienne: Record<ToneKey, string> = {
     'Ton inscription à cette halte n’a pas pu être notée. Réessaie.',
   'partie.ralliement_event_unsubscribe_error':
     'Ta désinscription de cette halte n’a pas pu être notée. Réessaie.',
+  /* — réserver une place à des membres (Story 40.4) : mots du contrat identiques, situations et replis d’erreur selon le thème — */
+  'partie.ralliement_event_chip_reserved': 'Place réservée',
+  'partie.ralliement_event_accept_btn': 'Accepter',
+  'partie.ralliement_event_decline_btn': 'Décliner',
+  'partie.ralliement_event_reserve_label': 'Réserver une place à des membres',
+  'partie.ralliement_event_reserve_hint':
+    'Une place réservée est rendue aux autres si la personne la décline.',
+  'partie.ralliement_event_reserve_none': 'Aucun autre membre à qui réserver une place.',
+  'partie.ralliement_event_reserve_chip_aria': 'Réserver une place à {name}',
+  'partie.ralliement_event_unreserve_btn': 'Retirer la réservation',
+  'partie.ralliement_event_unreserve_aria': 'Retirer la réservation de {name}',
+  'partie.ralliement_event_pending_text': '{name} — invité·e, n’a pas encore accepté',
+  'partie.ralliement_event_situation_reserved':
+    'Une place t’est gardée à cette halte : accepte-la ou décline-la.',
+  'partie.ralliement_event_situation_reserved_past': 'Une place t’était gardée à cette halte.',
+  'partie.ralliement_event_accept_error':
+    'Ton acceptation de cette place n’a pas pu être notée. Réessaie.',
+  'partie.ralliement_event_decline_error':
+    'Ton refus de cette place n’a pas pu être noté. Réessaie.',
+  'partie.ralliement_event_reserve_error':
+    'Cette place n’a pas pu être gardée. Réessaie.',
+  'partie.ralliement_event_unreserve_error':
+    'Cette place gardée n’a pas pu être relâchée. Réessaie.',
   /* — « Appels » d’un groupe, côté administrateur (Story 39.3) : variantes sans mot de JDR — */
   'partie.ralliement_invite_title': 'Appeler à la veillée',
   'partie.ralliement_search_label': 'Pseudo ou espèce connue',
@@ -510,6 +533,7 @@ export const foretAncienne: Record<ToneKey, string> = {
   /* — signaux d’état — */
   'partie.signal_personnage_a_creer': 'Façonner son compagnon',
   'partie.signal_vote_en_cours_sans_reponse': 'Réponds à l’appel du vote',
+  'partie.signal_reservation_a_confirmer': 'Une place t’est gardée',
   'partie.signal_compte_rendu_non_redige': 'Récit à graver',
   'partie.signal_homme_dragon_a_creer': 'Façonner son Homme Dragon',
   'partie.signal_aucun_membre_invite': 'Aucun voyageur convié',

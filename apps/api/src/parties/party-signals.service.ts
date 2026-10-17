@@ -5,6 +5,13 @@ import { VISIBLE_POLL_WHERE } from '../permissions/scenario-visibility';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from './parties.service';
 
+/** Début du jour courant (UTC) : une conjonction « à venir » est datée d'aujourd'hui ou après. */
+function startOfTodayUtc(): Date {
+  const start = new Date();
+  start.setUTCHours(0, 0, 0, 0);
+  return start;
+}
+
 type OpenPollWithVotes = {
   partieId: string;
   options: { votes: { userId: string }[] }[];
@@ -15,6 +22,11 @@ type OpenPollWithVotes = {
  * parties de l'utilisateur en un seul aller-retour par table concernée — jamais une requête par
  * partie. `role`/`status` sont lus tels quels depuis `PartiesService.listForUser()` (AD-8/AD-15,
  * Story 29.6), jamais redérivés ici.
+ *
+ * Story 40.4 : les groupes de ralliement n'entrent pas dans les listes par rôle ci-dessous (ils n'ont
+ * ni MJ ni joueur) ; une entrée n'existe pour eux que lorsqu'une place est réservée à l'utilisateur
+ * dans une conjonction à venir (`RESERVATION_A_CONFIRMER`), dérivée en UNE lecture groupée des
+ * inscriptions réservées — jamais une requête par partie.
  */
 @Injectable()
 export class PartySignalsService {
@@ -44,6 +56,7 @@ export class PartySignalsService {
       scenariosMissingResume,
       seancesOfMjParties,
       openPolls,
+      reservedRows,
     ] = await Promise.all([
       this.prisma.character.findMany({
         where: { userId, partieId: { in: playerPartieIds } },
@@ -108,6 +121,16 @@ export class PartySignalsService {
             select: { votes: { where: { userId }, select: { userId: true } } },
           },
         },
+      }),
+      // RESERVATION_A_CONFIRMER (Story 40.4) : les places réservées à l'utilisateur dans une
+      // conjonction dont le jour n'est pas passé (jour UTC, comme les règles d'inscription).
+      this.prisma.inscription.findMany({
+        where: {
+          userId,
+          status: 'RESERVED',
+          seance: { startDate: { gte: startOfTodayUtc() } },
+        },
+        select: { seance: { select: { event: { select: { partieId: true } } } } },
       }),
     ]);
 
@@ -206,6 +229,18 @@ export class PartySignalsService {
         status: p.status,
         signals: computeSignals(p, 'player'),
       };
+    }
+
+    // Story 40.4 : groupes de ralliement où une place est réservée à l'utilisateur. Le statut du
+    // groupe vient de `listForUser` (une seule lecture, seulement s'il y a une réservation) ; un
+    // groupe terminé ne porte plus de signal d'action (AC5 de la Story 29.7).
+    const reservedPartieIds = new Set(reservedRows.map((r) => r.seance.event.partieId));
+    if (reservedPartieIds.size > 0) {
+      const mine = await this.parties.listForUser(userId);
+      for (const p of mine) {
+        if (!reservedPartieIds.has(p.id) || p.status === 'TERMINEE') continue;
+        result[p.id] = { role: 'player', status: p.status, signals: ['RESERVATION_A_CONFIRMER'] };
+      }
     }
     return result;
   }

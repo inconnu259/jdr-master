@@ -248,6 +248,68 @@ describe('Droits sur une partie et ses événements (Story 37.6)', () => {
     expect(await h.prisma.inscription.count({ where: { seanceId: jdrSeance } })).toBe(0);
   });
 
+  // Story 40.4 : réserver une place, retirer une réservation et accepter n'existent pas en JDR — les
+  // trois routes sont fermées au MJ comme au joueur sur la séance d'un scénario ; un étranger reçoit
+  // « pas accès » ; un membre d'un groupe n'atteint jamais la séance d'une partie de JDR (la partie
+  // est lue depuis la séance). Aucune inscription n'est écrite.
+  it('réservations : réserver / retirer / accepter refusés sur une partie de JDR (403), sans écriture', async () => {
+    const jdrSeance = scenarioA.seances[0].id;
+    const before = await h.prisma.inscription.count({ where: { seanceId: jdrSeance } });
+    const reserve = (who: TestUser) =>
+      who.agent.post(`/scenarios/seances/${jdrSeance}/reservations`).send({ userId: joueurA.id });
+    const unreserve = (who: TestUser) =>
+      who.agent.delete(`/scenarios/seances/${jdrSeance}/reservations/${joueurA.id}`);
+
+    for (const who of [mjA, joueurA]) {
+      for (const call of [reserve, unreserve]) {
+        const res = await call(who).expect(403);
+        expect(body<ErrorLike>(res).message).toBe(MJ_ONLY_MESSAGE);
+      }
+    }
+    // Accepter : le joueur a le droit de s'inscrire, mais la réservation n'existe pas en JDR.
+    const accept = await joueurA.agent
+      .patch(`/scenarios/seances/${jdrSeance}/inscription/accept`)
+      .expect(403);
+    expect(body<ErrorLike>(accept).message).toBe(
+      "Cette action n'est pas disponible pour ce type de partie",
+    );
+    for (const call of [reserve, unreserve]) {
+      const res = await call(etranger).expect(403);
+      expect(body<ErrorLike>(res).message).toBe(NO_ACCESS_MESSAGE);
+    }
+    const asStranger = await etranger.agent
+      .patch(`/scenarios/seances/${jdrSeance}/inscription/accept`)
+      .expect(403);
+    expect(body<ErrorLike>(asStranger).message).toBe(NO_ACCESS_MESSAGE);
+
+    // Et l'administrateur d'un groupe n'a aucun rôle dans la partie de JDR (ni l'inverse).
+    const { id: groupe } = await h.createPartie(
+      mjB,
+      'CAMPAGNE_EPISODIQUE',
+      'droits groupe 40-4',
+      'ralliement',
+    );
+    const created = await mjB.agent
+      .post(`/parties/${groupe}/events`)
+      .send({ title: 'Une conjonction', date: isoDay(10), slot: 'EVENING', capacity: 4 })
+      .expect(201);
+    const groupSeance = body<{ seance: { id: string } }>(created).seance.id;
+    await mjB.agent
+      .post(`/scenarios/seances/${jdrSeance}/reservations`)
+      .send({ userId: mjB.id })
+      .expect(403);
+    for (const who of [mjA, joueurA]) {
+      const res = await who.agent
+        .post(`/scenarios/seances/${groupSeance}/reservations`)
+        .send({ userId: joueurA.id })
+        .expect(403);
+      expect(body<ErrorLike>(res).message).toBe(NO_ACCESS_MESSAGE);
+    }
+
+    expect(await h.prisma.inscription.count({ where: { seanceId: jdrSeance } })).toBe(before);
+    expect(await h.prisma.inscription.count({ where: { seanceId: groupSeance } })).toBe(0);
+  });
+
   it("un scénario (événement) d'une autre partie est refusé au MJ de A (403), sans écriture", async () => {
     const res = await mjA.agent
       .patch(`/scenarios/${scenarioB.id}`)

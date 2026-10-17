@@ -1,6 +1,8 @@
-import { Component, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, OnInit, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import type { EventCardDto } from '@master-jdr/shared';
+import type { EventCardDto, PartieMemberDto } from '@master-jdr/shared';
+import { AuthService } from '../../../core/auth/auth.service';
+import { PartiesService } from '../../../core/parties/parties.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
 import { EventForm } from '../event-form/event-form';
@@ -15,6 +17,10 @@ let nextUid = 0;
  * mode édition de la fenêtre de détail, Story 40.2) ; ici : titre, pied « Renoncer » · « Créer la
  * conjonction », garde de double envoi (`busy`) et refus du serveur affiché DANS la fenêtre (message
  * français tel quel, sinon repli du thème). Le serveur reste juge de toutes les règles.
+ *
+ * Story 40.4 : la fenêtre charge les membres du groupe (une fois, échec toléré : le sélecteur de places
+ * réservées reste alors vide) et les remet à `EventForm`, avec l'hôte — la personne connectée — qu'on
+ * ne peut pas inviter à sa propre conjonction.
  */
 @Component({
   selector: 'app-event-create',
@@ -22,9 +28,11 @@ let nextUid = 0;
   templateUrl: './event-create.html',
   styleUrl: './event-create.scss',
 })
-export class EventCreate {
+export class EventCreate implements OnInit {
   protected readonly theme = inject(ThemeToneService);
   private readonly api = inject(EventsApiService);
+  private readonly parties = inject(PartiesService);
+  private readonly auth = inject(AuthService);
 
   readonly partieId = input.required<string>();
   readonly created = output<EventCardDto>();
@@ -35,6 +43,21 @@ export class EventCreate {
 
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly members = signal<PartieMemberDto[]>([]);
+  protected readonly hostId = computed(() => this.auth.currentUser()?.id ?? null);
+
+  ngOnInit(): void {
+    void this.loadMembers();
+  }
+
+  /** Membres du groupe pour le sélecteur de places réservées. Un échec n'empêche pas de créer. */
+  private async loadMembers(): Promise<void> {
+    try {
+      this.members.set(await this.parties.members(this.partieId()));
+    } catch {
+      this.members.set([]);
+    }
+  }
 
   protected readonly canSubmit = computed(() => !this.busy() && this.form().valid());
 

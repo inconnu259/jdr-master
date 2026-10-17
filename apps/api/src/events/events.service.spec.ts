@@ -1,12 +1,17 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import {
   EventsService,
   FULL_EVENT_MESSAGE,
   PAST_EVENT_MESSAGE,
   PAST_ROSTER_MESSAGE,
+  RESERVE_ALREADY_MESSAGE,
+  RESERVE_HOST_MESSAGE,
+  RESERVE_NOT_LIMITED_MESSAGE,
+  RESERVE_NOT_MEMBER_MESSAGE,
+  RESERVE_TOO_MANY_MESSAGE,
 } from './events.service';
 import { testGrant } from '../common/test-utils/grant';
 import { callArg, mockCalls, objectLike } from '../common/test-utils/jest-typed';
@@ -52,15 +57,25 @@ function makePrisma() {
       findUnique: jest.fn().mockResolvedValue(null),
       count: jest.fn().mockResolvedValue(0),
       create: jest.fn(),
-      deleteMany: jest.fn(),
+      createMany: jest.fn(),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
+    // Story 40.4 : appartenance des personnes à qui une place est réservée.
+    membership: { findMany: jest.fn().mockResolvedValue([]) },
   };
   return {
     tx,
     $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
     // Story 37.6 — appartenance à la partie de l'autorisation (1 = la séance/l'événement en est).
     // Story 40.1 : `listCards` lit les événements de la partie (cartes de conjonctions).
-    event: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([]) },
+    event: {
+      count: jest.fn().mockResolvedValue(1),
+      findMany: jest.fn().mockResolvedValue([]),
+      // Story 40.4 : de quoi écrire l'e-mail d'une place réservée.
+      findUnique: jest.fn(),
+    },
+    user: { findMany: jest.fn().mockResolvedValue([]) },
     seance: {
       count: jest.fn().mockResolvedValue(1),
       create: jest.fn(),
@@ -220,6 +235,100 @@ describe('EventsService (Story 37.3)', () => {
     });
   });
 
+  describe('createHosted() — places réservées à la création (Story 40.4)', () => {
+    const DAY = new Date('2026-11-14T00:00:00.000Z');
+    const SEANCE = {
+      date: DAY,
+      slot: 'EVENING' as const,
+      lieu: null,
+      heureRdv: null,
+      notePratique: null,
+      capacity: 4,
+    };
+    const members = (...ids: string[]) =>
+      prisma.tx.membership.findMany.mockResolvedValue(ids.map((userId) => ({ userId })));
+    const create = (seance: Record<string, unknown>) =>
+      service.createHosted(GRANT_P1, 'hote', {
+        title: 'Catane',
+        seance: { ...SEANCE, ...seance },
+      });
+
+    it('écrit les lignes RESERVED dans la MÊME transaction que l’événement, puis émet partie: et user: de chaque cible', async () => {
+      prisma.tx.$queryRaw.mockResolvedValue([{ kind: 'CAMPAGNE_EPISODIQUE' }]);
+      members('a', 'b');
+
+      await create({ reservedUserIds: ['a', 'b'] });
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const { data } = callArg<{ data: { userId: string; createdAt: Date }[] }>(
+        prisma.tx.inscription.createMany,
+      );
+      expect(data).toEqual([
+        { seanceId: 'se1', userId: 'a', status: 'RESERVED', createdAt: expect.any(Date) as Date },
+        { seanceId: 'se1', userId: 'b', status: 'RESERVED', createdAt: expect.any(Date) as Date },
+      ]);
+      // Ordre d'inscription = ordre choisi : un horodatage strictement croissant.
+      expect(data[1].createdAt.getTime()).toBeGreaterThan(data[0].createdAt.getTime());
+      expect(callArg(prisma.tx.membership.findMany)).toEqual(
+        objectLike({ where: { partieId: 'p1', userId: { in: ['a', 'b'] } } }),
+      );
+      expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtime.emit).toHaveBeenCalledWith(userTopic('a'));
+      expect(realtime.emit).toHaveBeenCalledWith(userTopic('b'));
+    });
+
+    it('sans réservation : aucune lecture d’appartenance ni écriture d’inscription', async () => {
+      await create({});
+      await create({ reservedUserIds: [] });
+
+      expect(prisma.tx.membership.findMany).not.toHaveBeenCalled();
+      expect(prisma.tx.inscription.createMany).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        'places non limitées',
+        { capacity: null, reservedUserIds: ['a'] },
+        RESERVE_NOT_LIMITED_MESSAGE,
+      ],
+      ['une personne deux fois', { reservedUserIds: ['a', 'a'] }, 'deux places'],
+      ['l’hôte lui-même', { reservedUserIds: ['hote'] }, RESERVE_HOST_MESSAGE],
+      [
+        'plus de places que capacité − 1',
+        { capacity: 3, reservedUserIds: ['a', 'b', 'c'] },
+        RESERVE_TOO_MANY_MESSAGE,
+      ],
+    ])('refus 400 (%s) : rien n’est écrit ni émis', async (_label, seance, message) => {
+      members('a', 'b', 'c');
+
+      const refusal = create(seance);
+
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(message);
+      expect(prisma.tx.inscription.createMany).not.toHaveBeenCalled();
+      expect(realtime.emit).not.toHaveBeenCalled();
+    });
+
+    it('capacité − 1 réservations exactement : acceptée', async () => {
+      members('a', 'b', 'c');
+
+      await create({ capacity: 4, reservedUserIds: ['a', 'b', 'c'] });
+
+      expect(prisma.tx.inscription.createMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('une personne qui n’est pas membre du groupe → 400, rien n’est émis', async () => {
+      members('a');
+
+      const refusal = create({ reservedUserIds: ['a', 'etranger'] });
+
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(RESERVE_NOT_MEMBER_MESSAGE);
+      expect(prisma.tx.inscription.createMany).not.toHaveBeenCalled();
+      expect(realtime.emit).not.toHaveBeenCalled();
+    });
+  });
+
   describe('listCards() — cartes de conjonctions (Story 40.1)', () => {
     const row = (over: Record<string, unknown> = {}) => ({
       id: 'e1',
@@ -243,7 +352,7 @@ describe('EventsService (Story 37.3)', () => {
     it('projection explicite : hôte, séance unique (date en clé de jour), capacité', async () => {
       prisma.event.findMany.mockResolvedValue([row()]);
 
-      const cards = await service.listCards(GRANT_P1);
+      const cards = await service.listCards(GRANT_P1, 'viewer');
 
       expect(cards).toEqual([
         {
@@ -259,8 +368,18 @@ describe('EventsService (Story 37.3)', () => {
             heureRdv: '20:30',
             notePratique: null,
             capacity: 8,
+            placesTaken: 1,
           },
-          participants: [{ userId: 'hote', displayName: 'Léa', isHost: true, isAdmin: false }],
+          participants: [
+            {
+              userId: 'hote',
+              displayName: 'Léa',
+              isHost: true,
+              isAdmin: false,
+              status: 'CONFIRMED',
+            },
+          ],
+          myInscription: null,
         },
       ]);
       // Une seule lecture, scopée à la partie de l'autorisation.
@@ -277,7 +396,7 @@ describe('EventsService (Story 37.3)', () => {
         at('aprem', 'AFTERNOON'),
       ]);
 
-      const cards = await service.listCards(GRANT_P1);
+      const cards = await service.listCards(GRANT_P1, 'viewer');
 
       expect(cards.map((c) => c.id)).toEqual(['matin', 'aprem', 'soir']);
     });
@@ -294,7 +413,7 @@ describe('EventsService (Story 37.3)', () => {
         row({ id: 'tot' }),
       ]);
 
-      const cards = await service.listCards(GRANT_P1);
+      const cards = await service.listCards(GRANT_P1, 'viewer');
 
       expect(cards.map((c) => c.id)).toEqual(['tot', 'tard', 'sans-date']);
       expect(cards[1]).toEqual(objectLike({ hostId: null, hostDisplayName: null }));
@@ -311,27 +430,29 @@ describe('EventsService (Story 37.3)', () => {
         }),
       ]);
       prisma.inscription.findMany.mockResolvedValue([
-        { seanceId: 'se1', userId: 'ami', user: { displayName: 'Zoé' } },
+        { seanceId: 'se1', userId: 'ami', status: 'CONFIRMED', user: { displayName: 'Zoé' } },
         // L'hôte inscrit lui-même n'est listé qu'une fois.
-        { seanceId: 'se1', userId: 'hote', user: { displayName: 'Léa' } },
-        { seanceId: 'se2', userId: 'ami', user: { displayName: 'Zoé' } },
+        { seanceId: 'se1', userId: 'hote', status: 'CONFIRMED', user: { displayName: 'Léa' } },
+        { seanceId: 'se2', userId: 'ami', status: 'CONFIRMED', user: { displayName: 'Zoé' } },
       ]);
       prisma.membership.findMany.mockResolvedValue([
         { userId: 'ami', role: 'ADMIN' },
         { userId: 'hote', role: 'MEMBER' },
       ]);
 
-      const cards = await service.listCards(GRANT_P1);
+      const cards = await service.listCards(GRANT_P1, 'viewer');
 
       const byId = Object.fromEntries(cards.map((c) => [c.id, c.participants]));
       expect(byId.e1).toEqual([
-        { userId: 'hote', displayName: 'Léa', isHost: true, isAdmin: false },
-        { userId: 'ami', displayName: 'Zoé', isHost: false, isAdmin: true },
+        { userId: 'hote', displayName: 'Léa', isHost: true, isAdmin: false, status: 'CONFIRMED' },
+        { userId: 'ami', displayName: 'Zoé', isHost: false, isAdmin: true, status: 'CONFIRMED' },
       ]);
       expect(byId.e2).toEqual([
-        { userId: 'autre', displayName: 'Max', isHost: true, isAdmin: false },
-        { userId: 'ami', displayName: 'Zoé', isHost: false, isAdmin: true },
+        { userId: 'autre', displayName: 'Max', isHost: true, isAdmin: false, status: 'CONFIRMED' },
+        { userId: 'ami', displayName: 'Zoé', isHost: false, isAdmin: true, status: 'CONFIRMED' },
       ]);
+      // L'hôte occupe une place sans ligne : hôte + inscrit (l'hôte inscrit n'est pas recompté).
+      expect(cards.find((c) => c.id === 'e1')?.seance?.placesTaken).toBe(2);
       // Une lecture d'inscriptions et UNE d'appartenances pour tous les événements, jamais par carte.
       expect(prisma.inscription.findMany).toHaveBeenCalledTimes(1);
       expect(prisma.membership.findMany).toHaveBeenCalledTimes(1);
@@ -340,14 +461,69 @@ describe('EventsService (Story 37.3)', () => {
       );
     });
 
+    describe('visibilité des places réservées (Story 40.4)', () => {
+      const rows = [
+        { seanceId: 'se1', userId: 'ami', status: 'CONFIRMED', user: { displayName: 'Zoé' } },
+        { seanceId: 'se1', userId: 'invite', status: 'RESERVED', user: { displayName: 'Sam' } },
+      ];
+
+      it('l’hôte voit la place réservée (avec son statut) ; elle compte dans les places prises', async () => {
+        prisma.event.findMany.mockResolvedValue([row()]);
+        prisma.inscription.findMany.mockResolvedValue(rows);
+
+        const [card] = await service.listCards(GRANT_P1, 'hote');
+
+        expect(card.participants.map((p) => [p.userId, p.status])).toEqual([
+          ['hote', 'CONFIRMED'],
+          ['ami', 'CONFIRMED'],
+          ['invite', 'RESERVED'],
+        ]);
+        expect(card.seance?.placesTaken).toBe(3);
+        expect(card.myInscription).toBeNull();
+      });
+
+      it('un autre membre ne voit pas qui tient la place réservée, mais « placesTaken » la compte', async () => {
+        prisma.event.findMany.mockResolvedValue([row()]);
+        prisma.inscription.findMany.mockResolvedValue(rows);
+
+        const [card] = await service.listCards(GRANT_P1, 'ami');
+
+        expect(card.participants.map((p) => p.userId)).toEqual(['hote', 'ami']);
+        expect(JSON.stringify(card)).not.toContain('invite');
+        expect(JSON.stringify(card)).not.toContain('Sam');
+        expect(card.seance?.placesTaken).toBe(3);
+        expect(card.myInscription).toBe('CONFIRMED');
+      });
+
+      it('la personne à qui la place est réservée n’est pas listée mais lit sa propre ligne (myInscription)', async () => {
+        prisma.event.findMany.mockResolvedValue([row()]);
+        prisma.inscription.findMany.mockResolvedValue(rows);
+
+        const [card] = await service.listCards(GRANT_P1, 'invite');
+
+        expect(card.participants.map((p) => p.userId)).toEqual(['hote', 'ami']);
+        expect(card.myInscription).toBe('RESERVED');
+        expect(card.seance?.placesTaken).toBe(3);
+      });
+
+      it('un membre sans ligne : myInscription nul', async () => {
+        prisma.event.findMany.mockResolvedValue([row()]);
+        prisma.inscription.findMany.mockResolvedValue(rows);
+
+        const [card] = await service.listCards(GRANT_P1, 'etranger');
+
+        expect(card.myInscription).toBeNull();
+      });
+    });
+
     it('sans événement : aucune lecture de participants', async () => {
-      await service.listCards(GRANT_P1);
+      await service.listCards(GRANT_P1, 'viewer');
       expect(prisma.inscription.findMany).not.toHaveBeenCalled();
       expect(prisma.membership.findMany).not.toHaveBeenCalled();
     });
 
     it('restreinte à des identifiants donnés (carte d’un événement tout juste créé)', async () => {
-      await service.listCards(GRANT_P1, ['e9']);
+      await service.listCards(GRANT_P1, 'viewer', ['e9']);
 
       expect(callArg(prisma.event.findMany)).toEqual(
         objectLike({ where: { partieId: 'p1', id: { in: ['e9'] } } }),
@@ -968,12 +1144,31 @@ describe('EventsService (Story 37.3)', () => {
 
     it('déjà inscrit : idempotent, aucun comptage ni création — même sur une conjonction pleine', async () => {
       locked({ inscriptionMax: 3 });
-      prisma.tx.inscription.findUnique.mockResolvedValue({ id: 'i1' });
+      prisma.tx.inscription.findUnique.mockResolvedValue({ id: 'i1', status: 'CONFIRMED' });
 
       await expect(service.inscrireConjonction(GRANT_SE1, 'se1', 'u1')).resolves.toBeUndefined();
 
       expect(prisma.tx.inscription.count).not.toHaveBeenCalled();
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+      expect(prisma.tx.inscription.updateMany).not.toHaveBeenCalled();
+      expect(realtime.emit).not.toHaveBeenCalledWith(userTopic('u1'));
+    });
+
+    it('place RÉSERVÉE : s’inscrire la confirme (sous le verrou, sans comptage ni nouvelle ligne) et notifie la personne (Story 40.4)', async () => {
+      locked({ inscriptionMax: 3 });
+      prisma.tx.inscription.findUnique.mockResolvedValue({ id: 'i1', status: 'RESERVED' });
+
+      await service.inscrireConjonction(GRANT_SE1, 'se1', 'u1');
+
+      expect(callArg<string[]>(prisma.tx.$queryRaw, 0, 0).join('?')).toContain('FROM "Event"');
+      expect(prisma.tx.inscription.updateMany).toHaveBeenCalledWith({
+        where: { seanceId: 'se1', userId: 'u1', status: 'RESERVED' },
+        data: { status: 'CONFIRMED' },
+      });
+      expect(prisma.tx.inscription.count).not.toHaveBeenCalled();
+      expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+      expect(realtime.emit).toHaveBeenNthCalledWith(1, partieTopic('p1'));
+      expect(realtime.emit).toHaveBeenNthCalledWith(2, userTopic('u1'));
     });
 
     it('l’hôte qui s’inscrit : idempotent, aucune ligne créée', async () => {
@@ -1055,6 +1250,293 @@ describe('EventsService (Story 37.3)', () => {
     });
   });
 
+  describe('réserver / retirer / accepter une place (Story 40.4)', () => {
+    const GRANT_SE1 = testGrant({ id: 'p1', ownerId: 'a' }, 'member', {
+      eventId: 'e1',
+      seanceId: 'se1',
+    });
+    const inDays = (days: number) => new Date(Date.now() + days * 86_400_000);
+
+    /** Séance relue sous le verrou : date, capacité et hôte de l'événement (comme pour 40.3). */
+    function locked(
+      over: {
+        startDate?: Date | null;
+        inscriptionMax?: number | null;
+        ownerId?: string | null;
+      } = {},
+    ) {
+      prisma.tx.seance.findUnique.mockImplementation((args: { select: Record<string, unknown> }) =>
+        Promise.resolve(
+          'eventId' in args.select
+            ? { eventId: 'e1' }
+            : {
+                startDate: 'startDate' in over ? over.startDate : inDays(3),
+                inscriptionMax: 'inscriptionMax' in over ? over.inscriptionMax : 4,
+                event: { ownerId: 'ownerId' in over ? over.ownerId : 'hote' },
+              },
+        ),
+      );
+      prisma.tx.membership.findMany.mockResolvedValue([{ userId: 'cible' }]);
+    }
+
+    describe('reserverPlace()', () => {
+      it('verrouille la ligne Event AVANT de compter, écrit une ligne RESERVED puis émet partie: et user: de la cible', async () => {
+        locked();
+        prisma.tx.inscription.count.mockResolvedValue(1);
+
+        await service.reserverPlace(GRANT_SE1, 'se1', 'cible');
+
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(callArg<string[]>(prisma.tx.$queryRaw, 0, 0).join('?')).toContain('FROM "Event"');
+        expect(callArg<string>(prisma.tx.$queryRaw, 0, 1)).toBe('e1');
+        expect(prisma.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+          prisma.tx.inscription.count.mock.invocationCallOrder[0],
+        );
+        expect(prisma.tx.inscription.create).toHaveBeenCalledWith({
+          data: { seanceId: 'se1', userId: 'cible', status: 'RESERVED' },
+        });
+        expect(realtime.emit).toHaveBeenNthCalledWith(1, partieTopic('p1'));
+        expect(realtime.emit).toHaveBeenNthCalledWith(2, userTopic('cible'));
+      });
+
+      it('la dernière place libre peut être réservée ; toute ligne (réservée ou confirmée) compte dans la capacité', async () => {
+        locked({ inscriptionMax: 4 });
+        // Hôte + 2 lignes (une confirmée, une réservée) = 3 places prises sur 4.
+        prisma.tx.inscription.count.mockResolvedValue(2);
+
+        await service.reserverPlace(GRANT_SE1, 'se1', 'cible');
+
+        expect(prisma.tx.inscription.count).toHaveBeenCalledWith({
+          where: { seanceId: 'se1', userId: { not: 'hote' } },
+        });
+        expect(prisma.tx.inscription.create).toHaveBeenCalledTimes(1);
+      });
+
+      it('complet (les places réservées comptent) → 409, rien n’est écrit ni émis', async () => {
+        locked({ inscriptionMax: 3 });
+        prisma.tx.inscription.count.mockResolvedValue(2);
+
+        const refusal = service.reserverPlace(GRANT_SE1, 'se1', 'cible');
+
+        await expect(refusal).rejects.toBeInstanceOf(ConflictException);
+        await expect(refusal).rejects.toThrow(FULL_EVENT_MESSAGE);
+        expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      });
+
+      it('déjà inscrit ou déjà réservé → 409 en français, rien n’est écrit', async () => {
+        locked();
+        prisma.tx.inscription.findUnique.mockResolvedValue({ id: 'i1' });
+
+        const refusal = service.reserverPlace(GRANT_SE1, 'se1', 'cible');
+
+        await expect(refusal).rejects.toBeInstanceOf(ConflictException);
+        await expect(refusal).rejects.toThrow(RESERVE_ALREADY_MESSAGE);
+        expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+      });
+
+      it('« Tous les membres » (capacité nulle) → 400, aucun comptage', async () => {
+        locked({ inscriptionMax: null });
+
+        const refusal = service.reserverPlace(GRANT_SE1, 'se1', 'cible');
+
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(RESERVE_NOT_LIMITED_MESSAGE);
+        expect(prisma.tx.inscription.count).not.toHaveBeenCalled();
+        expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+      });
+
+      it('l’hôte lui-même → 400', async () => {
+        locked();
+
+        const refusal = service.reserverPlace(GRANT_SE1, 'se1', 'hote');
+
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(RESERVE_HOST_MESSAGE);
+        expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+      });
+
+      it('une personne qui n’est pas (ou plus) membre du groupe → 400', async () => {
+        locked();
+        prisma.tx.membership.findMany.mockResolvedValue([]);
+
+        const refusal = service.reserverPlace(GRANT_SE1, 'se1', 'cible');
+
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(RESERVE_NOT_MEMBER_MESSAGE);
+        expect(callArg(prisma.tx.membership.findMany)).toEqual(
+          objectLike({ where: { partieId: 'p1', userId: { in: ['cible'] } } }),
+        );
+        expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+      });
+
+      it('conjonction passée → 400, rien n’est écrit ni émis', async () => {
+        locked({ startDate: inDays(-1) });
+
+        const refusal = service.reserverPlace(GRANT_SE1, 'se1', 'cible');
+
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(PAST_ROSTER_MESSAGE);
+        expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      });
+
+      it('séance d’une autre partie que celle de l’autorisation → 404 avant toute transaction', async () => {
+        prisma.seance.count.mockResolvedValue(0);
+        const grantAutre = testGrant({ id: 'p1', ownerId: 'a' }, 'member', { eventId: 'e9' });
+
+        await expect(service.reserverPlace(grantAutre, 'se9', 'cible')).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('retirerReservation()', () => {
+      it('sous le même verrou, ne supprime QUE la ligne RESERVED de la cible, puis émet partie: et user:', async () => {
+        locked();
+
+        await service.retirerReservation(GRANT_SE1, 'se1', 'cible');
+
+        expect(callArg<string[]>(prisma.tx.$queryRaw, 0, 0).join('?')).toContain('FROM "Event"');
+        expect(prisma.tx.inscription.deleteMany).toHaveBeenCalledWith({
+          where: { seanceId: 'se1', userId: 'cible', status: 'RESERVED' },
+        });
+        expect(realtime.emit).toHaveBeenNthCalledWith(1, partieTopic('p1'));
+        expect(realtime.emit).toHaveBeenNthCalledWith(2, userTopic('cible'));
+      });
+
+      it('rien à retirer (inscription confirmée ou absente) : idempotent, la cible n’est pas notifiée', async () => {
+        locked();
+        prisma.tx.inscription.deleteMany.mockResolvedValue({ count: 0 });
+
+        await expect(
+          service.retirerReservation(GRANT_SE1, 'se1', 'cible'),
+        ).resolves.toBeUndefined();
+
+        expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
+        expect(realtime.emit).not.toHaveBeenCalledWith(userTopic('cible'));
+      });
+
+      it('conjonction passée → 400, rien n’est supprimé', async () => {
+        locked({ startDate: inDays(-1) });
+
+        await expect(service.retirerReservation(GRANT_SE1, 'se1', 'cible')).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+        expect(prisma.tx.inscription.deleteMany).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('accepterReservation()', () => {
+      it('sous le même verrou, passe la ligne RESERVED de l’appelant à CONFIRMED (la capacité ne change pas), puis émet', async () => {
+        locked();
+
+        await service.accepterReservation(GRANT_SE1, 'se1', 'cible');
+
+        expect(callArg<string[]>(prisma.tx.$queryRaw, 0, 0).join('?')).toContain('FROM "Event"');
+        expect(prisma.tx.inscription.updateMany).toHaveBeenCalledWith({
+          where: { seanceId: 'se1', userId: 'cible', status: 'RESERVED' },
+          data: { status: 'CONFIRMED' },
+        });
+        expect(prisma.tx.inscription.count).not.toHaveBeenCalled();
+        expect(realtime.emit).toHaveBeenNthCalledWith(1, partieTopic('p1'));
+        expect(realtime.emit).toHaveBeenNthCalledWith(2, userTopic('cible'));
+      });
+
+      it('ligne absente ou déjà confirmée : sans effet (aucune notification de la personne)', async () => {
+        locked();
+        prisma.tx.inscription.updateMany.mockResolvedValue({ count: 0 });
+
+        await expect(
+          service.accepterReservation(GRANT_SE1, 'se1', 'cible'),
+        ).resolves.toBeUndefined();
+
+        expect(realtime.emit).not.toHaveBeenCalledWith(userTopic('cible'));
+      });
+
+      it('conjonction passée → 400, rien n’est écrit ni émis', async () => {
+        locked({ startDate: inDays(-1) });
+
+        const refusal = service.accepterReservation(GRANT_SE1, 'se1', 'cible');
+
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(PAST_ROSTER_MESSAGE);
+        expect(prisma.tx.inscription.updateMany).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('décliner = désinscrireConjonction()', () => {
+      it('supprime la ligne (réservée comprise) et notifie la personne ; rien de supprimé → pas de notification', async () => {
+        locked();
+
+        await service.desinscrireConjonction(GRANT_SE1, 'se1', 'cible');
+        expect(realtime.emit).toHaveBeenCalledWith(userTopic('cible'));
+
+        realtime.emit.mockClear();
+        prisma.tx.inscription.deleteMany.mockResolvedValue({ count: 0 });
+        await service.desinscrireConjonction(GRANT_SE1, 'se1', 'cible');
+        expect(realtime.emit).not.toHaveBeenCalledWith(userTopic('cible'));
+      });
+    });
+
+    describe('inscrireConjonction() face à une place réservée', () => {
+      it('« Complet » : les places réservées comptent — un autre membre reçoit 409 sur la dernière place tenue', async () => {
+        locked({ inscriptionMax: 3 });
+        // Hôte + 1 confirmé + 1 RESERVED = 3 places prises sur 3.
+        prisma.tx.inscription.count.mockResolvedValue(2);
+
+        await expect(service.inscrireConjonction(GRANT_SE1, 'se1', 'autre')).rejects.toThrow(
+          FULL_EVENT_MESSAGE,
+        );
+        expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+      });
+
+      it('la personne qui tient une place réservée n’est jamais rejetée : sa ligne existe déjà (idempotent)', async () => {
+        locked({ inscriptionMax: 3 });
+        prisma.tx.inscription.findUnique.mockResolvedValue({ id: 'i1' });
+
+        await expect(
+          service.inscrireConjonction(GRANT_SE1, 'se1', 'cible'),
+        ).resolves.toBeUndefined();
+
+        expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('reservationNotice()', () => {
+      it('titre, hôte, date, lieu et adresses des destinataires, en deux lectures', async () => {
+        prisma.event.findUnique.mockResolvedValue({
+          title: 'Catane',
+          owner: { displayName: 'Léa' },
+          seances: [
+            { startDate: new Date('2026-11-14T00:00:00Z'), startSlot: 'EVENING', lieu: 'Lyon' },
+          ],
+        });
+        prisma.user.findMany.mockResolvedValue([{ id: 'cible', email: 'cible@example.com' }]);
+
+        const notice = await service.reservationNotice('e1', ['cible']);
+
+        expect(notice).toEqual({
+          eventTitle: 'Catane',
+          hostName: 'Léa',
+          startDate: new Date('2026-11-14T00:00:00Z'),
+          startSlot: 'EVENING',
+          lieu: 'Lyon',
+          recipients: [{ id: 'cible', email: 'cible@example.com' }],
+        });
+      });
+
+      it('conjonction disparue → null', async () => {
+        prisma.event.findUnique.mockResolvedValue(null);
+
+        await expect(service.reservationNotice('e1', ['cible'])).resolves.toBeNull();
+      });
+    });
+  });
+
   describe('reminderRecipients() (Story 40.3)', () => {
     const u = (id: string) => ({ id, email: `${id}@example.com` });
     const partie = (over: Record<string, unknown> = {}) => ({
@@ -1092,6 +1574,18 @@ describe('EventsService (Story 37.3)', () => {
           }),
         ),
       ).toEqual(['b']);
+    });
+
+    it('groupe : une place seulement RÉSERVÉE ne reçoit pas le rappel (Story 40.4)', () => {
+      const recipients = service.reminderRecipients({
+        inscriptions: [
+          { status: 'CONFIRMED', user: u('b') },
+          { status: 'RESERVED', user: u('c') },
+        ],
+        event: { owner: u('a'), partie: partie() },
+      });
+
+      expect(ids(recipients)).toEqual(['a', 'b']);
     });
 
     it('groupe sans aucun inscrit : l’hôte seul', () => {
@@ -1445,6 +1939,32 @@ describe('EventsService (Story 37.3)', () => {
       expect(map.get('autre')).toEqual([]);
     });
 
+    it('ralliement (Story 40.4) : une place seulement RÉSERVÉE n’occupe pas le calendrier, l’inscription confirmée si', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        {
+          id: 'B',
+          kind: 'CAMPAGNE_EPISODIQUE',
+          gameSystemId: 'ralliement',
+          ownerId: 'createur',
+          memberships: [{ userId: 'reservee' }, { userId: 'confirmee' }],
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        seanceB({
+          event: { partieId: 'B', ownerId: 'hote' },
+          inscriptions: [
+            { userId: 'reservee', status: 'RESERVED' },
+            { userId: 'confirmee', status: 'CONFIRMED' },
+          ],
+        }),
+      ]);
+
+      const map = await service.occupiedSpansOf(['reservee', 'confirmee']);
+
+      expect(map.get('reservee')).toEqual([]);
+      expect(map.get('confirmee')).toHaveLength(1);
+    });
+
     it('ralliement : hôte disparu → seuls les inscrits sont occupés', async () => {
       prisma.partie.findMany.mockResolvedValue([
         {
@@ -1683,6 +2203,23 @@ describe('EventsService (Story 37.3)', () => {
 
       const admin = jest.fn().mockResolvedValue(new Map([['A', 'admin']]));
       expect((await service.ownEventsOf('autre', admin, RANGE)).seances).toEqual([]);
+    });
+
+    it('ralliement (Story 40.4) : une place seulement RÉSERVÉE n’est pas dans mes séances, une inscription confirmée si', async () => {
+      const groupe = { ...episodique, gameSystemId: 'ralliement' };
+      prisma.partie.findMany.mockResolvedValue([groupe]);
+      const roles = jest.fn().mockResolvedValue(new Map([['A', 'member']]));
+      const dated = (status: string) =>
+        seance({
+          event: { partieId: 'A', title: 'Catane', ownerId: 'hote', scenario: null },
+          inscriptions: [{ userId: 'me', status }],
+        });
+
+      prisma.seance.findMany.mockResolvedValue([dated('RESERVED')]);
+      expect((await service.ownEventsOf('me', roles, RANGE)).seances).toEqual([]);
+
+      prisma.seance.findMany.mockResolvedValue([dated('CONFIRMED')]);
+      expect((await service.ownEventsOf('me', roles, RANGE)).seances).toHaveLength(1);
     });
 
     it('inscriptions ouvertes : une partie non épisodique n’en a jamais', async () => {

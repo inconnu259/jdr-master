@@ -440,6 +440,30 @@ export const grimoireEmeraude = {
     'Votre inscription à cette conjonction n’a pu être enregistrée. Réessayez.',
   'partie.ralliement_event_unsubscribe_error':
     'Votre désinscription de cette conjonction n’a pu être enregistrée. Réessayez.',
+  /* — réserver une place à des membres (Story 40.4) : mots du contrat identiques, situations et replis d’erreur selon le thème — */
+  'partie.ralliement_event_chip_reserved': 'Place réservée',
+  'partie.ralliement_event_accept_btn': 'Accepter',
+  'partie.ralliement_event_decline_btn': 'Décliner',
+  'partie.ralliement_event_reserve_label': 'Réserver une place à des membres',
+  'partie.ralliement_event_reserve_hint':
+    'Une place réservée est rendue aux autres si la personne la décline.',
+  'partie.ralliement_event_reserve_none': 'Aucun autre membre à qui réserver une place.',
+  'partie.ralliement_event_reserve_chip_aria': 'Réserver une place à {name}',
+  'partie.ralliement_event_unreserve_btn': 'Retirer la réservation',
+  'partie.ralliement_event_unreserve_aria': 'Retirer la réservation de {name}',
+  'partie.ralliement_event_pending_text': '{name} — invité·e, n’a pas encore accepté',
+  'partie.ralliement_event_situation_reserved':
+    'Une place vous est réservée dans cette conjonction : acceptez-la ou déclinez-la.',
+  'partie.ralliement_event_situation_reserved_past':
+    'Une place vous était réservée dans cette conjonction.',
+  'partie.ralliement_event_accept_error':
+    'Votre acceptation de cette place dans la conjonction n’a pu être enregistrée. Réessayez.',
+  'partie.ralliement_event_decline_error':
+    'Votre refus de cette place dans la conjonction n’a pu être enregistré. Réessayez.',
+  'partie.ralliement_event_reserve_error':
+    'Cette place de la conjonction n’a pu être réservée. Réessayez.',
+  'partie.ralliement_event_unreserve_error':
+    'Cette réservation de la conjonction n’a pu être retirée. Réessayez.',
   /* — « Missives » d’un groupe, côté administrateur (Story 39.3) : variantes sans mot de JDR — */
   'partie.ralliement_invite_title': 'Convier au ralliement',
   'partie.ralliement_search_label': 'Pseudo ou signe distinctif',
@@ -515,6 +539,7 @@ export const grimoireEmeraude = {
   /* — signaux d’état — */
   'partie.signal_personnage_a_creer': 'Créer son héros',
   'partie.signal_vote_en_cours_sans_reponse': 'Répondez au vote',
+  'partie.signal_reservation_a_confirmer': 'Une place vous attend',
   'partie.signal_compte_rendu_non_redige': 'Chronique à rédiger',
   'partie.signal_homme_dragon_a_creer': 'Créer son Homme Dragon',
   'partie.signal_aucun_membre_invite': 'Aucun compagnon convoqué',

@@ -11,6 +11,8 @@ const SUBJECTS: Record<EmailTemplate, string> = {
   'session-reminder': 'Rappel : séance de {{partieName}} demain',
   // Story 40.3 : rappel de la veille d'une conjonction de groupe — vocabulaire neutre, aucun mot de JDR.
   'conjonction-reminder': 'Demain : « {{eventTitle}} »',
+  // Story 40.4 : place réservée par l'hôte — vocabulaire neutre, aucun mot de JDR (l'invité peut n'en avoir jamais vu).
+  'conjonction-reservation': '{{hostName}} vous a réservé une place : « {{eventTitle}} »',
   'password-reset': 'Réinitialisation de votre mot de passe',
   'password-changed': 'Votre mot de passe a été modifié',
   'level-up': 'Nouveau niveau disponible pour {{characterName}}',
@@ -28,6 +30,7 @@ const ACTION_LABELS: Record<EmailTemplate, string | null> = {
   'group-invitation': 'Rejoindre le groupe',
   'session-reminder': 'Voir la partie',
   'conjonction-reminder': 'Voir la rencontre',
+  'conjonction-reservation': 'Répondre',
   'password-reset': 'Choisir un nouveau mot de passe',
   'password-changed': null,
   'level-up': 'Voir la fiche',

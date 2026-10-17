@@ -35,6 +35,23 @@ describe('dominantSignal (Story 29.7, AC8)', () => {
   });
 });
 
+describe('RESERVATION_A_CONFIRMER (Story 40.4)', () => {
+  it("est un signal à échéance, juste après le vote sans réponse", () => {
+    expect(dominantCategory(['RESERVATION_A_CONFIRMER'])).toBe('deadline');
+    expect(sortByPriority(['RAPPORT_FIN_MANQUANT', 'RESERVATION_A_CONFIRMER', 'VOTE_EN_COURS_SANS_REPONSE'])).toEqual([
+      'VOTE_EN_COURS_SANS_REPONSE',
+      'RESERVATION_A_CONFIRMER',
+      'RAPPORT_FIN_MANQUANT',
+    ]);
+  });
+
+  it('un blocage prime, mais la réservation prime sur un retard et sur l’information', () => {
+    expect(dominantSignal(['AUCUN_MEMBRE_INVITE', 'RESERVATION_A_CONFIRMER'])).toBe('AUCUN_MEMBRE_INVITE');
+    expect(dominantSignal(['RAPPORT_FIN_MANQUANT', 'RESERVATION_A_CONFIRMER'])).toBe('RESERVATION_A_CONFIRMER');
+    expect(dominantSignal(['PROCHAINE_SEANCE_CONNUE', 'RESERVATION_A_CONFIRMER'])).toBe('RESERVATION_A_CONFIRMER');
+  });
+});
+
 describe('sortByPriority (Story 29.7, AC3)', () => {
   it('trie du plus au moins prioritaire, dominantSignal() en tête', () => {
     const sorted = sortByPriority([

@@ -215,6 +215,11 @@ describe('ScenariosService', () => {
   let characters: ReturnType<typeof makeCharacters>;
   let pollService: ReturnType<typeof makePollService>;
   let realtimeEvents: ReturnType<typeof makeRealtimeEvents>;
+  let groupEvents: {
+    accepter: jest.Mock;
+    reserver: jest.Mock;
+    retirerReservation: jest.Mock;
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -246,10 +251,102 @@ describe('ScenariosService', () => {
         // Story 37.3 — l'EventsService réel, sur les mêmes mocks Prisma/temps réel.
         EventsService,
         // Story 40.3 — branche « groupe » des routes d'inscription (jamais atteinte par ces tests JDR).
-        { provide: GroupEventsService, useValue: { inscrire: jest.fn(), desinscrire: jest.fn() } },
+        {
+          provide: GroupEventsService,
+          useValue: {
+            inscrire: jest.fn(),
+            desinscrire: jest.fn(),
+            accepter: jest.fn(),
+            reserver: jest.fn(),
+            retirerReservation: jest.fn(),
+          },
+        },
       ],
     }).compile();
     service = module.get(ScenariosService);
+    groupEvents = module.get(GroupEventsService);
+  });
+
+  describe('places réservées d’une conjonction (Story 40.4)', () => {
+    const GROUPE = {
+      id: 'g1',
+      ownerId: 'a',
+      kind: 'CAMPAGNE_EPISODIQUE',
+      gameSystemId: 'ralliement',
+    };
+    const grant = (partie: Record<string, unknown> = GROUPE) =>
+      testGrant(partie, 'member', { eventId: 'e1', seanceId: 'se1' });
+
+    it('reserver : droit SEANCE_RESERVE décidé sur la SÉANCE (jamais la route), puis délégation au groupe', async () => {
+      const g = grant();
+      permissions.assert.mockResolvedValue(g);
+      groupEvents.reserver.mockResolvedValue({ id: 'e1' });
+
+      await expect(service.reserver('se1', 'hote', 'cible')).resolves.toEqual({ id: 'e1' });
+
+      expect(permissions.assert).toHaveBeenCalledWith('hote', 'SEANCE_RESERVE', {
+        seanceId: 'se1',
+      });
+      expect(groupEvents.reserver).toHaveBeenCalledWith(g, 'hote', 'cible');
+    });
+
+    it('retirerReservation : même droit, puis délégation au groupe', async () => {
+      const g = grant();
+      permissions.assert.mockResolvedValue(g);
+
+      await service.retirerReservation('se1', 'hote', 'cible');
+
+      expect(permissions.assert).toHaveBeenCalledWith('hote', 'SEANCE_RESERVE', {
+        seanceId: 'se1',
+      });
+      expect(groupEvents.retirerReservation).toHaveBeenCalledWith(g, 'hote', 'cible');
+    });
+
+    it.each(['reserver', 'retirerReservation'] as const)(
+      '%s : un refus de droit (non-hôte, étranger, JDR) remonte, rien n’est délégué',
+      async (method) => {
+        permissions.assert.mockRejectedValue(new ForbiddenException('pas l’hôte'));
+
+        await expect(service[method]('se1', 'autre', 'cible')).rejects.toBeInstanceOf(
+          ForbiddenException,
+        );
+        expect(groupEvents.reserver).not.toHaveBeenCalled();
+        expect(groupEvents.retirerReservation).not.toHaveBeenCalled();
+      },
+    );
+
+    it('accepter : droit SEANCE_INSCRIBE (comme s’inscrire) sur la séance, puis délégation au groupe', async () => {
+      const g = grant();
+      permissions.assert.mockResolvedValue(g);
+      groupEvents.accepter.mockResolvedValue({ id: 'e1' });
+
+      await expect(service.accepterReservation('se1', 'cible')).resolves.toEqual({ id: 'e1' });
+
+      expect(permissions.assert).toHaveBeenCalledWith('cible', 'SEANCE_INSCRIBE', {
+        seanceId: 'se1',
+      });
+      expect(groupEvents.accepter).toHaveBeenCalledWith(g, 'cible');
+    });
+
+    it('accepter : une partie de JDR est refusée (403) — la réservation n’existe que dans un groupe', async () => {
+      permissions.assert.mockResolvedValue(
+        grant({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
+
+      await expect(service.accepterReservation('se1', 'joueur')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(groupEvents.accepter).not.toHaveBeenCalled();
+    });
+
+    it('accepter : un refus de droit (étranger) remonte tel quel', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException('pas accès'));
+
+      await expect(service.accepterReservation('se1', 'etranger')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(groupEvents.accepter).not.toHaveBeenCalled();
+    });
   });
 
   describe('create()', () => {

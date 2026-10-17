@@ -16,6 +16,7 @@ describe('EventsApiService (Story 40.1)', () => {
     hostDisplayName: 'Léa',
     seance: null,
     participants: [],
+    myInscription: null,
   };
 
   beforeEach(() => {
@@ -71,6 +72,34 @@ describe('EventsApiService (Story 40.1)', () => {
   it('desinscrire → DELETE /scenarios/seances/:id/inscription, avec withCredentials (Story 40.3)', async () => {
     const p = service.desinscrire('s1');
     const req = http.expectOne(`${API}/scenarios/seances/s1/inscription`);
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(card);
+    expect(await p).toEqual(card);
+  });
+
+  it('accepter → PATCH /scenarios/seances/:id/inscription/accept, avec withCredentials (Story 40.4)', async () => {
+    const p = service.accepter('s1');
+    const req = http.expectOne(`${API}/scenarios/seances/s1/inscription/accept`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(card);
+    expect(await p).toEqual(card);
+  });
+
+  it('reserver → POST /scenarios/seances/:id/reservations avec l’identifiant du membre (Story 40.4)', async () => {
+    const p = service.reserver('s1', 'u2');
+    const req = http.expectOne(`${API}/scenarios/seances/s1/reservations`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual({ userId: 'u2' });
+    req.flush(card);
+    expect(await p).toEqual(card);
+  });
+
+  it('retirerReservation → DELETE /scenarios/seances/:id/reservations/:userId (Story 40.4)', async () => {
+    const p = service.retirerReservation('s1', 'u2');
+    const req = http.expectOne(`${API}/scenarios/seances/s1/reservations/u2`);
     expect(req.request.method).toBe('DELETE');
     expect(req.request.withCredentials).toBe(true);
     req.flush(card);

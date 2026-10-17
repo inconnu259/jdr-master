@@ -1,8 +1,12 @@
 import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
   IsIn,
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   Min,
@@ -70,6 +74,15 @@ export class CreateEventDto implements CreateEventPayload {
   @IsInt({ message: 'Le nombre de places doit être un entier' })
   @Min(2, { message: 'Des places limitées en comptent au moins 2, hôte compris' })
   capacity?: number | null;
+
+  /** Story 40.4 : membres à qui une place est réservée d'emblée. Les règles métier (places limitées,
+   *  jamais l'hôte, au plus `capacity − 1`, tous membres) sont vérifiées par le service. */
+  @IsOptional()
+  @IsArray({ message: 'Les places réservées doivent être une liste' })
+  @ArrayMaxSize(100, { message: 'Trop de places réservées' })
+  @ArrayUnique({ message: 'Une même personne ne peut pas recevoir deux places' })
+  @IsUUID(undefined, { each: true, message: 'Un membre réservé est mal identifié' })
+  reservedUserIds?: string[];
 }
 
 /**

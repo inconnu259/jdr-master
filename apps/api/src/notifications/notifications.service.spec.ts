@@ -186,6 +186,25 @@ describe('NotificationsService', () => {
       expect(prisma.seance.updateMany).toHaveBeenCalledTimes(1);
     });
 
+    it('une place seulement RÉSERVÉE ne reçoit pas le rappel (Story 40.4) — hôte et inscrits confirmés seulement', async () => {
+      const u = (id: string) => ({ id, email: `${id}@example.com` });
+      prisma.seance.findMany.mockResolvedValue([
+        withHost(
+          conjonction({
+            inscriptions: [
+              { status: 'CONFIRMED', user: u('b') },
+              { status: 'RESERVED', user: u('c') },
+            ],
+          }),
+        ),
+      ]);
+
+      await service.sendDueReminders();
+
+      const recipients = (email.sendMail.mock.calls as [string, string][]).map(([, to]) => to);
+      expect(recipients).toEqual(['a@example.com', 'b@example.com']);
+    });
+
     it('le message porte le titre, la date, le lieu et le lien vers la page du groupe', async () => {
       prisma.seance.findMany.mockResolvedValue([withHost(conjonction({ startSlot: 'EVENING' }))]);
 

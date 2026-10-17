@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -25,7 +26,10 @@ import { EventsService } from '../events/events.service';
 import { GroupEventsService } from '../events/group-events.service';
 import { PartiesService } from '../parties/parties.service';
 import { countParticipants } from '../common/participant-count.util';
-import { PermissionService } from '../permissions/permission.service';
+import {
+  PermissionService,
+  RALLIEMENT_UNAVAILABLE_MESSAGE,
+} from '../permissions/permission.service';
 import {
   VISIBLE_SCENARIO_WHERE,
   isHiddenDraft,
@@ -866,6 +870,38 @@ export class ScenariosService {
     // Deferred-work (SSE, calendrier personnel) : même raison qu'inscrire() ci-dessus.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, partie.ownerId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
+  }
+
+  // ─── Places réservées d'une conjonction (Story 40.4) ────────────────────────────────────────
+  // Routes partagées avec le JDR (`scenarios/seances/:id/…`) mais propres au groupe de ralliement :
+  // la partie est résolue DEPUIS la séance par `PermissionService.assert` (jamais depuis la route).
+
+  /** L'hôte de la conjonction réserve une place à un membre (`SEANCE_RESERVE` : cellule de rôle du
+   *  groupe + « hôte de l'événement » décidé dans `assert()` ; nulle en JDR). Renvoie la carte à jour. */
+  async reserver(seanceId: string, hostId: string, targetUserId: string): Promise<EventCardDto> {
+    const grant = await this.permissions.assert(hostId, 'SEANCE_RESERVE', { seanceId });
+    return this.groupEvents.reserver(grant, hostId, targetUserId);
+  }
+
+  /** L'hôte retire la réservation d'un membre (même droit). Renvoie la carte à jour. */
+  async retirerReservation(
+    seanceId: string,
+    hostId: string,
+    targetUserId: string,
+  ): Promise<EventCardDto> {
+    const grant = await this.permissions.assert(hostId, 'SEANCE_RESERVE', { seanceId });
+    return this.groupEvents.retirerReservation(grant, hostId, targetUserId);
+  }
+
+  /** La personne à qui une place est réservée l'accepte (`SEANCE_INSCRIBE`, comme s'inscrire). La
+   *  réservation n'existe que dans un groupe de ralliement : toute autre famille est refusée (403).
+   *  Renvoie la carte à jour. */
+  async accepterReservation(seanceId: string, userId: string): Promise<EventCardDto> {
+    const grant = await this.permissions.assert(userId, 'SEANCE_INSCRIBE', { seanceId });
+    if (familyOf(grant.partie.gameSystemId) !== 'ralliement') {
+      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
+    }
+    return this.groupEvents.accepter(grant, userId);
   }
 
   // AD-1/AD-9 : compte-rendu = champ neutre de Seance, jamais restreint par kind ni par un

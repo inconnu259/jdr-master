@@ -981,6 +981,19 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_event_signup_btn',
     'partie.ralliement_event_unsubscribe_btn',
     'partie.ralliement_event_badge_full',
+    // Story 40.4 : « Place réservée », « Accepter », « Décliner », « Réserver une place à des membres »,
+    // son aide, la pastille « invité·e » de l’hôte et les actions de retrait sont des mots du contrat
+    // d’UI ; les situations de la personne réservée et les replis d’erreur ont une voix
+    'partie.ralliement_event_chip_reserved',
+    'partie.ralliement_event_accept_btn',
+    'partie.ralliement_event_decline_btn',
+    'partie.ralliement_event_reserve_label',
+    'partie.ralliement_event_reserve_hint',
+    'partie.ralliement_event_reserve_none',
+    'partie.ralliement_event_reserve_chip_aria',
+    'partie.ralliement_event_unreserve_btn',
+    'partie.ralliement_event_unreserve_aria',
+    'partie.ralliement_event_pending_text',
     // Gabarits structurels et libellés techniques
     'partie.signal_more_count',
     'parties.detail_link_expires_short',
@@ -1478,6 +1491,50 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     }
     expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_situation_full']).toBe(
       'Complet : toutes les places de cette halte sont prises.',
+    );
+  });
+
+  // Story 40.4 : réserver une place à des membres. Les mots du contrat sont identiques dans les trois
+  // thèmes ; la situation de la personne réservée, le signal d'accueil et les replis d'erreur ont une voix.
+  it('Story 40.4 : la réservation de place garde les mots du contrat et prend la voix du thème, sans mot de JDR', () => {
+    const neutres: Record<string, string> = {
+      'partie.ralliement_event_chip_reserved': 'Place réservée',
+      'partie.ralliement_event_accept_btn': 'Accepter',
+      'partie.ralliement_event_decline_btn': 'Décliner',
+      'partie.ralliement_event_reserve_label': 'Réserver une place à des membres',
+      'partie.ralliement_event_unreserve_btn': 'Retirer la réservation',
+    };
+    for (const [key, attendu] of Object.entries(neutres)) {
+      for (const theme of THEMES) expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(attendu);
+    }
+    const voix = [
+      'partie.signal_reservation_a_confirmer',
+      'partie.ralliement_event_situation_reserved',
+      'partie.ralliement_event_situation_reserved_past',
+      'partie.ralliement_event_accept_error',
+      'partie.ralliement_event_decline_error',
+      'partie.ralliement_event_reserve_error',
+      'partie.ralliement_event_unreserve_error',
+    ];
+    for (const key of voix) {
+      const valeurs = THEMES.map((theme) => TONE_MAP[theme][key]);
+      expect(new Set(valeurs).size, key).toBe(THEMES.length);
+    }
+    for (const key of [...Object.keys(neutres), ...voix]) {
+      for (const theme of THEMES) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).not.toMatch(NON_JDR_BANNED_WORDS);
+      }
+    }
+    for (const theme of THEMES) {
+      expect(TONE_MAP[theme]['partie.ralliement_event_reserve_chip_aria'], theme).toContain('{name}');
+      expect(TONE_MAP[theme]['partie.ralliement_event_unreserve_aria'], theme).toContain('{name}');
+      // Le texte de l’hôte reste lisible en toutes lettres : « <nom> — invité·e, n’a pas encore accepté ».
+      expect(TONE_MAP[theme]['partie.ralliement_event_pending_text'], theme).toBe(
+        '{name} — invité·e, n’a pas encore accepté',
+      );
+    }
+    expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_situation_reserved']).toBe(
+      'Une place t’est gardée à cette halte : accepte-la ou décline-la.',
     );
   });
 

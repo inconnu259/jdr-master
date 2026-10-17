@@ -82,6 +82,27 @@ describe('EmailService', () => {
     });
   });
 
+  it('conjonction-reservation : sujet neutre « <hôte> vous a réservé une place : « <titre> » » et bouton « Répondre » (Story 40.4)', async () => {
+    await service.sendMail('conjonction-reservation', 'ami@example.com', {
+      hostName: 'Léa',
+      eventTitle: 'Catane',
+      sessionDate: 'samedi 24 octobre (soir)',
+      link: 'https://x/parties/p1',
+    });
+    expect(mailer.sendMail).toHaveBeenCalledWith({
+      to: 'ami@example.com',
+      subject: '{{hostName}} vous a réservé une place : « {{eventTitle}} »',
+      template: 'conjonction-reservation',
+      context: {
+        hostName: 'Léa',
+        eventTitle: 'Catane',
+        sessionDate: 'samedi 24 octobre (soir)',
+        link: 'https://x/parties/p1',
+        actionLabel: 'Répondre',
+      },
+    });
+  });
+
   it('sujet correct par gabarit (session-reminder, password-reset)', async () => {
     await service.sendMail('session-reminder', 'joueur@example.com', {});
     expect(mailer.sendMail).toHaveBeenCalledWith(

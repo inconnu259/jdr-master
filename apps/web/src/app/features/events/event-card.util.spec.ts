@@ -1,6 +1,8 @@
 import type { EventCardDto } from '@master-jdr/shared';
 import { TONE_MAP } from '../../core/theme/tones';
 import {
+  canManageReservations,
+  canRespondToReservation,
   canSignUp,
   canUnsubscribe,
   eventBadge,
@@ -13,6 +15,7 @@ import {
   isFullForViewer,
   isHostOf,
   isParticipantOf,
+  isPendingParticipant,
   participationLine,
   isImminentEvent,
   isPastEvent,
@@ -35,8 +38,10 @@ const card = (id: string, date: string | null, over: Partial<EventCardDto> = {})
     heureRdv: null,
     notePratique: null,
     capacity: null,
+    placesTaken: 1,
   },
   participants: [],
+  myInscription: null,
   ...over,
 });
 
@@ -141,12 +146,13 @@ describe('event-card.util (Story 40.1)', () => {
   describe('Story 40.2', () => {
     const withPeople = (capacity: number | null, n: number) =>
       card('x', '2026-10-20', {
-        seance: { ...card('x', '2026-10-20').seance!, capacity },
+        seance: { ...card('x', '2026-10-20').seance!, capacity, placesTaken: n },
         participants: Array.from({ length: n }, (_, k) => ({
           userId: k === 0 ? 'hote' : `u${k}`,
           displayName: `P${k}`,
           isHost: k === 0,
           isAdmin: false,
+          status: 'CONFIRMED' as const,
         })),
       });
 
@@ -206,12 +212,13 @@ describe('event-card.util (Story 40.1)', () => {
   describe('Story 40.3 — inscription, « Complet »', () => {
     const people = (capacity: number | null, ids: string[], date = '2026-10-20') =>
       card('x', date, {
-        seance: { ...card('x', date).seance!, capacity },
+        seance: { ...card('x', date).seance!, capacity, placesTaken: ids.length },
         participants: ids.map((id) => ({
           userId: id,
           displayName: id,
           isHost: id === 'hote',
           isAdmin: false,
+          status: 'CONFIRMED' as const,
         })),
       });
     // Capacité 3 : l'hôte et deux inscrits la remplissent.
@@ -269,7 +276,9 @@ describe('event-card.util (Story 40.1)', () => {
     it('sans séance : ni « S’inscrire » ni « Me désinscrire » (le clic ne ferait rien)', () => {
       const noSeance = card('n', null, {
         seance: null,
-        participants: [{ userId: 'u1', displayName: 'u1', isHost: false, isAdmin: false }],
+        participants: [
+          { userId: 'u1', displayName: 'u1', isHost: false, isAdmin: false, status: 'CONFIRMED' },
+        ],
       });
       expect(canSignUp(noSeance, 'autre', TODAY)).toBe(false);
       expect(canUnsubscribe(noSeance, 'u1', TODAY)).toBe(false);
@@ -282,6 +291,110 @@ describe('event-card.util (Story 40.1)', () => {
       expect(canUnsubscribe(open, 'autre', TODAY)).toBe(false);
       expect(canUnsubscribe(people(3, ['hote', 'u1'], '2026-10-01'), 'u1', TODAY)).toBe(false);
       expect(canUnsubscribe(full, 'u1', TODAY)).toBe(true);
+    });
+  });
+
+  describe('Story 40.4 — places réservées', () => {
+    /** Conjonction à 4 places : l'hôte, un inscrit, et une place réservée à `resa`. Vue d'un membre
+     *  quelconque : la place réservée n'est pas dans la liste, mais « placesTaken » la compte. */
+    const held = (over: Partial<EventCardDto> = {}, date = '2026-10-20') =>
+      card('x', date, {
+        seance: { ...card('x', date).seance!, capacity: 4, placesTaken: 3 },
+        participants: [
+          { userId: 'hote', displayName: 'Léa', isHost: true, isAdmin: false, status: 'CONFIRMED' },
+          { userId: 'u1', displayName: 'Zoé', isHost: false, isAdmin: false, status: 'CONFIRMED' },
+        ],
+        ...over,
+      });
+    /** Même conjonction vue de l'hôte : la réservation en attente figure parmi les participants. */
+    const heldForHost = () =>
+      held({
+        participants: [
+          ...held().participants,
+          { userId: 'resa', displayName: 'Sam', isHost: false, isAdmin: false, status: 'RESERVED' },
+        ],
+      });
+
+    it('« Complet » vient de placesTaken : une place tenue (réservée) compte, sans être listée', () => {
+      const almost = held({ seance: { ...held().seance!, capacity: 3 } });
+      expect(isFull(almost)).toBe(true);
+      expect(isFull(held())).toBe(false);
+      // Un membre sans ligne ne peut plus s'inscrire et lit « Complet ».
+      expect(canSignUp(almost, 'autre', TODAY)).toBe(false);
+      expect(isFullForViewer(almost, 'autre', TODAY)).toBe(true);
+    });
+
+    it('la personne qui tient la place réservée n’est pas « inscrite » : elle ne s’inscrit pas et la conjonction n’est pas « complète » pour elle', () => {
+      const mine = held({
+        seance: { ...held().seance!, capacity: 3 },
+        myInscription: 'RESERVED',
+      });
+      expect(isParticipantOf(mine, 'resa')).toBe(false);
+      expect(canSignUp(mine, 'resa', TODAY)).toBe(false);
+      expect(isFullForViewer(mine, 'resa', TODAY)).toBe(false);
+      expect(canUnsubscribe(mine, 'resa', TODAY)).toBe(false);
+    });
+
+    it('une ligne RESERVED de la liste (vue de l’hôte) n’est pas une participation', () => {
+      expect(isParticipantOf(heldForHost(), 'resa')).toBe(false);
+      expect(isParticipantOf(heldForHost(), 'u1')).toBe(true);
+      expect(isParticipantOf(heldForHost(), 'hote')).toBe(true);
+    });
+
+    it('participation : « inscrits » = hôte + confirmés ; « libres » = capacité − places prises (réservées comprises)', () => {
+      // 4 places · 2 inscrits · 1 libre (la 3e place est tenue, la 4e libre) — vue de n'importe qui.
+      expect(participationLine(held(), TONE)).toBe('4 places · 2 inscrits · 1 libre');
+      expect(participationLine(heldForHost(), TONE)).toBe('4 places · 2 inscrits · 1 libre');
+    });
+
+    it('puce de situation : « Place réservée » (pleine) pour qui tient une place ; « Pas inscrit·e » (pointillée) une fois la conjonction passée', () => {
+      const mine = held({ myInscription: 'RESERVED' });
+      expect(eventSituation(mine, 'resa', TODAY)).toEqual({
+        labelKey: 'partie.ralliement_event_chip_reserved',
+        dotted: false,
+      });
+      const past = held({ myInscription: 'RESERVED' }, '2026-10-01');
+      expect(eventSituation(past, 'resa', TODAY)).toEqual({
+        labelKey: 'partie.ralliement_event_chip_not_registered',
+        dotted: true,
+      });
+    });
+
+    it('texte du panneau : « réservée » (au présent), « réservée_past » à l’imparfait', () => {
+      expect(eventSituationTextKey(held({ myInscription: 'RESERVED' }), 'resa', TODAY)).toBe(
+        'partie.ralliement_event_situation_reserved',
+      );
+      expect(
+        eventSituationTextKey(held({ myInscription: 'RESERVED' }, '2026-10-01'), 'resa', TODAY),
+      ).toBe('partie.ralliement_event_situation_reserved_past');
+    });
+
+    it('répondre à la réservation : seulement avec une place réservée, avant le jour passé', () => {
+      expect(canRespondToReservation(held({ myInscription: 'RESERVED' }), TODAY)).toBe(true);
+      expect(canRespondToReservation(held({ myInscription: 'CONFIRMED' }), TODAY)).toBe(false);
+      expect(canRespondToReservation(held(), TODAY)).toBe(false);
+      expect(canRespondToReservation(held({ myInscription: 'RESERVED' }, '2026-10-01'), TODAY)).toBe(
+        false,
+      );
+      expect(canRespondToReservation(held({ myInscription: 'RESERVED', seance: null }), TODAY)).toBe(
+        false,
+      );
+    });
+
+    it('gérer les réservations : l’hôte, places limitées, pas passée', () => {
+      expect(canManageReservations(held(), 'hote', TODAY)).toBe(true);
+      expect(canManageReservations(held(), 'u1', TODAY)).toBe(false);
+      expect(canManageReservations(held(), null, TODAY)).toBe(false);
+      expect(canManageReservations(held({}, '2026-10-01'), 'hote', TODAY)).toBe(false);
+      const open = held({ seance: { ...held().seance!, capacity: null } });
+      expect(canManageReservations(open, 'hote', TODAY)).toBe(false);
+      expect(canManageReservations(held({ seance: null }), 'hote', TODAY)).toBe(false);
+    });
+
+    it('une place en attente se reconnaît à son statut', () => {
+      const [, , pending] = heldForHost().participants;
+      expect(isPendingParticipant(pending)).toBe(true);
+      expect(isPendingParticipant(heldForHost().participants[1])).toBe(false);
     });
   });
 });

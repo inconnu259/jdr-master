@@ -57,6 +57,41 @@ export class EventsApiService {
     );
   }
 
+  /** Story 40.4 : accepter la place qui m'est réservée (`PATCH /scenarios/seances/:id/inscription/accept`)
+   *  — la carte à jour. Décliner réutilise `desinscrire`. */
+  accepter(seanceId: string): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.patch<EventCardDto>(
+        `${API_BASE}/scenarios/seances/${seanceId}/inscription/accept`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  /** Story 40.4 : l'hôte réserve une place à un membre (`POST /scenarios/seances/:id/reservations`) —
+   *  la carte à jour, vue de l'hôte. Refus en français (complet 409, déjà inscrit 409, passée 400…). */
+  reserver(seanceId: string, userId: string): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.post<EventCardDto>(
+        `${API_BASE}/scenarios/seances/${seanceId}/reservations`,
+        { userId },
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  /** Story 40.4 : l'hôte retire la réservation d'un membre
+   *  (`DELETE /scenarios/seances/:id/reservations/:userId`) — la carte à jour. */
+  retirerReservation(seanceId: string, userId: string): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.delete<EventCardDto>(
+        `${API_BASE}/scenarios/seances/${seanceId}/reservations/${userId}`,
+        { withCredentials: true },
+      ),
+    );
+  }
+
   /** Story 40.2 : l'hôte remplace sa conjonction (`PATCH /parties/:id/events/:eventId`) — renvoie
    *  la carte à jour, participants compris. */
   update(partieId: string, eventId: string, dto: UpdateEventDto): Promise<EventCardDto> {

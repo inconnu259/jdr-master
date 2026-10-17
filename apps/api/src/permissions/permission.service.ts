@@ -163,6 +163,8 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
   SEANCE_POLL_CREATE: OWNER_ONLY,
   SEANCE_INSCRIBE: OWNER_AND_MEMBERS,
   SEANCE_UNSUBSCRIBE: OWNER_AND_MEMBERS,
+  // Story 40.4 : réserver une place à un membre n'existe pas en JDR (inscription libre, sans hôte).
+  SEANCE_RESERVE: NOBODY,
   // Vote de date
   POLL_READ: OWNER_AND_MEMBERS,
   POLL_VOTE: OWNER_AND_MEMBERS,
@@ -214,7 +216,7 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
  * l'administrateur seul, et, depuis la Story 39.4, « nommer un administrateur / quitter l'office ».
  * Depuis la Story 39.5, « quitter le groupe » est ouvert à l'administrateur et aux membres, et depuis
  * la Story 40.1, « proposer une conjonction / lister celles du groupe » et, depuis la Story 40.3,
- * « s'inscrire à une conjonction / s'en désinscrire ».
+ * « s'inscrire à une conjonction / s'en désinscrire », puis, Story 40.4, « réserver une place ».
  * TOUTE autre action est refusée
  * à tous les rôles — le ralliement n'a ni scénario, ni personnage, ni XP. Table COMPLÈTE par
  * construction (`Record` sur l'union fermée) : une action ajoutée sans sa ligne ne compile pas.
@@ -264,6 +266,9 @@ export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly Parti
   // service (`GroupEventsService`).
   SEANCE_INSCRIBE: ADMIN_AND_MEMBERS,
   SEANCE_UNSUBSCRIBE: ADMIN_AND_MEMBERS,
+  // Story 40.4 : réserver une place / retirer une réservation. Tout membre passe la cellule ; la règle
+  // « hôte de l'événement » est décidée plus bas, dans `assert()` (HOST_ONLY_ACTIONS) — jamais ailleurs.
+  SEANCE_RESERVE: ADMIN_AND_MEMBERS,
   // Vote de date
   POLL_READ: NOBODY,
   POLL_VOTE: NOBODY,
@@ -337,6 +342,9 @@ export const ACTION_CAPABILITY: Readonly<Partial<Record<PermissionAction, GameSy
  *  aucun code hors de `permissions/` ne lit `ownerId` pour un droit. */
 const HOST_ONLY_ACTIONS: ReadonlySet<PermissionAction> = new Set<PermissionAction>([
   'EVENT_UPDATE',
+  // Story 40.4 : réserver / retirer une réservation — cible `{ seanceId }` (l'hôte est celui de
+  // l'événement de la séance).
+  'SEANCE_RESERVE',
 ]);
 
 /** Politique applicable à une famille. Un système inconnu du registre retombe sur la politique
@@ -426,8 +434,9 @@ export class PermissionService {
       }
       throw new ForbiddenException(MJ_ONLY_MESSAGE);
     }
-    // Story 40.2 : l'hôte de l'événement visé seul (cible `{ eventId }` obligatoire ; une cible sans
-    // événement, ou un événement sans hôte — compte supprimé —, n'ouvre rien).
+    // Story 40.2 : l'hôte de l'événement visé seul (cible `{ eventId }` ou, Story 40.4, `{ seanceId }`
+    // obligatoire ; une cible sans événement, ou un événement sans hôte — compte supprimé —, n'ouvre
+    // rien).
     if (HOST_ONLY_ACTIONS.has(action) && (eventOwnerId == null || eventOwnerId !== userId)) {
       throw new ForbiddenException(HOST_ONLY_MESSAGE);
     }
@@ -609,6 +618,7 @@ export class PermissionService {
     return {
       partie: seance.event.partie,
       resolved: { partieId: seance.event.partie.id, eventId: seance.event.id, seanceId: seance.id },
+      eventOwnerId: seance.event.ownerId,
     };
   }
 

@@ -28,6 +28,7 @@ import { ScenariosService } from './scenarios.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
 import { CreateSeancePollDto } from './dto/create-seance-poll.dto';
+import { ReservePlaceDto } from './dto/reserve-place.dto';
 import { SetSeanceCapacityDto } from './dto/set-seance-capacity.dto';
 import { SetCompteRenduDto } from './dto/set-compte-rendu.dto';
 import { SetInfosPratiquesDto } from './dto/set-infos-pratiques.dto';
@@ -151,6 +152,32 @@ export class ScenariosController {
   @Delete('scenarios/seances/:id/inscription')
   desinscrire(@Param('id', ParseUUIDPipe) seanceId: string, @CurrentUser() user: AuthUser) {
     return this.scenarios.desinscrire(seanceId, user.id);
+  }
+
+  /** Story 40.4 : accepter la place qui m'est réservée (groupe de ralliement). */
+  @Patch('scenarios/seances/:id/inscription/accept')
+  accepterReservation(@Param('id', ParseUUIDPipe) seanceId: string, @CurrentUser() user: AuthUser) {
+    return this.scenarios.accepterReservation(seanceId, user.id);
+  }
+
+  /** Story 40.4 : l'hôte d'une conjonction réserve une place à un membre. */
+  @Post('scenarios/seances/:id/reservations')
+  reserver(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ReservePlaceDto,
+  ) {
+    return this.scenarios.reserver(seanceId, user.id, dto.userId);
+  }
+
+  /** Story 40.4 : l'hôte retire la réservation d'un membre. */
+  @Delete('scenarios/seances/:id/reservations/:userId')
+  retirerReservation(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @Param('userId', ParseUUIDPipe) targetUserId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.scenarios.retirerReservation(seanceId, user.id, targetUserId);
   }
 
   @Patch('scenarios/seances/:id/compte-rendu')
