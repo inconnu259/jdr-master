@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { EventsService } from './events.service';
 import { testGrant } from '../common/test-utils/grant';
-import { mockCalls } from '../common/test-utils/jest-typed';
+import { callArg, mockCalls, objectLike } from '../common/test-utils/jest-typed';
 import { VISIBLE_SEANCE_WHERE } from '../permissions/scenario-visibility';
 
 /** Story 37.6 — autorisation délivrée (simulée) par `PermissionService.assert()` sur `p1`. */
@@ -49,7 +49,8 @@ function makePrisma() {
     tx,
     $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
     // Story 37.6 — appartenance à la partie de l'autorisation (1 = la séance/l'événement en est).
-    event: { count: jest.fn().mockResolvedValue(1) },
+    // Story 40.1 : `listCards` lit les événements de la partie (cartes de conjonctions).
+    event: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([]) },
     seance: {
       count: jest.fn().mockResolvedValue(1),
       create: jest.fn(),
@@ -137,6 +138,163 @@ describe('EventsService (Story 37.3)', () => {
         service.create(testGrant({ id: 'absente', ownerId: null }), { title: 'X', ownerId: null }),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(prisma.tx.event.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createHosted() — conjonction à date fixée (Story 40.1)', () => {
+    const DAY = new Date('2026-11-14T00:00:00.000Z');
+    const SEANCE = {
+      date: DAY,
+      slot: 'EVENING' as const,
+      lieu: 'Lyon 3e',
+      heureRdv: '20:30',
+      notePratique: 'Apportez un jeu',
+      capacity: 8,
+    };
+
+    it('écrit l’événement (hôte = propriétaire de l’événement) et sa séance datée dans UNE transaction, recalcule la prochaine date, puis émet', async () => {
+      prisma.tx.$queryRaw.mockResolvedValue([{ kind: 'CAMPAGNE_EPISODIQUE' }]);
+
+      await service.createHosted(GRANT_P1, 'hote', { title: 'Catane', seance: SEANCE });
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.tx.event.create).toHaveBeenCalledWith({
+        data: { partieId: 'p1', title: 'Catane', description: null, ownerId: 'hote' },
+      });
+      expect(prisma.tx.seance.create).toHaveBeenCalledWith({
+        data: {
+          eventId: 'e1',
+          startDate: DAY,
+          startSlot: 'EVENING',
+          endDate: DAY,
+          endSlot: 'EVENING',
+          lieu: 'Lyon 3e',
+          heureRdv: '20:30',
+          notePratique: 'Apportez un jeu',
+          inscriptionMax: 8,
+        },
+      });
+      // Verrou de la partie (assertCanAddEvent) puis verrou du recalcul, même transaction.
+      expect(prisma.tx.$queryRaw).toHaveBeenCalledTimes(2);
+      expect(prisma.tx.seance.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.tx.partie.update).toHaveBeenCalledTimes(1);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+      expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('capacité nulle = « tous les membres » : aucune capacité écrite', async () => {
+      await service.createHosted(GRANT_P1, 'hote', {
+        title: 'X',
+        seance: { ...SEANCE, capacity: null, lieu: null, heureRdv: null, notePratique: null },
+      });
+
+      expect(prisma.tx.seance.create).toHaveBeenCalledWith({
+        data: objectLike({
+          inscriptionMax: null,
+          lieu: null,
+          heureRdv: null,
+          notePratique: null,
+        }),
+      });
+    });
+
+    it('n’émet rien si la transaction échoue', async () => {
+      prisma.tx.seance.create.mockRejectedValue(new Error('échec séance'));
+
+      await expect(
+        service.createHosted(GRANT_P1, 'hote', { title: 'X', seance: SEANCE }),
+      ).rejects.toThrow('échec séance');
+      expect(realtime.emit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listCards() — cartes de conjonctions (Story 40.1)', () => {
+    const row = (over: Record<string, unknown> = {}) => ({
+      id: 'e1',
+      title: 'Catane',
+      ownerId: 'hote',
+      owner: { displayName: 'Léa' },
+      seances: [
+        {
+          id: 'se1',
+          startDate: new Date('2026-11-14T00:00:00.000Z'),
+          startSlot: 'EVENING',
+          lieu: 'Lyon 3e',
+          heureRdv: '20:30',
+          notePratique: null,
+          inscriptionMax: 8,
+        },
+      ],
+      ...over,
+    });
+
+    it('projection explicite : hôte, séance unique (date en clé de jour), capacité', async () => {
+      prisma.event.findMany.mockResolvedValue([row()]);
+
+      const cards = await service.listCards(GRANT_P1);
+
+      expect(cards).toEqual([
+        {
+          id: 'e1',
+          title: 'Catane',
+          hostId: 'hote',
+          hostDisplayName: 'Léa',
+          seance: {
+            id: 'se1',
+            date: '2026-11-14',
+            slot: 'EVENING',
+            lieu: 'Lyon 3e',
+            heureRdv: '20:30',
+            notePratique: null,
+            capacity: 8,
+          },
+        },
+      ]);
+      // Une seule lecture, scopée à la partie de l'autorisation.
+      expect(prisma.event.findMany).toHaveBeenCalledTimes(1);
+      expect(callArg(prisma.event.findMany)).toEqual(
+        objectLike({ where: { partieId: 'p1' } }),
+      );
+    });
+
+    it('même jour : tri par créneau (matin < après-midi < soir), pas par ordre de création', async () => {
+      const at = (id: string, slot: string) =>
+        row({ id, seances: [{ ...row().seances[0], startSlot: slot }] });
+      prisma.event.findMany.mockResolvedValue([
+        at('soir', 'EVENING'),
+        at('matin', 'MORNING'),
+        at('aprem', 'AFTERNOON'),
+      ]);
+
+      const cards = await service.listCards(GRANT_P1);
+
+      expect(cards.map((c) => c.id)).toEqual(['matin', 'aprem', 'soir']);
+    });
+
+    it('hôte disparu → identité nulle ; tri par date, sans date en dernier', async () => {
+      prisma.event.findMany.mockResolvedValue([
+        row({ id: 'sans-date', seances: [{ ...row().seances[0], startDate: null }] }),
+        row({
+          id: 'tard',
+          ownerId: null,
+          owner: null,
+          seances: [{ ...row().seances[0], startDate: new Date('2026-12-01T00:00:00Z') }],
+        }),
+        row({ id: 'tot' }),
+      ]);
+
+      const cards = await service.listCards(GRANT_P1);
+
+      expect(cards.map((c) => c.id)).toEqual(['tot', 'tard', 'sans-date']);
+      expect(cards[1]).toEqual(objectLike({ hostId: null, hostDisplayName: null }));
+    });
+
+    it('restreinte à des identifiants donnés (carte d’un événement tout juste créé)', async () => {
+      await service.listCards(GRANT_P1, ['e9']);
+
+      expect(callArg(prisma.event.findMany)).toEqual(
+        objectLike({ where: { partieId: 'p1', id: { in: ['e9'] } } }),
+      );
     });
   });
 
@@ -732,6 +890,68 @@ describe('EventsService (Story 37.3)', () => {
       expect(map.get('u1')).toHaveLength(1);
     });
 
+    it('rencontre isolée de ralliement (ONE_SHOT) datée : règle historique inchangée — propriétaire et tous les membres', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        {
+          id: 'B',
+          kind: 'ONE_SHOT',
+          gameSystemId: 'ralliement',
+          ownerId: 'createur',
+          memberships: [{ userId: 'createur' }, { userId: 'autre' }],
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        seanceB({ event: { partieId: 'B', ownerId: 'hote-ailleurs' } }),
+      ]);
+
+      const map = await service.occupiedSpansOf(['createur', 'autre', 'hote-ailleurs']);
+
+      expect(map.get('createur')).toHaveLength(1);
+      expect(map.get('autre')).toHaveLength(1);
+      expect(map.get('hote-ailleurs')).toEqual([]);
+    });
+
+    it('ralliement (Story 40.1) : l’HÔTE de l’événement et les inscrits sont occupés — ni le propriétaire de la partie ni les autres membres', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        {
+          id: 'B',
+          kind: 'CAMPAGNE_EPISODIQUE',
+          gameSystemId: 'ralliement',
+          ownerId: 'createur',
+          memberships: [{ userId: 'createur' }, { userId: 'hote' }, { userId: 'autre' }],
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        seanceB({ event: { partieId: 'B', ownerId: 'hote' } }),
+      ]);
+
+      const map = await service.occupiedSpansOf(['createur', 'hote', 'autre']);
+
+      expect(map.get('hote')).toEqual([{ date: new Date('2026-09-10T00:00:00Z'), slot: 'EVENING' }]);
+      expect(map.get('createur')).toEqual([]);
+      expect(map.get('autre')).toEqual([]);
+    });
+
+    it('ralliement : hôte disparu → seuls les inscrits sont occupés', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        {
+          id: 'B',
+          kind: 'CAMPAGNE_EPISODIQUE',
+          gameSystemId: 'ralliement',
+          ownerId: 'createur',
+          memberships: [{ userId: 'inscrit' }],
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        seanceB({ event: { partieId: 'B', ownerId: null }, inscriptions: [{ userId: 'inscrit' }] }),
+      ]);
+
+      const map = await service.occupiedSpansOf(['createur', 'inscrit']);
+
+      expect(map.get('inscrit')).toHaveLength(1);
+      expect(map.get('createur')).toEqual([]);
+    });
+
     it('deux requêtes au total, jamais une par utilisateur ni par partie', async () => {
       prisma.partie.findMany.mockResolvedValue([
         { id: 'B', kind: 'ONE_SHOT', ownerId: 'mjB', memberships: [{ userId: 'u1' }] },
@@ -920,6 +1140,36 @@ describe('EventsService (Story 37.3)', () => {
       const own = await service.ownEventsOf('me', rolesOf('player'), RANGE);
 
       expect(own.seances.map((s) => s.seanceId)).toEqual(['se1']);
+    });
+
+    it('rencontre isolée de ralliement (ONE_SHOT) datée : règle historique — tout membre la voit, hôte ou non', async () => {
+      prisma.partie.findMany.mockResolvedValue([{ ...partieA, gameSystemId: 'ralliement' }]);
+      prisma.seance.findMany.mockResolvedValue([
+        seance({ event: { partieId: 'A', title: 'Soirée', ownerId: 'quelquun', scenario: null } }),
+      ]);
+      const membre = jest.fn().mockResolvedValue(new Map([['A', 'member']]));
+
+      const own = await service.ownEventsOf('me', membre, RANGE);
+
+      expect(own.seances.map((s) => s.seanceId)).toEqual(['se1']);
+    });
+
+    it('ralliement (Story 40.1) : l’hôte voit son événement, un membre non inscrit non ; la sortie garde sa forme', async () => {
+      const groupe = { ...episodique, gameSystemId: 'ralliement' };
+      prisma.partie.findMany.mockResolvedValue([groupe]);
+      prisma.seance.findMany.mockResolvedValue([
+        seance({ event: { partieId: 'A', title: 'Catane', ownerId: 'me', scenario: null } }),
+      ]);
+      // Le rôle de partie ne décide pas : un simple membre hôte voit son événement.
+      const roles = jest.fn().mockResolvedValue(new Map([['A', 'member']]));
+
+      const own = await service.ownEventsOf('me', roles, RANGE);
+
+      expect(own.parties).toEqual([episodique]);
+      expect(own.seances.map((s) => [s.seanceId, s.scenarioTitle])).toEqual([['se1', 'Catane']]);
+
+      const admin = jest.fn().mockResolvedValue(new Map([['A', 'admin']]));
+      expect((await service.ownEventsOf('autre', admin, RANGE)).seances).toEqual([]);
     });
 
     it('inscriptions ouvertes : une partie non épisodique n’en a jamais', async () => {

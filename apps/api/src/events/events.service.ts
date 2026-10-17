@@ -7,10 +7,14 @@ import {
 import { Prisma, type Event, type Seance } from '@prisma/client';
 import type {
   DaySlot,
+  EventCardDto,
   MyCalendarOpenInscriptionEntry,
   MyCalendarSeanceEntry,
   PartieKind,
 } from '@master-jdr/shared';
+// Import RUNTIME du registre des systèmes (Story 40.1) : la famille de la partie choisit qui
+// participe à une séance datée dans les ports du calendrier. Jamais `import type` sur une valeur.
+import { familyOf } from '@master-jdr/shared';
 import type { OccupiedSpan, OccupiedSpansPort } from '../availability/ports/occupied-spans.port';
 import type {
   OwnEvents,
@@ -28,12 +32,28 @@ import type { SeanceDatePort } from '../poll/ports/seance-date.port';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
-/** Données de base d'un événement (Story 37.3, AD-3). `ownerId` = propriétaire de la partie. */
+/** Données de base d'un événement (Story 37.3, AD-3). `ownerId` = propriétaire de la partie pour le
+ *  JDR ; l'hôte pour une conjonction de groupe (Story 40.1). `seance` : données de la séance unique
+ *  créée avec l'événement — absente, la séance est créée vide (comportement historique). */
 export interface CreateEventInput {
   partieId: string;
   title: string;
   description?: string | null;
   ownerId: string | null;
+  seance?: EventSeanceInput;
+}
+
+/** Séance datée créée avec son événement (Story 40.1) : plage d'un seul créneau (`start = end`),
+ *  informations pratiques écrites TELLES QUELLES (`heureRdv` est une étiquette `"HH:MM"`, jamais un
+ *  instant) et capacité (`null` = sans limite, sinon le nombre de places, hôte compris). Les règles
+ *  de saisie (jour non passé, créneau précis, bornes) sont vérifiées par l'appelant. */
+export interface EventSeanceInput {
+  date: Date;
+  slot: DaySlot;
+  lieu: string | null;
+  heureRdv: string | null;
+  notePratique: string | null;
+  capacity: number | null;
 }
 
 /** Rappel d'extension : écrit, dans la MÊME transaction, la ligne qui étend l'événement (le
@@ -66,6 +86,16 @@ export interface NextSession {
 }
 
 const FROZEN_ROSTER_MESSAGE = 'Cette séance a déjà une date validée — les inscriptions sont figées';
+
+/** Story 40.1 : un GROUPE de ralliement (`CAMPAGNE_EPISODIQUE` de la famille `ralliement`) — ses
+ *  séances datées engagent l'hôte de l'événement et ses inscrits (AD-15). La rencontre isolée
+ *  (`ONE_SHOT`) garde la règle historique : tous les membres. */
+function isRalliementGroup(partie: { kind: PartieKind; gameSystemId: string }): boolean {
+  return partie.kind === 'CAMPAGNE_EPISODIQUE' && familyOf(partie.gameSystemId) === 'ralliement';
+}
+
+/** Ordre des créneaux d'une même journée (tri des cartes, Story 40.1). */
+const SLOT_ORDER: Record<DaySlot, number> = { MORNING: 0, AFTERNOON: 1, EVENING: 2, FULL_DAY: 3 };
 
 /**
  * Événement de base et ses séances (Story 37.3, couche 2 « rassemblement »).
@@ -122,6 +152,17 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     return created;
   }
 
+  /** Story 40.1 : événement proposé par `hostId`, qui en devient l'hôte (propriétaire de
+   *  l'événement, immuable), créé avec sa séance datée unique — même transaction et même émission
+   *  que `create`. L'autorisation (`EVENT_CREATE`) et les règles de saisie sont celles de l'appelant. */
+  async createHosted(
+    grant: PartieGrant,
+    hostId: string,
+    input: { title: string; seance: EventSeanceInput },
+  ): Promise<CreatedEvent<undefined>> {
+    return this.create(grant, { title: input.title, ownerId: hostId, seance: input.seance });
+  }
+
   /** Variante pour un appelant déjà dans une transaction (`PartiesService.create`/`convertKind`).
    *  N'émet rien : l'appelant émet après son propre commit. Seul écrivain de `Partie`,
    *  `PartiesService` l'appelle sur la partie qu'il est en train de créer (aucune autorisation ne
@@ -144,7 +185,28 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     const extension = (extend ? await extend(tx, event) : undefined) as T;
     // Un événement a systématiquement besoin d'au moins une séance pour planifier sa date — on
     // peut toujours en ajouter d'autres ensuite (addSeance, aucun plafond).
-    await tx.seance.create({ data: { eventId: event.id } });
+    const seance = input.seance;
+    if (!seance) {
+      await tx.seance.create({ data: { eventId: event.id } });
+      return { event, extension };
+    }
+    // Story 40.1 : séance datée d'emblée (conjonction à date fixée) — une plage d'un seul créneau.
+    await tx.seance.create({
+      data: {
+        eventId: event.id,
+        startDate: seance.date,
+        startSlot: seance.slot,
+        endDate: seance.date,
+        endSlot: seance.slot,
+        lieu: seance.lieu,
+        heureRdv: seance.heureRdv,
+        notePratique: seance.notePratique,
+        inscriptionMax: seance.capacity,
+      },
+    });
+    // La date la plus proche de la partie peut changer : recalcul dans LA MÊME transaction (le
+    // verrou de la partie est déjà tenu, pris par `assertCanAddEvent`).
+    await this.recalculateNextSessionInTx(tx, input.partieId);
     return { event, extension };
   }
 
@@ -170,6 +232,78 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
         "Une Partie de type ONE_SHOT n'a qu'un seul événement — il est créé avec elle",
       );
     }
+  }
+
+  // ─── Cartes d'événements (Story 40.1) ───────────────────────────────────────────────────────
+
+  /**
+   * Cartes des événements de la partie de l'autorisation (conjonctions d'un groupe) : projection
+   * EXPLICITE — identifiant, titre, hôte (identifiant + nom affiché) et séance unique (date, créneau,
+   * lieu, heure, note pratique, capacité). Une seule lecture groupée (relations comprises), jamais
+   * une requête par événement. `eventIds` restreint la lecture (carte d'un événement tout juste
+   * créé). Ordre : date croissante, les événements sans date en dernier, puis création.
+   */
+  async listCards(grant: PartieGrant, eventIds?: string[]): Promise<EventCardDto[]> {
+    const events = await this.prisma.event.findMany({
+      where: {
+        partieId: grant.partieId,
+        ...(eventIds ? { id: { in: eventIds } } : {}),
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        title: true,
+        // L'hôte d'une conjonction est le propriétaire de l'événement (Story 40.1) : sélection de
+        // la personne à afficher, jamais une décision de droit.
+        ownerId: true,
+        owner: { select: { displayName: true } },
+        seances: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: 1,
+          select: {
+            id: true,
+            startDate: true,
+            startSlot: true,
+            lieu: true,
+            heureRdv: true,
+            notePratique: true,
+            inscriptionMax: true,
+          },
+        },
+      },
+    });
+
+    const cards = events.map((e): EventCardDto => {
+      const s = e.seances[0];
+      return {
+        id: e.id,
+        title: e.title,
+        hostId: e.ownerId,
+        hostDisplayName: e.owner?.displayName ?? null,
+        seance: s
+          ? {
+              id: s.id,
+              date: s.startDate ? s.startDate.toISOString().substring(0, 10) : null,
+              slot: s.startSlot ?? null,
+              lieu: s.lieu ?? null,
+              heureRdv: s.heureRdv ?? null,
+              notePratique: s.notePratique ?? null,
+              capacity: s.inscriptionMax ?? null,
+            }
+          : null,
+      };
+    });
+    // Tri stable (création déjà ordonnée par la requête) : par date puis créneau (matin <
+    // après-midi < soir), sans date en dernier.
+    return cards.sort((a, b) => {
+      const da = a.seance?.date ?? null;
+      const db = b.seance?.date ?? null;
+      if (da === null || db === null) return da === db ? 0 : da === null ? 1 : -1;
+      if (da !== db) return da < db ? -1 : 1;
+      const sa = a.seance?.slot ? SLOT_ORDER[a.seance.slot] : -1;
+      const sb = b.seance?.slot ? SLOT_ORDER[b.seance.slot] : -1;
+      return sa - sb;
+    });
   }
 
   // ─── Appartenance à la partie de l'autorisation ──────────────────────────────────────────────
@@ -499,7 +633,9 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
    * Participant d'une séance datée : ONE_SHOT/CAMPAGNE_LINEAIRE → tous les membres + le
    * propriétaire (aucune présence individuelle dans ces kinds) ; CAMPAGNE_EPISODIQUE → le
    * propriétaire + les seuls utilisateurs inscrits (`Inscription`) à CETTE séance — un joueur non
-   * inscrit n'est engagé sur rien.
+   * inscrit n'est engagé sur rien. Groupe de ralliement (`CAMPAGNE_EPISODIQUE`, Story 40.1, AD-15) :
+   * l'HÔTE de l'événement (`Event.ownerId`, pas le propriétaire de la partie) + les inscrits de la
+   * séance ; la rencontre isolée de ralliement (`ONE_SHOT`) garde la règle « tous les membres ».
    *
    * Deux requêtes Prisma au total, jamais une par utilisateur ni par partie (pas de N+1).
    */
@@ -514,6 +650,7 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       select: {
         id: true,
         kind: true,
+        gameSystemId: true,
         ownerId: true,
         memberships: { select: { userId: true } },
       },
@@ -526,7 +663,7 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       where: { event: { partieId: { in: partieIds } } },
       include: {
         inscriptions: { select: { userId: true } },
-        event: { select: { partieId: true } },
+        event: { select: { partieId: true, ownerId: true } },
       },
     });
 
@@ -541,12 +678,20 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       const partie = partieById.get(seance.event.partieId);
       if (!partie) continue; // partie hors du périmètre résolu ci-dessus
 
-      // Propriétaire absent (AD-5, compte supprimé) : seuls les membres/inscrits sont concernés.
-      const ownerIds = partie.ownerId === null ? [] : [partie.ownerId];
-      const participantIds =
-        partie.kind === 'CAMPAGNE_EPISODIQUE'
-          ? new Set([...ownerIds, ...seance.inscriptions.map((i) => i.userId)])
-          : new Set([...ownerIds, ...partie.memberships.map((m) => m.userId)]);
+      const inscritIds = seance.inscriptions.map((i) => i.userId);
+      let participantIds: Set<string>;
+      if (isRalliementGroup(partie)) {
+        // Story 40.1 : groupe de ralliement — hôte de l'événement + inscrits. Hôte absent (compte supprimé) : les inscrits.
+        const hostIds = seance.event.ownerId ? [seance.event.ownerId] : [];
+        participantIds = new Set([...hostIds, ...inscritIds]);
+      } else {
+        // Propriétaire absent (AD-5, compte supprimé) : seuls les membres/inscrits sont concernés.
+        const ownerIds = partie.ownerId === null ? [] : [partie.ownerId];
+        participantIds =
+          partie.kind === 'CAMPAGNE_EPISODIQUE'
+            ? new Set([...ownerIds, ...inscritIds])
+            : new Set([...ownerIds, ...partie.memberships.map((m) => m.userId)]);
+      }
 
       const dayUtc = new Date(
         Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
@@ -573,11 +718,14 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     roles: OwnRolesResolver,
     range: OwnEventsRange,
   ): Promise<OwnEvents> {
-    const parties = await this.prisma.partie.findMany({
+    const found = await this.prisma.partie.findMany({
       where: { OR: [{ ownerId: userId }, { memberships: { some: { userId } } }] },
-      select: { id: true, name: true, kind: true },
+      select: { id: true, name: true, kind: true, gameSystemId: true },
     });
-    if (parties.length === 0) return { parties: [], seances: [], inscriptionsOuvertes: [] };
+    if (found.length === 0) return { parties: [], seances: [], inscriptionsOuvertes: [] };
+    // La famille sert au choix des participants ; la sortie garde sa forme (id, nom, nature).
+    const ralliementIds = new Set(found.filter(isRalliementGroup).map((p) => p.id));
+    const parties = found.map(({ id, name, kind }) => ({ id, name, kind }));
 
     const partieIds = parties.map((p) => p.id);
     const partieById = new Map(parties.map((p) => [p.id, p]));
@@ -588,7 +736,12 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
         include: {
           inscriptions: { select: { userId: true } },
           event: {
-            select: { partieId: true, title: true, scenario: { select: { status: true } } },
+            select: {
+              partieId: true,
+              title: true,
+              ownerId: true,
+              scenario: { select: { status: true } },
+            },
           },
         },
       }),
@@ -617,10 +770,12 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       // (AD-9), sinon un membre non inscrit verrait listée comme sienne une séance à laquelle il
       // ne participe pas.
       const date = s.startDate;
-      const notMine =
-        partie.kind === 'CAMPAGNE_EPISODIQUE' &&
-        roleByPartie.get(partie.id) !== 'mj' &&
-        !s.inscriptions.some((i) => i.userId === userId);
+      const inscrit = s.inscriptions.some((i) => i.userId === userId);
+      // Story 40.1 : dans un groupe de ralliement, la séance est « mienne » si j'en suis l'hôte
+      // (propriétaire de l'événement) ou inscrit — jamais par un rôle de partie.
+      const notMine = ralliementIds.has(partie.id)
+        ? s.event.ownerId !== userId && !inscrit
+        : partie.kind === 'CAMPAGNE_EPISODIQUE' && roleByPartie.get(partie.id) !== 'mj' && !inscrit;
       if (date && date.getTime() >= range.fromMs && date.getTime() <= range.toMs && !notMine) {
         mySeances.push({
           seanceId: s.id,
@@ -656,7 +811,7 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
           inscriptionMin: s.inscriptionMin ?? 0,
           inscriptionMax: s.inscriptionMax,
           inscritsCount: s.inscriptions.length,
-          jeSuisInscrit: s.inscriptions.some((i) => i.userId === userId),
+          jeSuisInscrit: inscrit,
         });
       }
     }

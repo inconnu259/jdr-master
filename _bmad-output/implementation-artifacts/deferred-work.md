@@ -359,3 +359,6 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-39-5-quitter-un-groupe-ou-en-retirer-un-membre.md`
   summary: By hand in the browser (two accounts in a group): a member leaves from the footer (non-red confirmation, back home, group gone from their list, others' member list updated); an admin removes the creator after the creator stepped down.
   evidence: No live check was run; only unit/DOM/e2e tests.
+- source_spec: `_bmad-output/implementation-artifacts/spec-40-1-proposer-une-conjonction-a-date-fixee.md`
+  summary: A closed group (closedAt set, TERMINEE) still accepts new conjonctions; no write guard on closed parties exists app-wide.
+  evidence: Unverified medium — settle by deciding whether a closed party (JDR or ralliement) refuses new events/scenarios, then guard in PermissionService or the services.

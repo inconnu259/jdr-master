@@ -420,3 +420,62 @@ describe('DetailSurface — extension rétro-compatible (Story 33.6)', () => {
     expect(host!.parentElement).not.toBe(document.body);
   });
 });
+
+@Component({
+  standalone: true,
+  imports: [DetailSurface],
+  template: `<app-detail-surface
+    title="Nouvelle fenêtre large"
+    [custom]="true"
+    [hasHeader]="true"
+    [hasFooter]="true"
+    [wide]="true"
+    [desktopWidth]="620"
+  >
+    <h2 detail-header>Titre large</h2>
+    <p class="body-wide">Corps</p>
+    <div detail-footer><button type="button">Valider</button></div>
+  </app-detail-surface>`,
+})
+class WideHost {}
+
+// ⚠️ Story 40.1 — variante large rétro-compatible : seule la fenêtre d'une conjonction l'active.
+describe('DetailSurface — variante large (Story 40.1)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  async function mountWide(desktop: boolean): Promise<HTMLElement> {
+    await TestBed.configureTestingModule({
+      imports: [WideHost],
+      providers: [
+        provideNoopAnimations(),
+        { provide: BreakpointObserver, useValue: makeBreakpointObserver(desktop) },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(WideHost);
+    fixture.detectChanges();
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('wide : classe de variante posée, la largeur par usage est ignorée (aucune variable CSS)', async () => {
+    const el = await mountWide(true);
+    const panel = el.querySelector('.detail-surface-panel') as HTMLElement;
+
+    expect(panel.classList).toContain('detail-surface-panel--wide');
+    expect(panel.classList).toContain('detail-surface-panel--split');
+    expect(panel.style.getPropertyValue('--detail-surface-width')).toBe('');
+    // Toujours un dialogue modal, corps dans la zone défilante.
+    expect(panel.getAttribute('aria-modal')).toBe('true');
+    expect(el.querySelector('.detail-surface-content .body-wide')).not.toBeNull();
+  });
+
+  it('défaut inchangé : sans wide, aucune classe de variante (les autres surfaces gardent leurs dimensions)', async () => {
+    const { fixture } = await createHost(true);
+    const panel = (fixture.nativeElement as HTMLElement).querySelector('.detail-surface-panel');
+
+    expect(panel?.classList).not.toContain('detail-surface-panel--wide');
+  });
+});

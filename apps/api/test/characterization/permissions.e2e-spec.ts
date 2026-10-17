@@ -246,6 +246,26 @@ describe('Droits sur une partie et ses événements (Story 37.6)', () => {
     expect(body<ErrorLike>(res).message).toBe('Séance introuvable');
   });
 
+  // Story 40.1 : les conjonctions n'existent que dans un groupe de ralliement — sur une partie de
+  // JDR, la création et la liste sont fermées au MJ comme au joueur (politique `NOBODY`), et un
+  // étranger reçoit « pas accès ». Aucun événement écrit.
+  it('conjonctions : POST /parties/:id/events et GET …/events/list refusés sur une partie de JDR (403), sans écriture', async () => {
+    const before = await h.prisma.event.count({ where: { partieId: partieA } });
+    const sent = { title: 'Une conjonction', date: isoDay(10), slot: 'EVENING' };
+    for (const who of [mjA, joueurA]) {
+      const res = await who.agent.post(`/parties/${partieA}/events`).send(sent).expect(403);
+      expect(body<ErrorLike>(res).message).toBe(MJ_ONLY_MESSAGE);
+      await who.agent.get(`/parties/${partieA}/events/list`).expect(403);
+    }
+    const asStranger = await etranger.agent
+      .post(`/parties/${partieA}/events`)
+      .send(sent)
+      .expect(403);
+    expect(body<ErrorLike>(asStranger).message).toBe(NO_ACCESS_MESSAGE);
+    await etranger.agent.get(`/parties/${partieA}/events/list`).expect(403);
+    expect(await h.prisma.event.count({ where: { partieId: partieA } })).toBe(before);
+  });
+
   describe('capacités JDR, invitations et favoris (Story 37.7)', () => {
     let joueurB: TestUser;
     let ami: TestUser;

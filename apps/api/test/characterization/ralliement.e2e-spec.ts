@@ -1,11 +1,12 @@
 import request from 'supertest';
+import { EventsService } from '../../src/events/events.service';
 import { PartiesService } from '../../src/parties/parties.service';
 import {
   RealtimeEventsService,
   partieTopic,
   userTopic,
 } from '../../src/realtime/realtime-events.service';
-import { Harness, body, type TestUser } from './harness';
+import { Harness, body, isoDay, type TestUser } from './harness';
 
 // Story 38.2 — création et droits d'un ralliement, au niveau HTTP : les deux formes (rencontre
 // isolée, groupe), le rôle `admin`/`member` dérivé de `Membership.role`, la politique « voir /
@@ -403,6 +404,14 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
       },
       // Invitations, liens et retrait d'un membre : ouverts à l'administrateur depuis la Story 39.3
       // (describe « inviter » ci-dessous) — retirés de cette liste de capacités absentes.
+      // Story 40.1 : une rencontre isolée n'accueille pas de nouvelle conjonction (réservé au groupe).
+      {
+        label: 'POST events (conjonction)',
+        send: (u) =>
+          u.agent
+            .post(`${p(partieId)}/events`)
+            .send({ title: 'Une conjonction', date: '2030-01-01', slot: 'EVENING' }),
+      },
       { label: 'GET poll', send: (u) => u.agent.get(`${p(partieId)}/poll`) },
       {
         label: 'POST poll/:id/vote',
@@ -1282,5 +1291,272 @@ describe('Ralliement — quitter un groupe (Story 39.5)', () => {
     expect([a.status, b.status].sort()).toEqual([200, 409]);
     expect(await h.prisma.partie.count({ where: { id } })).toBe(1);
     expect(await h.prisma.membership.count({ where: { partieId: id, role: 'ADMIN' } })).toBe(1);
+  });
+});
+
+// Story 40.1 — proposer une conjonction à date fixée : tout membre d'un groupe propose, il en est
+// l'hôte ; l'événement et sa séance datée unique sont écrits ensemble ; le groupe passe « en cours » ;
+// la carte, l'agenda de l'hôte et ses indisponibilités suivent. Refus : partie de JDR, étranger,
+// membre d'un autre groupe, rencontre isolée ; saisies invalides en 400, rien écrit.
+describe('Ralliement — proposer une conjonction à date fixée (Story 40.1)', () => {
+  let h: Harness;
+  let admin: TestUser;
+  let member: TestUser;
+  let stranger: TestUser;
+  let otherAdmin: TestUser;
+  let groupId: string;
+  let otherGroupId: string;
+
+  type CardLike = {
+    id: string;
+    title: string;
+    hostId: string | null;
+    hostDisplayName: string | null;
+    seance: {
+      id: string;
+      date: string | null;
+      slot: string | null;
+      lieu: string | null;
+      heureRdv: string | null;
+      notePratique: string | null;
+      capacity: number | null;
+    } | null;
+  };
+  type ErrorLike = { statusCode: number; message: string | string[] };
+  type CalendarLike = { 'mes-seances': { seanceId: string }[] };
+  type DatedPartieLike = PartieDtoLike & {
+    nextSessionDate: string | null;
+    nextSessionSlot: string | null;
+  };
+
+  const payload = (over: Record<string, unknown> = {}) => ({
+    title: 'Catane et galettes',
+    date: isoDay(5),
+    slot: 'EVENING',
+    ...over,
+  });
+  const propose = (who: TestUser, partieId: string, sent: Record<string, unknown>) =>
+    who.agent.post(`/parties/${partieId}/events`).send(sent);
+  const eventCount = (partieId: string) => h.prisma.event.count({ where: { partieId } });
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, member, stranger, otherAdmin] = await Promise.all([
+      h.createUser('conj-admin'),
+      h.createUser('conj-membre'),
+      h.createUser('conj-etranger'),
+      h.createUser('conj-autre-admin'),
+    ]);
+    ({ id: groupId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'conj', 'ralliement'));
+    await h.addMember(groupId, member);
+    ({ id: otherGroupId } = await h.createPartie(
+      otherAdmin,
+      'CAMPAGNE_EPISODIQUE',
+      'conj-autre',
+      'ralliement',
+    ));
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it('avant toute conjonction : le groupe est « À venir », la liste est vide', async () => {
+    const partie = body<PartieDtoLike>(await admin.agent.get(`/parties/${groupId}`).expect(200));
+    expect(partie.status).toBe('A_VENIR');
+    const list = await member.agent.get(`/parties/${groupId}/events/list`).expect(200);
+    expect(body<CardLike[]>(list)).toEqual([]);
+  });
+
+  it('un simple membre propose : 201, il est l’hôte ; événement + séance datée unique ; groupe EN_COURS, prochaine date posée ; tous sont prévenus', async () => {
+    const day = isoDay(5);
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    let card: CardLike;
+    try {
+      const res = await propose(
+        member,
+        groupId,
+        payload({ lieu: ' Lyon 3e ', heureRdv: '20:30', notePratique: 'On mange sur place.' }),
+      ).expect(201);
+      card = body<CardLike>(res);
+      // Carte en temps réel pour tous les membres, liste d'accueil (statut, date) de chacun.
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(emit).toHaveBeenCalledWith(userTopic(admin.id));
+      expect(emit).toHaveBeenCalledWith(userTopic(member.id));
+    } finally {
+      emit.mockRestore();
+    }
+
+    expect(card).toEqual({
+      id: card.id,
+      title: 'Catane et galettes',
+      hostId: member.id,
+      hostDisplayName: member.displayName,
+      seance: {
+        id: card.seance!.id,
+        date: day,
+        slot: 'EVENING',
+        lieu: 'Lyon 3e',
+        heureRdv: '20:30',
+        notePratique: 'On mange sur place.',
+        capacity: null,
+      },
+    });
+
+    const events = await h.prisma.event.findMany({
+      where: { partieId: groupId },
+      include: { seances: true, scenario: true },
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].ownerId).toBe(member.id);
+    expect(events[0].scenario).toBeNull();
+    expect(events[0].seances).toHaveLength(1);
+    const seance = events[0].seances[0];
+    expect(seance.startDate?.toISOString()).toBe(`${day}T00:00:00.000Z`);
+    expect(seance.endDate?.toISOString()).toBe(`${day}T00:00:00.000Z`);
+    expect([seance.startSlot, seance.endSlot]).toEqual(['EVENING', 'EVENING']);
+    expect(seance.inscriptionMax).toBeNull();
+    // Aucune inscription : l'hôte occupe sa place sans ligne `Inscription` (AD-15).
+    expect(await h.prisma.inscription.count({ where: { seanceId: seance.id } })).toBe(0);
+
+    // Statut et prochaine date, vus par chacun (détail et liste d'accueil).
+    for (const who of [admin, member]) {
+      const partie = body<DatedPartieLike>(await who.agent.get(`/parties/${groupId}`).expect(200));
+      expect(partie.status).toBe('EN_COURS');
+      expect(partie.nextSessionDate).toBe(`${day}T00:00:00.000Z`);
+      expect(partie.nextSessionSlot).toBe('EVENING');
+      const mine = body<PartieDtoLike[]>(await who.agent.get('/parties').expect(200));
+      expect(mine.find((p) => p.id === groupId)?.status).toBe('EN_COURS');
+    }
+
+    // La liste des conjonctions, lue par l'administrateur.
+    const list = body<CardLike[]>(
+      await admin.agent.get(`/parties/${groupId}/events/list`).expect(200),
+    );
+    expect(list).toEqual([card]);
+  });
+
+  it('places limitées : N = 8 stocké tel quel (aucun plafond) ; N < 2 → 400, rien écrit', async () => {
+    const res = await propose(admin, groupId, payload({ title: 'Huit places', capacity: 8 }));
+    expect(res.status).toBe(201);
+    expect(body<CardLike>(res).seance?.capacity).toBe(8);
+    const seance = await h.prisma.seance.findFirstOrThrow({
+      where: { event: { partieId: groupId, title: 'Huit places' } },
+    });
+    expect(seance.inscriptionMax).toBe(8);
+
+    const before = await eventCount(groupId);
+    const refused = await propose(admin, groupId, payload({ title: 'Une place', capacity: 1 }));
+    expect(refused.status).toBe(400);
+    expect(await eventCount(groupId)).toBe(before);
+  });
+
+  it.each([
+    ['créneau FULL_DAY', { slot: 'FULL_DAY' }],
+    ['créneau absent', { slot: undefined }],
+    ['date mal formée', { date: '10/10/2031' }],
+    ['date inexistante', { date: '2031-02-31' }],
+    ['date passée', { date: isoDay(-1) }],
+    ['nom vide', { title: '   ' }],
+    ['heure mal formée', { heureRdv: '20h30' }],
+    ['lieu trop long', { lieu: 'x'.repeat(81) }],
+    ['note trop longue', { notePratique: 'x'.repeat(201) }],
+  ])('%s → 400 avec un message en français, rien écrit', async (_label, over) => {
+    const before = await eventCount(groupId);
+    const res = await propose(member, groupId, payload(over));
+    expect(res.status).toBe(400);
+    const message = body<ErrorLike>(res).message;
+    const text = Array.isArray(message) ? message.join(' ') : message;
+    // Français : aucun message de validation par défaut (anglais) de class-validator.
+    expect(text).not.toMatch(/must be|should not|is not/i);
+    expect(text.length).toBeGreaterThan(0);
+    expect(await eventCount(groupId)).toBe(before);
+  });
+
+  it('aujourd’hui est accepté', async () => {
+    await propose(member, groupId, payload({ title: 'Ce soir', date: isoDay(0) })).expect(201);
+  });
+
+  describe('refus (403, rien écrit)', () => {
+    it('un étranger : « pas accès », en création comme en lecture', async () => {
+      const before = await eventCount(groupId);
+      const res = await propose(stranger, groupId, payload());
+      expect(res.status).toBe(403);
+      expect(body<ErrorLike>(res).message).toBe(NO_ACCESS);
+      await stranger.agent.get(`/parties/${groupId}/events/list`).expect(403);
+      expect(await eventCount(groupId)).toBe(before);
+    });
+
+    it('le membre d’un autre groupe : ni création ni lecture', async () => {
+      const before = await eventCount(groupId);
+      expect((await propose(otherAdmin, groupId, payload())).status).toBe(403);
+      await otherAdmin.agent.get(`/parties/${groupId}/events/list`).expect(403);
+      expect(await eventCount(groupId)).toBe(before);
+      // Et réciproquement : son propre groupe ne montre rien des conjonctions des autres.
+      const own = body<CardLike[]>(
+        await otherAdmin.agent.get(`/parties/${otherGroupId}/events/list`).expect(200),
+      );
+      expect(own).toEqual([]);
+    });
+
+    it('une partie de JDR : fermée au MJ comme au joueur, en création comme en lecture', async () => {
+      const { id: jdrId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'conj-jdr');
+      await h.addMember(jdrId, member);
+      for (const who of [admin, member]) {
+        expect((await propose(who, jdrId, payload())).status).toBe(403);
+        await who.agent.get(`/parties/${jdrId}/events/list`).expect(403);
+      }
+      expect(await eventCount(jdrId)).toBe(0);
+      const partie = body<PartieDtoLike>(await admin.agent.get(`/parties/${jdrId}`).expect(200));
+      expect(partie.status).toBe('A_VENIR');
+    });
+
+    it('une rencontre isolée (ONE_SHOT) : « indisponible », même à son administrateur', async () => {
+      const { id: isoleeId } = await h.createPartie(admin, 'ONE_SHOT', 'conj-isolee', 'ralliement');
+      await h.addMember(isoleeId, member);
+      for (const who of [admin, member]) {
+        const res = await propose(who, isoleeId, payload());
+        expect(res.status).toBe(403);
+        expect(body<ErrorLike>(res).message).toBe(UNAVAILABLE);
+      }
+      // Son événement unique, créé avec elle, reste le seul.
+      expect(await eventCount(isoleeId)).toBe(1);
+    });
+  });
+
+  it('calendrier : l’hôte non créateur voit sa conjonction dans son agenda et en est occupé ; les autres membres non', async () => {
+    const day = isoDay(9);
+    const res = await propose(member, groupId, payload({ title: 'Agenda', date: day, slot: 'MORNING' }));
+    expect(res.status).toBe(201);
+    const card = body<CardLike>(res);
+    const query = { from: isoDay(0), to: isoDay(30) };
+
+    const hostCal = body<CalendarLike>(
+      await member.agent.get('/me/calendar').query(query).expect(200),
+    );
+    expect(hostCal['mes-seances'].map((s) => s.seanceId)).toContain(card.seance!.id);
+    const adminCal = body<CalendarLike>(
+      await admin.agent.get('/me/calendar').query(query).expect(200),
+    );
+    expect(adminCal['mes-seances'].map((s) => s.seanceId)).not.toContain(card.seance!.id);
+
+    // Indisponibilités : une plage { date, slot } seulement, sans titre ni identité.
+    const spans = await h.app.get(EventsService).occupiedSpansOf([member.id, admin.id]);
+    const memberSpans = spans.get(member.id)!.map((s) => [s.date.toISOString(), s.slot]);
+    expect(memberSpans).toContainEqual([`${day}T00:00:00.000Z`, 'MORNING']);
+    const adminSpans = spans.get(admin.id)!.map((s) => [s.date.toISOString(), s.slot]);
+    expect(adminSpans).not.toContainEqual([`${day}T00:00:00.000Z`, 'MORNING']);
+    for (const span of spans.get(member.id)!) {
+      expect(Object.keys(span).sort()).toEqual(['date', 'slot']);
+    }
+  });
+
+  it('la liste compte toutes les conjonctions du groupe, triées par date', async () => {
+    const list = body<CardLike[]>(
+      await member.agent.get(`/parties/${groupId}/events/list`).expect(200),
+    );
+    expect(list).toHaveLength(await eventCount(groupId));
+    const dates = list.map((c) => c.seance?.date ?? '');
+    expect(dates).toEqual([...dates].sort());
   });
 });

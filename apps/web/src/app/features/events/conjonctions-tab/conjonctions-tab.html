@@ -1,0 +1,66 @@
+<!-- Story 39.1 (⚠️ contrat UI) : un groupe s'ouvre sur ses conjonctions. Story 40.1 : en-tête avec
+     « + Nouvelle conjonction » pour tout membre, cartes dans « À venir » / « Passées ». -->
+<section class="conjonctions">
+  <header class="conjonctions__header">
+    <h2 class="conjonctions__title">{{ theme.tone()['partie.ralliement_conjonctions_tab'] }}</h2>
+    <button mat-flat-button type="button" class="conjonctions__new" (click)="openCreate()">
+      {{ theme.tone()['partie.ralliement_event_new_btn'] }}
+    </button>
+  </header>
+
+  @if (loadError()) {
+    <p class="conjonctions__error" role="alert">
+      {{ theme.tone()['partie.ralliement_event_list_error'] }}
+    </p>
+  }
+
+  <section class="conjonctions__section conjonctions__section--upcoming">
+    <h3>{{ theme.tone()['partie.ralliement_conjonctions_upcoming'] }}</h3>
+    @if (sections().upcoming.length === 0) {
+      <p class="muted">{{ theme.tone()['partie.ralliement_conjonctions_upcoming_empty'] }}</p>
+    } @else {
+      <div class="conjonctions__grid" role="list">
+        @for (card of sections().upcoming; track card.id) {
+          <app-event-card
+            role="listitem"
+            [card]="card"
+            [todayKey]="todayKey"
+            [currentUserId]="currentUserId()"
+          />
+        }
+      </div>
+    }
+  </section>
+
+  <section class="conjonctions__section conjonctions__section--past">
+    <h3>{{ theme.tone()['partie.ralliement_conjonctions_past'] }}</h3>
+    @if (sections().past.length === 0) {
+      <p class="muted">{{ theme.tone()['partie.ralliement_conjonctions_past_empty'] }}</p>
+    } @else {
+      <div class="conjonctions__grid" role="list">
+        @for (card of sections().past; track card.id) {
+          <app-event-card
+            role="listitem"
+            [card]="card"
+            [todayKey]="todayKey"
+            [currentUserId]="currentUserId()"
+          />
+        }
+      </div>
+    }
+  </section>
+
+  @if (loaded() && events().length === 0) {
+    <p class="conjonctions__empty" role="status">
+      {{ theme.tone()['partie.ralliement_conjonctions_empty'] }}
+    </p>
+  }
+</section>
+
+@if (creating()) {
+  <app-event-create
+    [partieId]="partieId()"
+    (created)="onCreated($event)"
+    (closed)="closeCreate()"
+  />
+}

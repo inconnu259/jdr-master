@@ -76,6 +76,11 @@ export class DetailSurface {
   /** Story 33.6 — largeur de la fenêtre desktop en px (≥ 1024 px) ; `null` = largeur par défaut
    *  (560 px). Sans effet sur la feuille mobile. */
   readonly desktopWidth = input<number | null>(null);
+  /** ⚠️ Story 40.1 — variante LARGE, rétro-compatible (désactivée par défaut, aucun autre usage ne
+   *  change) : fenêtre `min(900px, 96vw)` en desktop, hauteur ≤ 94vh avec défilement interne, et
+   *  plein écran sur mobile. Utilisée par la fenêtre d'une conjonction (création, puis détail en
+   *  40.2). Prime sur `desktopWidth`. */
+  readonly wide = input<boolean>(false);
   /** Story 33.6 — `id` de l'élément qui décrit le dialogue (`aria-describedby`), ex. un compteur. */
   readonly describedBy = input<string | null>(null);
   /** Story 33.6 — déplace l'hôte sous `<body>` après le premier rendu. Nécessaire quand la surface
@@ -108,8 +113,10 @@ export class DetailSurface {
   /** En-tête ou pied personnalisé : le panneau passe en colonne (corps seul défilant). */
   protected readonly split = computed(() => this.hasHeader() || this.hasFooter());
 
-  /** Valeur de la variable CSS `--detail-surface-width` (lue à ≥ 1024 px uniquement). */
+  /** Valeur de la variable CSS `--detail-surface-width` (lue à ≥ 1024 px uniquement). La variante
+   *  large porte sa propre largeur (feuille de style) : aucune variable n'est posée. */
   protected readonly widthVar = computed(() => {
+    if (this.wide()) return null;
     const width = this.desktopWidth();
     return width ? `${width}px` : null;
   });

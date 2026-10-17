@@ -668,6 +668,49 @@ describe('PartiesService', () => {
       expect((await service.listForUser('u', 'player')).map((d) => d.id)).toEqual(['p9']);
     });
 
+    it('groupe de ralliement (Story 40.1) : EN_COURS dès sa première conjonction (tout événement compte), une rencontre isolée garde la règle du scénario', async () => {
+      const groupe = {
+        ...partieB,
+        id: 'g1',
+        kind: 'CAMPAGNE_EPISODIQUE',
+        gameSystemId: 'ralliement',
+        ownerId: 'u',
+      };
+      const vide = { ...groupe, id: 'g2' };
+      const isolee = { ...groupe, id: 'r1', kind: 'ONE_SHOT' };
+      prisma.partie.findMany.mockResolvedValueOnce([groupe, vide, isolee]).mockResolvedValueOnce(
+        ['g1', 'g2', 'r1'].map((id) => ({
+          id,
+          ownerId: 'u',
+          gameSystemId: 'ralliement',
+          memberships: [{ role: 'ADMIN' }],
+        })),
+      );
+      prisma.event.groupBy.mockImplementation(({ where }: { where: { scenario?: unknown } }) =>
+        Promise.resolve(where.scenario ? [] : [{ partieId: 'g1', _count: { _all: 1 } }]),
+      );
+
+      const dtos = await service.listForUser('u');
+
+      expect(dtos.map((d) => [d.id, d.status])).toEqual([
+        ['g1', 'EN_COURS'],
+        ['g2', 'A_VENIR'],
+        ['r1', 'A_VENIR'],
+      ]);
+      // Deux lectures groupées au plus : les groupes sans filtre de scénario, les autres avec.
+      expect(prisma.event.groupBy).toHaveBeenCalledTimes(2);
+      expect(prisma.event.groupBy).toHaveBeenCalledWith({
+        by: ['partieId'],
+        where: { partieId: { in: ['g1', 'g2'] } },
+        _count: { _all: true },
+      });
+      expect(prisma.event.groupBy).toHaveBeenCalledWith({
+        by: ['partieId'],
+        where: { partieId: { in: ['r1'] }, scenario: { isNot: null } },
+        _count: { _all: true },
+      });
+    });
+
     it('aucune partie → liste vide, sans lecture de rôles', async () => {
       prisma.partie.findMany.mockResolvedValueOnce([]);
 
@@ -1180,6 +1223,20 @@ describe('PartiesService', () => {
     expect(prisma.event.count).toHaveBeenCalledWith({
       where: { partieId: 'p1', scenario: { isNot: null } },
     });
+  });
+
+  it('findOneDto : un groupe de ralliement avec une conjonction est EN_COURS — tout événement compte (Story 40.1)', async () => {
+    prisma.partie.findUnique.mockResolvedValue({
+      ...partie,
+      kind: 'CAMPAGNE_EPISODIQUE',
+      gameSystemId: 'ralliement',
+    });
+    prisma.membership.findUnique.mockResolvedValue({ role: 'MEMBER' });
+    prisma.event.count.mockResolvedValue(1);
+    prisma.user.findUnique.mockResolvedValue(null);
+    const dto = await service.findOneDto('p1', 'membre');
+    expect(dto.status).toBe('EN_COURS');
+    expect(prisma.event.count).toHaveBeenCalledWith({ where: { partieId: 'p1' } });
   });
 
   it('findOneDto : status: TERMINEE quand closedAt est renseigné, même avec des scénarios (Story 29.6)', async () => {

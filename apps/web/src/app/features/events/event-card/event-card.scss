@@ -1,0 +1,84 @@
+/* Story 40.1 — carte d'une conjonction (UX-DR7). Filet de 1 px à la teinte de l'état + barre
+   gauche de 3 px ; au palier imminent, 2 px + 4 px. Teintes : tokens `--jdr-status-*` du thème
+   (même source que `StatusBadge`), jamais une couleur réinventée. L'épaisseur DOUBLE l'état écrit
+   par le badge, elle ne le remplace jamais. Aucune animation. */
+:host {
+  display: block;
+}
+
+.event-card {
+  --event-card-tone: var(--jdr-status-soon, #ff7ad9);
+  box-sizing: border-box;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--event-card-tone);
+  border-left-width: 3px;
+  background: var(--mat-sys-surface-container, transparent);
+}
+
+.event-card--imminent {
+  border-width: 2px;
+  border-left-width: 4px;
+}
+
+.event-card--past {
+  --event-card-tone: var(--jdr-status-done, #5a5a6a);
+}
+
+.event-card__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.event-card__date {
+  margin: 2px 0 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.event-card__line {
+  align-self: stretch;
+  margin: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.event-card__situation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.event-card__situation-label {
+  color: var(--jdr-text-muted, #9b8fb0);
+}
+
+.event-card__chip {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--jdr-status-live, #3fd4ff);
+  color: var(--jdr-status-live, #3fd4ff);
+  background: color-mix(in srgb, var(--jdr-status-live, #3fd4ff) 12%, transparent);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/* « Pas inscrit·e » : contour pointillé, texte à pleine lecture — identifiable sans la couleur. */
+.event-card__chip--dotted {
+  border-style: dotted;
+  border-color: var(--jdr-text-muted, #9b8fb0);
+  color: var(--mat-sys-on-surface);
+  background: transparent;
+}

@@ -326,6 +326,10 @@ export type PermissionAction =
   | 'ANNOUNCEMENT_CREATE'
   | 'ANNOUNCEMENT_READ'
   | 'ANNOUNCEMENT_MARK_READ'
+  // Événements d'un groupe de ralliement (Story 40.1) : proposer une conjonction, lister celles du
+  // groupe. Couche 2, aucune capacité requise ; fermées à tous en JDR (le JDR passe par ses scénarios).
+  | 'EVENT_CREATE'
+  | 'EVENT_LIST'
   // Invitations et liens d'invitation (couche 2, aucune capacité requise)
   | 'INVITATION_CREATE'
   | 'INVITATION_READ'
@@ -682,6 +686,49 @@ export interface UpdateScenarioDto {
   description?: string;
   dureeHeures?: number;
   dureeSeances?: number;
+}
+
+// ─── Epic 40 : conjonctions d'un groupe de ralliement ─────────────────────────
+
+/** Créneau d'une conjonction (Story 40.1) : toujours un créneau de journée précis — jamais
+ *  `FULL_DAY`, jamais vide. */
+export type EventSlot = Exclude<DaySlot, 'FULL_DAY'>;
+
+/** Payload de création d'une conjonction à date fixée (POST /parties/:id/events, Story 40.1).
+ *  `date` est une clé `YYYY-MM-DD` (aujourd'hui accepté, jamais avant) ; `heureRdv` est une
+ *  ÉTIQUETTE `"HH:MM"`, jamais un instant. `capacity` : `null` (ou absent) = « Tous les membres »,
+ *  sinon N places, hôte compris (N ≥ 2, sans plafond). */
+export interface CreateEventDto {
+  title: string;
+  date: string;
+  slot: EventSlot;
+  lieu?: string | null;
+  heureRdv?: string | null;
+  notePratique?: string | null;
+  capacity?: number | null;
+}
+
+/** La séance unique d'une conjonction, telle que projetée pour sa carte (Story 40.1). `date` est la
+ *  clé `YYYY-MM-DD` du début de sa plage (`null` tant qu'elle n'est pas fixée) ; `capacity` `null` =
+ *  « Tous les membres ». */
+export interface EventCardSeanceDto {
+  id: string;
+  date: string | null;
+  slot: DaySlot | null;
+  lieu: string | null;
+  heureRdv: string | null;
+  notePratique: string | null;
+  capacity: number | null;
+}
+
+/** Carte d'une conjonction (GET /parties/:id/events/list, Story 40.1) — projection explicite :
+ *  l'hôte (immuable, `null` si son compte a disparu) et la séance unique. */
+export interface EventCardDto {
+  id: string;
+  title: string;
+  hostId: string | null;
+  hostDisplayName: string | null;
+  seance: EventCardSeanceDto | null;
 }
 
 // ─── Epic 9 : Annonces MJ ──────────────────────────────────────────────────

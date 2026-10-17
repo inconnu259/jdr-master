@@ -137,6 +137,32 @@
   }
 }
 
+// ⚠️ Story 40.1 — variante LARGE (fenêtre d'une conjonction, contrat UX : EventDialog), activée
+// par `wide` uniquement : les autres surfaces gardent leurs dimensions. Desktop : `min(900px, 96vw)`,
+// au plus 94vh, défilement interne (le corps défile entre en-tête et pied en mode « split »).
+// Mobile : plein écran. Double classe : prime sur `--split` et sur sa variante très basse.
+.detail-surface-panel.detail-surface-panel--wide {
+  inset: 0;
+  width: auto;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  border-radius: 0;
+  border-width: 0;
+
+  @media (min-width: 1024px) {
+    inset: auto;
+    top: 50%;
+    left: 50%;
+    width: min(900px, 96vw);
+    height: auto;
+    max-height: 94vh;
+    max-height: 94dvh;
+    border-radius: 16px;
+    border-width: 1px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .detail-surface-panel {
     animation: none;

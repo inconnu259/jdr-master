@@ -40,22 +40,10 @@
       >
         @if (isGroup()) {
           <!-- Story 39.1 (⚠️ contrat UI) : un groupe s'ouvre sur ses conjonctions (onglet par défaut,
-               pour tout membre). Les événements arrivent avec l'epic 40 : aucune source de données
-               n'existe encore, les deux listes restent vides et l'état vide global s'affiche. -->
+               pour tout membre). Story 40.1 : l'onglet (features/events) liste les conjonctions du
+               groupe, propose « + Nouvelle conjonction » et remonte leur nombre réel. -->
           <mat-tab [label]="theme.tone()['partie.ralliement_conjonctions_tab']">
-            <section class="conjonctions">
-              <section class="conjonctions__section conjonctions__section--upcoming">
-                <h3>{{ theme.tone()['partie.ralliement_conjonctions_upcoming'] }}</h3>
-                <p class="muted">{{ theme.tone()['partie.ralliement_conjonctions_upcoming_empty'] }}</p>
-              </section>
-              <section class="conjonctions__section conjonctions__section--past">
-                <h3>{{ theme.tone()['partie.ralliement_conjonctions_past'] }}</h3>
-                <p class="muted">{{ theme.tone()['partie.ralliement_conjonctions_past_empty'] }}</p>
-              </section>
-              <p class="conjonctions__empty" role="status">
-                {{ theme.tone()['partie.ralliement_conjonctions_empty'] }}
-              </p>
-            </section>
+            <app-conjonctions-tab [partieId]="p.id" (countChange)="conjonctionCount.set($event)" />
           </mat-tab>
         }
         <mat-tab [label]="theme.tone()['parties.detail_tab_details']">

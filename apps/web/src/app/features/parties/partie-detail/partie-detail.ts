@@ -78,6 +78,8 @@ import { scrollToAnnouncement } from '../../../core/announcements/scroll-to-anno
 import { CharacterRolesService } from '../../../core/character-roles/character-roles.service';
 import { HommeDragonAventurePanel } from '../../homme-dragon/homme-dragon-aventure-panel/homme-dragon-aventure-panel';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
+import { ConjonctionsTab } from '../../events/conjonctions-tab/conjonctions-tab';
+import { EventsApiService } from '../../events/events-api.service';
 
 /** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
 const MJ_INVITATIONS_TAB_INDEX = 1;
@@ -118,6 +120,7 @@ const SEARCH_DEBOUNCE_MS = 500;
     HommeDragonAventurePanel,
     IdentityLabel,
     StatusBadge,
+    ConjonctionsTab,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
@@ -139,6 +142,7 @@ export class PartieDetail implements OnInit {
   protected readonly theme = inject(ThemeToneService);
   private readonly contextualNav = inject(ContextualNavService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly eventsApi = inject(EventsApiService);
 
   private static readonly DESKTOP_QUERY = '(min-width: 1024px)';
 
@@ -238,9 +242,10 @@ export class PartieDetail implements OnInit {
   protected readonly isGroupAdmin = this.canInviteMembers;
 
   /** Story 39.4 : nombre de conjonctions du groupe, pour l'avertissement du dernier administrateur.
-   *  Aucune n'existe avant l'epic 40 (la liste s'ouvre sur son état vide) ; ce calcul sera branché sur
-   *  les conjonctions du groupe à ce moment-là, sans toucher au dialogue. */
-  protected readonly conjonctionCount = computed(() => 0);
+   *  Story 40.1 : nombre RÉEL (passées comprises), remonté par l'onglet des conjonctions à chaque
+   *  lecture de la liste. L'onglet n'est monté que lorsqu'il est affiché : l'avertissement relit
+   *  donc la liste au moment même (`stepDownFromOffice`) — cette valeur n'est que le repli. */
+  protected readonly conjonctionCount = signal(0);
 
   /** « Retirer » n'est offert que sur un membre ordinaire que le serveur acceptera de retirer : ni
    *  soi-même, ni un administrateur (Story 39.4 : son rôle vient de `members()`). Story 39.5 : c'est
@@ -939,6 +944,15 @@ export class PartieDetail implements OnInit {
     }
     const adminCount = this.members().filter((m) => m.role === 'ADMIN').length;
     const lastAdmin = adminCount <= 1;
+    // Story 40.1 : le nombre réel de conjonctions est relu ici (l'onglet des conjonctions peut ne
+    // jamais avoir été affiché) ; un échec retombe sur la dernière valeur connue.
+    if (lastAdmin) {
+      try {
+        this.conjonctionCount.set((await this.eventsApi.list(p.id)).length);
+      } catch {
+        // repli : dernière valeur connue
+      }
+    }
     const ref = this.dialog.open(ConfirmDialog, {
       data: lastAdmin
         ? {

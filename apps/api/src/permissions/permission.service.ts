@@ -189,6 +189,10 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
   ANNOUNCEMENT_CREATE: OWNER_ONLY,
   ANNOUNCEMENT_READ: OWNER_AND_MEMBERS,
   ANNOUNCEMENT_MARK_READ: OWNER_AND_MEMBERS,
+  // Story 40.1 : les événements d'un groupe de ralliement (conjonctions) n'existent pas en JDR — le
+  // JDR crée et lit ses événements par ses scénarios.
+  EVENT_CREATE: NOBODY,
+  EVENT_LIST: NOBODY,
   // Invitations : le MJ invite, liste et révoque (l'invitant est toujours le propriétaire, la
   // propriété d'une partie étant immuable).
   INVITATION_CREATE: OWNER_ONLY,
@@ -204,7 +208,8 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
  * l'administrateur et les membres, « modifier la partie » (édition, couverture) et, depuis la Story
  * 39.1, « clore / rouvrir / brûler » et, depuis la Story 39.3, « inviter / retirer un membre » pour
  * l'administrateur seul, et, depuis la Story 39.4, « nommer un administrateur / quitter l'office ».
- * Depuis la Story 39.5, « quitter le groupe » est ouvert à l'administrateur et aux membres.
+ * Depuis la Story 39.5, « quitter le groupe » est ouvert à l'administrateur et aux membres, et depuis
+ * la Story 40.1, « proposer une conjonction / lister celles du groupe ».
  * TOUTE autre action est refusée
  * à tous les rôles — le ralliement n'a ni scénario, ni personnage, ni XP. Table COMPLÈTE par
  * construction (`Record` sur l'union fermée) : une action ajoutée sans sa ligne ne compile pas.
@@ -277,6 +282,11 @@ export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly Parti
   ANNOUNCEMENT_CREATE: NOBODY,
   ANNOUNCEMENT_READ: NOBODY,
   ANNOUNCEMENT_MARK_READ: NOBODY,
+  // Story 40.1 : tout membre du groupe (administrateur ou membre) propose une conjonction, dont il
+  // est l'hôte, et lit celles du groupe. La cellule vaut pour la famille entière ; le refus de la
+  // rencontre isolée (`ONE_SHOT`) est posé dans le service (`GroupEventsService`).
+  EVENT_CREATE: ADMIN_AND_MEMBERS,
+  EVENT_LIST: ADMIN_AND_MEMBERS,
   // Invitations (Story 39.3) : l'administrateur invite, liste et révoque ; un simple membre n'a que
   // la lecture de la liste des membres. La cellule vaut pour la famille entière (l'invitation à
   // usage unique, épopée 41, n'a pas encore d'interface : l'UI reste réservée aux groupes).

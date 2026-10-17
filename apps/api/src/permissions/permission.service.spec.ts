@@ -171,7 +171,13 @@ const ACTIONS: PermissionAction[] = [...MJ_ONLY, ...MEMBER_ACTIONS];
 /** Actions que la politique `jdr` n'ouvre à aucun rôle (Story 39.4) : nommer un administrateur et
  *  quitter l'office n'existent que pour la famille `ralliement`. Story 39.5 : quitter soi-même la
  *  partie non plus — en JDR, seul le MJ retire un joueur. */
-const JDR_NOBODY: PermissionAction[] = ['PARTIE_MEMBER_ROLE_SET', 'PARTIE_LEAVE'];
+const JDR_NOBODY: PermissionAction[] = [
+  'PARTIE_MEMBER_ROLE_SET',
+  'PARTIE_LEAVE',
+  // Story 40.1 : proposer / lister les conjonctions d'un groupe — n'existe pas en JDR.
+  'EVENT_CREATE',
+  'EVENT_LIST',
+];
 
 describe('PermissionService', () => {
   let prisma: ReturnType<typeof makePrisma>;
@@ -480,6 +486,9 @@ describe('PermissionService', () => {
       'PARTIE_COVER_READ',
       // Story 39.5 : quitter le groupe — l'administrateur comme le membre.
       'PARTIE_LEAVE',
+      // Story 40.1 : proposer une conjonction (dont on est l'hôte) et lister celles du groupe.
+      'EVENT_CREATE',
+      'EVENT_LIST',
     ];
     /** Modifier la partie, la clore, la rouvrir, la brûler (Story 39.1), inviter et retirer un
      *  membre (Story 39.3) : admin seul. */

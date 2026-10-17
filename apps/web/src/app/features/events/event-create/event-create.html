@@ -1,0 +1,195 @@
+<app-detail-surface
+  [title]="theme.tone()['partie.ralliement_event_create_title']"
+  [custom]="true"
+  [hasHeader]="true"
+  [hasFooter]="true"
+  [wide]="true"
+  [portal]="true"
+  [openToken]="1"
+  (closed)="closed.emit()"
+>
+  <h2 detail-header class="ec__title" [id]="uid + '-title'">
+    {{ theme.tone()['partie.ralliement_event_create_title'] }}
+  </h2>
+
+  <form class="ec" [id]="uid + '-form'" (ngSubmit)="submit()" novalidate>
+    <!-- Nom* -->
+    <mat-form-field appearance="outline" class="ec__full">
+      <mat-label>{{ theme.tone()['partie.ralliement_event_name_label'] }}</mat-label>
+      <input
+        matInput
+        name="title"
+        class="ec__name"
+        required
+        maxlength="120"
+        [ngModel]="title()"
+        (ngModelChange)="title.set($event)"
+      />
+    </mat-form-field>
+
+    <!-- Date : fixée | sondage (désactivé jusqu'à la Story 40.5) -->
+    <div class="ec__field">
+      <span class="ec__label" [id]="uid + '-date-mode'">{{
+        theme.tone()['partie.ralliement_event_date_label']
+      }}</span>
+      <mat-button-toggle-group
+        class="ec__toggle ec__date-mode"
+        value="fixed"
+        [attr.aria-labelledby]="uid + '-date-mode'"
+        hideSingleSelectionIndicator
+      >
+        <mat-button-toggle value="fixed">{{
+          theme.tone()['partie.ralliement_event_date_fixed']
+        }}</mat-button-toggle>
+        <mat-button-toggle value="poll" [disabled]="true">{{
+          theme.tone()['partie.ralliement_event_date_poll']
+        }}</mat-button-toggle>
+      </mat-button-toggle-group>
+    </div>
+
+    <div class="ec__row">
+      <div class="ec__field">
+        <label class="ec__label" [for]="uid + '-day'">{{
+          theme.tone()['partie.ralliement_event_day_label']
+        }}</label>
+        <input
+          [id]="uid + '-day'"
+          class="ec__input ec__day"
+          type="date"
+          lang="fr"
+          required
+          [attr.min]="todayKey"
+          [value]="day()"
+          (input)="day.set($any($event.target).value)"
+        />
+      </div>
+      <div class="ec__field">
+        <span class="ec__label" [id]="uid + '-slot'">{{
+          theme.tone()['partie.ralliement_event_slot_label']
+        }}</span>
+        <mat-button-toggle-group
+          class="ec__toggle ec__slot"
+          [value]="slot()"
+          (change)="slot.set($event.value)"
+          [attr.aria-labelledby]="uid + '-slot'"
+          hideSingleSelectionIndicator
+        >
+          @for (s of slots; track s) {
+            <mat-button-toggle [value]="s">{{ slotLabels[s] }}</mat-button-toggle>
+          }
+        </mat-button-toggle-group>
+      </div>
+    </div>
+
+    <div class="ec__row">
+      <mat-form-field appearance="outline">
+        <mat-label>{{ theme.tone()['partie.ralliement_event_place_label'] }}</mat-label>
+        <input
+          matInput
+          name="lieu"
+          class="ec__place"
+          maxlength="80"
+          [ngModel]="lieu()"
+          (ngModelChange)="lieu.set($event)"
+        />
+      </mat-form-field>
+      <div class="ec__field">
+        <label class="ec__label" [for]="uid + '-time'">{{
+          theme.tone()['partie.ralliement_event_time_label']
+        }}</label>
+        <!-- Le widget natif rend déjà « HH:MM » : une ÉTIQUETTE, rien ne la parse en aval. -->
+        <input
+          [id]="uid + '-time'"
+          class="ec__input ec__time"
+          type="time"
+          [value]="heureRdv()"
+          (input)="heureRdv.set($any($event.target).value)"
+        />
+      </div>
+    </div>
+
+    <mat-form-field appearance="outline" class="ec__full">
+      <mat-label>{{ theme.tone()['partie.ralliement_event_note_label'] }}</mat-label>
+      <textarea
+        matInput
+        name="notePratique"
+        class="ec__note"
+        rows="2"
+        maxlength="200"
+        [ngModel]="notePratique()"
+        (ngModelChange)="notePratique.set($event)"
+      ></textarea>
+    </mat-form-field>
+
+    <!-- Participation -->
+    <div class="ec__field">
+      <span class="ec__label" [id]="uid + '-participation'">{{
+        theme.tone()['partie.ralliement_event_participation_label']
+      }}</span>
+      <mat-button-toggle-group
+        class="ec__toggle ec__participation"
+        [value]="participation()"
+        (change)="setParticipation($event.value)"
+        [attr.aria-labelledby]="uid + '-participation'"
+        hideSingleSelectionIndicator
+      >
+        <mat-button-toggle value="all">{{
+          theme.tone()['partie.ralliement_event_participation_all']
+        }}</mat-button-toggle>
+        <mat-button-toggle value="limited">{{
+          theme.tone()['partie.ralliement_event_participation_limited']
+        }}</mat-button-toggle>
+      </mat-button-toggle-group>
+      @if (participation() === 'limited') {
+        <div class="ec__places">
+          <div class="ec__stepper">
+            <button
+              type="button"
+              class="ec__step ec__step--less"
+              [disabled]="places() <= 2"
+              [attr.aria-label]="theme.tone()['partie.ralliement_event_places_less']"
+              (click)="decrement()"
+            >−</button>
+            <input
+              class="ec__places-count"
+              type="number"
+              inputmode="numeric"
+              min="2"
+              [attr.aria-label]="theme.tone()['partie.ralliement_event_places_count_aria']"
+              [value]="places()"
+              (change)="setPlaces($any($event.target))"
+            />
+            <button
+              type="button"
+              class="ec__step ec__step--more"
+              [attr.aria-label]="theme.tone()['partie.ralliement_event_places_more']"
+              (click)="increment()"
+            >+</button>
+          </div>
+          <span class="ec__places-hint">{{ theme.tone()['partie.ralliement_event_places_hint'] }}</span>
+        </div>
+      }
+    </div>
+  </form>
+
+  <div detail-footer class="ec__footer">
+    @if (error(); as message) {
+      <p class="ec__error" role="alert">{{ message }}</p>
+    }
+    <div class="ec__actions">
+      <button mat-stroked-button type="button" class="ec__cancel" (click)="closed.emit()">
+        {{ theme.tone()['partie.ralliement_event_cancel_btn'] }}
+      </button>
+      <button
+        mat-flat-button
+        type="button"
+        class="ec__submit"
+        [disabled]="!canSubmit()"
+        [attr.aria-busy]="busy()"
+        (click)="submit()"
+      >
+        {{ theme.tone()['partie.ralliement_event_submit_btn'] }}
+      </button>
+    </div>
+  </div>
+</app-detail-surface>

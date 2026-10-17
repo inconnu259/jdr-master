@@ -13,6 +13,7 @@ import type {
   AnnouncementDto,
   CharacterDto,
   CharacterGroupRoleDto,
+  EventCardDto,
   InviteLinkDto,
   PartieDto,
   PartieMemberDto,
@@ -37,6 +38,7 @@ import { TONE_MAP, THEMES, type Theme } from '../../../core/theme/tones';
 import { NON_JDR_BANNED_WORDS } from '../../../core/theme/non-jdr-words.fixture';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { fillTone } from '../../../core/theme/tone-format';
+import { EventsApiService } from '../../events/events-api.service';
 
 const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
@@ -216,6 +218,8 @@ interface CreateFixtureOptions {
   announcementIdQueryParam?: string;
   /** Story 38.4 : thème du registre de textes (Grimoire par défaut). */
   theme?: Theme;
+  /** Story 40.1 : conjonctions servies par `GET /parties/:id/events/list` (vide par défaut). */
+  events?: EventCardDto[];
 }
 
 async function createFixture(
@@ -317,6 +321,14 @@ async function createFixture(
         },
       },
       { provide: MatDialog, useValue: { open: vi.fn() } },
+      // Story 40.1 : l'onglet des conjonctions d'un groupe lit sa liste (aucun HttpClient en test).
+      {
+        provide: EventsApiService,
+        useValue: {
+          list: vi.fn().mockResolvedValue(options.events ?? []),
+          create: vi.fn(),
+        },
+      },
     ],
   }).compileComponents();
 
@@ -3734,8 +3746,13 @@ describe('PartieDetail — un groupe s’ouvre sur ses conjonctions (Story 39.1)
       expect(el.querySelector('.conjonctions__empty')?.textContent?.trim()).toBe(
         'Aucune conjonction pour l’instant',
       );
-      // Pas de bouton « + Nouvelle conjonction » ni de carte d'événement (epic 40).
-      expect(el.querySelector('.conjonctions button, .conjonctions a')).toBeNull();
+      // ⚠️ Story 40.1 : l'en-tête porte « + Nouvelle conjonction » pour tout membre ; sans
+      // conjonction, aucune carte (le seul bouton est celui de l'en-tête).
+      const buttons = Array.from(el.querySelectorAll('.conjonctions button'));
+      expect(buttons.map((b) => (b.textContent ?? '').trim())).toEqual([
+        tone['partie.ralliement_event_new_btn'],
+      ]);
+      expect(el.querySelector('.conjonctions a, app-event-card')).toBeNull();
     },
   );
 
@@ -4588,5 +4605,251 @@ describe('PartieDetail — quitter un groupe, retirer le créateur (Story 39.5)'
     expect(createur.textContent).toContain(tone['partie.remove_member_btn']);
     // Jamais sur soi-même, ni sur un administrateur.
     expect(moi.textContent).not.toContain(tone['partie.remove_member_btn']);
+  });
+});
+
+// ─── Conjonctions d'un groupe : cartes, création, temps réel (Story 40.1) ────────────────────
+
+describe('PartieDetail — les conjonctions d’un groupe (Story 40.1)', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
+  });
+
+  const OTHER_ID = 'member-2';
+  const groupe = (over: Partial<PartieDto> = {}) =>
+    makePartie({ gameSystemId: 'ralliement', kind: 'CAMPAGNE_EPISODIQUE', role: 'admin', ...over });
+  const members: PartieMemberDto[] = [
+    {
+      role: 'ADMIN',
+      userId: MJ_ID,
+      pseudo: 'createur',
+      displayName: 'Créateur',
+      joinedAt: '2026-10-01T00:00:00Z',
+    },
+  ];
+  /** Clé de jour locale décalée de `days` jours (même convention que l'écran). */
+  const dayKey = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const j = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${j}`;
+  };
+  const card = (id: string, days: number, over: Partial<EventCardDto> = {}): EventCardDto => ({
+    id,
+    title: `Conjonction ${id}`,
+    hostId: OTHER_ID,
+    hostDisplayName: 'Léa',
+    seance: {
+      id: `s-${id}`,
+      date: dayKey(days),
+      slot: 'EVENING',
+      lieu: 'Lyon 3e',
+      heureRdv: null,
+      notePratique: null,
+      capacity: null,
+    },
+    ...over,
+  });
+  const api = () => TestBed.inject(EventsApiService) as unknown as {
+    list: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+  };
+  const settle = async (fixture: ComponentFixture<PartieDetail>) => {
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+  };
+  const titlesIn = (el: HTMLElement, section: string) =>
+    Array.from(el.querySelectorAll(`.conjonctions__section--${section} app-event-card h4`)).map(
+      (h) => (h.textContent ?? '').trim(),
+    );
+
+  it('cartes rangées : « À venir » (date croissante) puis « Passées » (la plus récente d’abord), état vide retiré', async () => {
+    const { el } = await createFixture(groupe(), MJ_ID, {
+      members,
+      events: [card('passee-ancienne', -9), card('loin', 20), card('proche', 3), card('hier', -1)],
+    });
+
+    expect(titlesIn(el, 'upcoming')).toEqual(['Conjonction proche', 'Conjonction loin']);
+    expect(titlesIn(el, 'past')).toEqual(['Conjonction hier', 'Conjonction passee-ancienne']);
+    expect(el.querySelector('.conjonctions__empty')).toBeNull();
+    expect(api().list).toHaveBeenCalledWith('party-1');
+  });
+
+  it('carte : titre, badge écrit, date en gras, hôte, lieu, « Ma situation » ; lieu vide = ligne omise', async () => {
+    const tone = TONE_MAP['grimoire-emeraude'];
+    const { el } = await createFixture(groupe(), MJ_ID, {
+      members,
+      events: [
+        card('a', 3),
+        card('b', 30, { seance: { ...card('b', 30).seance!, lieu: null } }),
+        card('c', -2),
+      ],
+    });
+    const cards = Array.from(el.querySelectorAll<HTMLElement>('app-event-card'));
+    const [proche, loin, passee] = cards;
+
+    expect(proche.querySelector('.status-badge')?.textContent?.trim()).toBe('Dans 3 jours');
+    expect(proche.querySelector('.event-card__host')?.textContent?.trim()).toBe('Hôte : Léa');
+    expect(proche.querySelector('.event-card__place')?.textContent?.trim()).toBe('Lyon 3e');
+    expect(proche.querySelector('.event-card__date')?.textContent).toMatch(/ · soir$/);
+    expect(proche.querySelector('.event-card__chip')?.textContent?.trim()).toBe(
+      tone['partie.ralliement_event_chip_not_registered'],
+    );
+    expect(proche.querySelector('.event-card__chip--dotted')).not.toBeNull();
+    expect(loin.querySelector('.status-badge')?.textContent?.trim()).toBe(
+      tone['status.scenario_a_venir'],
+    );
+    expect(loin.querySelector('.event-card__place')).toBeNull();
+    expect(passee.querySelector('.status-badge')?.textContent?.trim()).toBe(
+      tone['status.scenario_passe'],
+    );
+    // Aucun mot de JDR sur une carte.
+    for (const c of cards) expect(NON_JDR_BANNED_WORDS.test(c.textContent ?? '')).toBe(false);
+  });
+
+  it('l’hôte lit « Je participe » (« J’y étais » une fois passée)', async () => {
+    const tone = TONE_MAP['grimoire-emeraude'];
+    const { el } = await createFixture(groupe({ role: 'member' }), OTHER_ID, {
+      members,
+      events: [card('futur', 2), card('passe', -2)],
+    });
+    const chips = Array.from(el.querySelectorAll('.event-card__chip')).map((c) =>
+      (c.textContent ?? '').trim(),
+    );
+    expect(chips).toEqual([
+      tone['partie.ralliement_event_chip_participating'],
+      tone['partie.ralliement_event_chip_was_there'],
+    ]);
+  });
+
+  it('temps réel : un signal de la partie recharge la liste, la nouvelle carte apparaît sans rechargement', async () => {
+    const { fixture, el } = await createFixture(groupe({ role: 'member' }), OTHER_ID, { members });
+    expect(el.querySelector('app-event-card')).toBeNull();
+
+    api().list.mockResolvedValue([card('nouvelle', 4)]);
+    TestBed.inject(PartiesService).notifyChanged();
+    await settle(fixture);
+
+    expect(titlesIn(el, 'upcoming')).toEqual(['Conjonction nouvelle']);
+    expect(el.querySelector('.conjonctions__empty')).toBeNull();
+  });
+
+  it('temps réel : un échec transitoire ne vide jamais la liste affichée', async () => {
+    const { fixture, el } = await createFixture(groupe(), MJ_ID, {
+      members,
+      events: [card('reste', 4)],
+    });
+    api().list.mockRejectedValue(new Error('réseau'));
+    TestBed.inject(PartiesService).notifyChanged();
+    await settle(fixture);
+
+    expect(titlesIn(el, 'upcoming')).toEqual(['Conjonction reste']);
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(el.querySelector('.conjonctions__error')?.textContent?.trim()).toBe(
+      tone['partie.ralliement_event_list_error'],
+    );
+  });
+
+  it('dernier administrateur depuis un autre onglet : le nombre est relu au moment de l’avertissement, jamais une valeur périmée', async () => {
+    const { fixture, el } = await createFixture(groupe(), MJ_ID, {
+      members,
+      noopAnimations: true,
+    });
+    // L'onglet des conjonctions est quitté (son contenu est détruit) avant toute nouvelle conjonction.
+    el.querySelectorAll<HTMLElement>('div[role="tab"]')[2].click();
+    await settle(fixture);
+    api().list.mockResolvedValue([card('a', 3), card('b', 6), card('c', -5)]);
+    const dialog = TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+    dialog.open.mockReturnValue({ afterClosed: () => of(false) });
+
+    await fixture.componentInstance.stepDownFromOffice();
+
+    expect(dialog.open.mock.calls[0][1].data.message).toBe(
+      fillTone(TONE_MAP['grimoire-emeraude']['partie.ralliement_last_admin_confirm'], {
+        partie: 'Test Party',
+        members: 1,
+        conjonctions: 3,
+      }),
+    );
+  });
+
+  it('dernier administrateur : la relecture échoue → repli sur la dernière valeur connue', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, {
+      members,
+      events: [card('a', 3), card('b', 6)],
+    });
+    api().list.mockRejectedValue(new Error('réseau'));
+    const dialog = TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+    dialog.open.mockReturnValue({ afterClosed: () => of(false) });
+
+    await fixture.componentInstance.stepDownFromOffice();
+
+    expect(dialog.open.mock.calls[0][1].data.message).toContain('conjonctions : 2');
+  });
+
+  it('dernier administrateur : l’avertissement cite le nombre RÉEL de conjonctions (passées comprises)', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, {
+      members,
+      events: [card('a', 3), card('b', -5)],
+    });
+    const dialog = TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+    dialog.open.mockReturnValue({ afterClosed: () => of(false) });
+
+    await fixture.componentInstance.stepDownFromOffice();
+
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(dialog.open.mock.calls[0][1].data.message).toBe(
+      fillTone(tone['partie.ralliement_last_admin_confirm'], {
+        partie: 'Test Party',
+        members: 1,
+        conjonctions: 2,
+      }),
+    );
+  });
+
+  it('création réussie : la fenêtre se referme, la carte apparaît dans « À venir » et la liste est relue', async () => {
+    const { fixture, el } = await createFixture(groupe({ role: 'member' }), OTHER_ID, { members });
+    el.querySelector<HTMLButtonElement>('.conjonctions__new')!.click();
+    await settle(fixture);
+    const type = async (sel: string, value: string) => {
+      const input = document.body.querySelector<HTMLInputElement>(sel)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+      await settle(fixture);
+    };
+    await type('.ec__name', 'Conjonction nouvelle');
+    await type('.ec__day', dayKey(4));
+    api().create.mockResolvedValue(card('nouvelle', 4));
+    api().list.mockResolvedValue([card('nouvelle', 4)]);
+    const listCalls = api().list.mock.calls.length;
+
+    document.body.querySelector<HTMLButtonElement>('.ec__submit')!.click();
+    await settle(fixture);
+
+    expect(api().create).toHaveBeenCalledTimes(1);
+    expect(document.body.querySelector('app-detail-surface')).toBeNull();
+    expect(titlesIn(el, 'upcoming')).toEqual(['Conjonction nouvelle']);
+    expect(api().list.mock.calls.length).toBeGreaterThan(listCalls);
+  });
+
+  it('« + Nouvelle conjonction » ouvre la fenêtre de création ; « Renoncer » la referme sans rien envoyer', async () => {
+    const { fixture, el } = await createFixture(groupe({ role: 'member' }), OTHER_ID, { members });
+    el.querySelector<HTMLButtonElement>('.conjonctions__new')!.click();
+    await settle(fixture);
+
+    const surface = document.body.querySelector('app-detail-surface .detail-surface-panel');
+    expect(surface?.classList).toContain('detail-surface-panel--wide');
+    expect(surface?.getAttribute('aria-label')).toBe(
+      TONE_MAP['grimoire-emeraude']['partie.ralliement_event_create_title'],
+    );
+
+    document.body.querySelector<HTMLButtonElement>('.ec__cancel')!.click();
+    await settle(fixture);
+    expect(document.body.querySelector('app-detail-surface')).toBeNull();
+    expect(api().create).not.toHaveBeenCalled();
   });
 });

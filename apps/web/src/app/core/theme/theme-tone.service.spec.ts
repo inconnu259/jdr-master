@@ -932,6 +932,33 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     // Story 39.5 : bouton « Quitter le groupe », verbatim du contrat d’UI ; sa confirmation prend le
     // tutoiement de la forêt, donc sa clé a une voix et n’est pas listée ici
     'partie.ralliement_leave_btn',
+    // Story 40.1 : fenêtre de création et carte d’une conjonction — libellés de champ, options,
+    // chips de situation et badges verbatim du contrat d’UI ; le nom de la rencontre (Conjonction /
+    // Halte / Réunion), le rappel d’hôte tutoyé dans la forêt, l’heure de « retrouvailles » de la
+    // forêt (« rendez-vous » s’y lirait comme un vouvoiement) et les replis d’erreur ont une voix
+    'partie.ralliement_event_date_label',
+    'partie.ralliement_event_date_fixed',
+    'partie.ralliement_event_date_poll',
+    'partie.ralliement_event_day_label',
+    'partie.ralliement_event_slot_label',
+    'partie.ralliement_event_place_label',
+    'partie.ralliement_event_note_label',
+    'partie.ralliement_event_participation_label',
+    'partie.ralliement_event_participation_all',
+    'partie.ralliement_event_participation_limited',
+    'partie.ralliement_event_places_count_aria',
+    'partie.ralliement_event_places_less',
+    'partie.ralliement_event_places_more',
+    'partie.ralliement_event_cancel_btn',
+    'partie.ralliement_event_host',
+    'partie.ralliement_event_situation',
+    'partie.ralliement_event_chip_participating',
+    'partie.ralliement_event_chip_was_there',
+    'partie.ralliement_event_chip_not_registered',
+    'partie.ralliement_event_badge_in_days',
+    'partie.ralliement_event_badge_today',
+    'partie.ralliement_event_badge_tomorrow',
+    'partie.ralliement_event_no_date',
     // Gabarits structurels et libellés techniques
     'partie.signal_more_count',
     'parties.detail_link_expires_short',
@@ -1298,6 +1325,49 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
       expect(TONE_MAP[theme]['partie.ralliement_conjonctions_empty'], theme).toBe(vide);
       expect(TONE_MAP[theme]['partie.ralliement_conjonctions_upcoming'], theme).toBe('À venir');
       expect(TONE_MAP[theme]['partie.ralliement_conjonctions_past'], theme).toBe('Passées');
+    }
+  });
+
+  // Story 40.1 : la rencontre d'un groupe porte le nom du thème (Conjonction / Halte / Réunion) sur
+  // le bouton, le titre de la fenêtre, le libellé du nom et le bouton de création ; les mots du
+  // contrat d'UI (« Renoncer », « Tous les membres », « Places limitées », chips) sont identiques.
+  it('Story 40.1 : la création d’une conjonction suit le thème, sans mot de JDR', () => {
+    const attendu: Record<Theme, [string, string, string, string]> = {
+      'grimoire-emeraude': [
+        '+ Nouvelle conjonction',
+        'Nouvelle conjonction',
+        'Nom de la conjonction',
+        'Créer la conjonction',
+      ],
+      'foret-ancienne': ['+ Nouvelle halte', 'Nouvelle halte', 'Nom de la halte', 'Créer la halte'],
+      'atelier-cuivre': [
+        '+ Nouvelle réunion',
+        'Nouvelle réunion',
+        'Nom de la réunion',
+        'Créer la réunion',
+      ],
+    };
+    for (const theme of THEMES) {
+      const tone = TONE_MAP[theme];
+      const [bouton, titre, nom, creer] = attendu[theme];
+      expect(tone['partie.ralliement_event_new_btn'], theme).toBe(bouton);
+      expect(tone['partie.ralliement_event_create_title'], theme).toBe(titre);
+      expect(tone['partie.ralliement_event_name_label'], theme).toBe(nom);
+      expect(tone['partie.ralliement_event_submit_btn'], theme).toBe(creer);
+      expect(tone['partie.ralliement_event_cancel_btn'], theme).toBe('Renoncer');
+      expect(tone['partie.ralliement_event_participation_all'], theme).toBe('Tous les membres');
+      expect(tone['partie.ralliement_event_participation_limited'], theme).toBe('Places limitées');
+      expect(tone['partie.ralliement_event_host'], theme).toContain('{name}');
+      expect(tone['partie.ralliement_event_badge_in_days'], theme).toContain('{n}');
+      for (const key of Object.keys(tone).filter((k) => k.startsWith('partie.ralliement_event_'))) {
+        expect(NON_JDR_BANNED_WORDS.test(tone[key]), `${theme} / ${key}`).toBe(false);
+      }
+    }
+    expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_places_hint']).toBe(
+      'places · tu es l’hôte (1 place)',
+    );
+    for (const key of ['partie.ralliement_event_create_error', 'partie.ralliement_event_list_error']) {
+      expect(new Set(THEMES.map((theme) => TONE_MAP[theme][key])).size, key).toBe(THEMES.length);
     }
   });
 
