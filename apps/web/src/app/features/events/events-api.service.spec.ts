@@ -58,4 +58,22 @@ describe('EventsApiService (Story 40.1)', () => {
     req.flush(card);
     expect(await p).toEqual(card);
   });
+
+  it('inscrire → POST /scenarios/seances/:id/inscription (route partagée), avec withCredentials (Story 40.3)', async () => {
+    const p = service.inscrire('s1');
+    const req = http.expectOne(`${API}/scenarios/seances/s1/inscription`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(card);
+    expect(await p).toEqual(card);
+  });
+
+  it('desinscrire → DELETE /scenarios/seances/:id/inscription, avec withCredentials (Story 40.3)', async () => {
+    const p = service.desinscrire('s1');
+    const req = http.expectOne(`${API}/scenarios/seances/s1/inscription`);
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(card);
+    expect(await p).toEqual(card);
+  });
 });

@@ -424,6 +424,16 @@ export const foretAncienne: Record<ToneKey, string> = {
   'partie.ralliement_event_situation_registered_past': 'Tu participais à cette halte.',
   'partie.ralliement_event_situation_none': 'Tu n’es pas inscrit·e à cette halte.',
   'partie.ralliement_event_situation_none_past': 'Tu n’étais pas inscrit·e à cette halte.',
+  /* — s’inscrire à une conjonction et s’en désinscrire (Story 40.3) : mots du contrat identiques, état « Complet » et replis d’erreur selon le thème — */
+  'partie.ralliement_event_signup_btn': 'S’inscrire',
+  'partie.ralliement_event_unsubscribe_btn': 'Me désinscrire',
+  'partie.ralliement_event_badge_full': 'Complet',
+  'partie.ralliement_event_situation_full':
+    'Complet : toutes les places de cette halte sont prises.',
+  'partie.ralliement_event_signup_error':
+    'Ton inscription à cette halte n’a pas pu être notée. Réessaie.',
+  'partie.ralliement_event_unsubscribe_error':
+    'Ta désinscription de cette halte n’a pas pu être notée. Réessaie.',
   /* — « Appels » d’un groupe, côté administrateur (Story 39.3) : variantes sans mot de JDR — */
   'partie.ralliement_invite_title': 'Appeler à la veillée',
   'partie.ralliement_search_label': 'Pseudo ou espèce connue',

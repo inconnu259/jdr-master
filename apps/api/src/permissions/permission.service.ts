@@ -213,7 +213,8 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
  * 39.1, « clore / rouvrir / brûler » et, depuis la Story 39.3, « inviter / retirer un membre » pour
  * l'administrateur seul, et, depuis la Story 39.4, « nommer un administrateur / quitter l'office ».
  * Depuis la Story 39.5, « quitter le groupe » est ouvert à l'administrateur et aux membres, et depuis
- * la Story 40.1, « proposer une conjonction / lister celles du groupe ».
+ * la Story 40.1, « proposer une conjonction / lister celles du groupe » et, depuis la Story 40.3,
+ * « s'inscrire à une conjonction / s'en désinscrire ».
  * TOUTE autre action est refusée
  * à tous les rôles — le ralliement n'a ni scénario, ni personnage, ni XP. Table COMPLÈTE par
  * construction (`Record` sur l'union fermée) : une action ajoutée sans sa ligne ne compile pas.
@@ -258,8 +259,11 @@ export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly Parti
   SEANCE_COMPTE_RENDU_SET: NOBODY,
   SEANCE_PRACTICAL_INFO_SET: NOBODY,
   SEANCE_POLL_CREATE: NOBODY,
-  SEANCE_INSCRIBE: NOBODY,
-  SEANCE_UNSUBSCRIBE: NOBODY,
+  // Story 40.3 : s'inscrire à une conjonction et s'en désinscrire — tout membre du groupe. La cellule
+  // vaut pour la famille entière ; le refus de la rencontre isolée (`ONE_SHOT`) est posé dans le
+  // service (`GroupEventsService`).
+  SEANCE_INSCRIBE: ADMIN_AND_MEMBERS,
+  SEANCE_UNSUBSCRIBE: ADMIN_AND_MEMBERS,
   // Vote de date
   POLL_READ: NOBODY,
   POLL_VOTE: NOBODY,

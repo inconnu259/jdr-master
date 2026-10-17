@@ -6,9 +6,12 @@ import { fillTone } from '../../../core/theme/tone-format';
 import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
 import { StatusBadge } from '../../../shared/status-badge/status-badge';
 import {
+  canSignUp,
+  canUnsubscribe,
   eventBadge,
   eventDateLabel,
   eventSituationTextKey,
+  isFullForViewer,
   isHostOf,
   isPastEvent,
   participationLine,
@@ -23,10 +26,17 @@ let nextUid = 0;
 /**
  * Fenêtre d'une conjonction (Story 40.2, EventDialog) sur la `DetailSurface` en variante LARGE
  * (⚠️ contrat UX). Ordre du contrat : titre (nom de la conjonction) + badge → panneau de situation
- * (la situation de la personne, puis date, heure et lieu en grand — ni vote ni inscription à ce
- * palier) → fiche (date, hôte, lieu, heure, participation, infos pratiques ; lignes facultatives
- * vides omises) → participants → pied. Pied : l'hôte voit « Modifier » tant que la conjonction n'est
- * pas passée, puis « Refermer ».
+ * (la situation de la personne, puis date, heure et lieu en grand — pas de vote à ce palier) →
+ * fiche (date, hôte, lieu, heure, participation, infos pratiques ; lignes facultatives vides omises)
+ * → participants → pied. Pied : l'hôte voit « Modifier » tant que la conjonction n'est pas passée,
+ * puis « Refermer ».
+ *
+ * Story 40.3 : le panneau de situation offre « S'inscrire » à un membre non inscrit (et pas l'hôte)
+ * tant que la conjonction est à venir — remplacé par « Complet », écrit, quand il n'y a plus de
+ * place — et le pied offre « Me désinscrire » à un inscrit (pas l'hôte). Les boutons sont gardés
+ * contre le double clic (`busy`), le refus du serveur (complet, passée) s'affiche dans la fenêtre,
+ * et la carte à jour est remise à l'onglet (`saved`) : participants, chip et ligne de participation
+ * se lisent ensuite dans la liste vivante, comme pour tout changement reçu en direct.
  *
  * La carte vient de la liste vivante de l'onglet (lue par identifiant) : toute mise à jour reçue en
  * temps réel se reflète ici sans rechargement. « Modifier » bascule la MÊME fenêtre en mode édition
@@ -49,7 +59,8 @@ export class EventDialog {
   /** Clé `YYYY-MM-DD` du jour courant, figée par l'écran parent. */
   readonly todayKey = input.required<string>();
   readonly currentUserId = input<string | null>(null);
-  /** Carte enregistrée par l'hôte (réponse du serveur) : l'onglet la met à jour tout de suite. */
+  /** Carte à jour renvoyée par le serveur (modification par l'hôte, inscription, désinscription) :
+   *  l'onglet la met à jour tout de suite. */
   readonly saved = output<EventCardDto>();
   readonly closed = output<void>();
 
@@ -65,7 +76,17 @@ export class EventDialog {
     () => isHostOf(this.card(), this.currentUserId()) && !this.past(),
   );
   protected readonly badge = computed(() =>
-    eventBadge(this.card(), this.todayKey(), this.theme.tone()),
+    eventBadge(this.card(), this.todayKey(), this.theme.tone(), this.currentUserId()),
+  );
+  protected readonly showSignUp = computed(() =>
+    canSignUp(this.card(), this.currentUserId(), this.todayKey()),
+  );
+  /** « Complet », écrit, à la place de « S'inscrire » : seulement pour qui n'est pas inscrit. */
+  protected readonly showFull = computed(() =>
+    isFullForViewer(this.card(), this.currentUserId(), this.todayKey()),
+  );
+  protected readonly showUnsubscribe = computed(() =>
+    canUnsubscribe(this.card(), this.currentUserId(), this.todayKey()),
   );
   protected readonly dateLabel = computed(() => eventDateLabel(this.card(), this.theme.tone()));
   protected readonly situationText = computed(
@@ -94,6 +115,39 @@ export class EventDialog {
   protected cancelEdit(): void {
     this.error.set(null);
     this.editing.set(false);
+  }
+
+  /** Story 40.3 : s'inscrire. Le serveur est seul juge (complet, passée) ; son refus s'affiche ici. */
+  protected async signUp(): Promise<void> {
+    await this.changeRoster(
+      (seanceId) => this.api.inscrire(seanceId),
+      'partie.ralliement_event_signup_error',
+    );
+  }
+
+  /** Story 40.3 : se désinscrire (libre tant que la conjonction n'est pas passée). */
+  protected async unsubscribe(): Promise<void> {
+    await this.changeRoster(
+      (seanceId) => this.api.desinscrire(seanceId),
+      'partie.ralliement_event_unsubscribe_error',
+    );
+  }
+
+  private async changeRoster(
+    call: (seanceId: string) => Promise<EventCardDto>,
+    errorKey: string,
+  ): Promise<void> {
+    const seanceId = this.card().seance?.id;
+    if (!seanceId || this.busy()) return;
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      this.saved.emit(await call(seanceId));
+    } catch (err) {
+      this.error.set(refusalMessage(err, this.theme.tone()[errorKey]));
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   protected async save(): Promise<void> {

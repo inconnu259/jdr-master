@@ -214,6 +214,40 @@ describe('Droits sur une partie et ses événements (Story 37.6)', () => {
     expect(inscriptions).toBe(0);
   });
 
+  // Story 40.3 : les routes d'inscription sont partagées entre JDR et groupes de ralliement. La partie
+  // est résolue depuis la séance : un membre d'une famille n'atteint jamais la séance de l'autre.
+  it('inscription : les routes partagées ne franchissent pas les familles (403 « pas accès »), sans écriture', async () => {
+    const { id: groupe } = await h.createPartie(
+      mjB,
+      'CAMPAGNE_EPISODIQUE',
+      'droits groupe',
+      'ralliement',
+    );
+    const created = await mjB.agent
+      .post(`/parties/${groupe}/events`)
+      .send({ title: 'Une conjonction', date: isoDay(10), slot: 'EVENING' })
+      .expect(201);
+    const groupSeance = body<{ seance: { id: string } }>(created).seance.id;
+    const jdrSeance = scenarioA.seances[0].id;
+
+    // Le MJ et le joueur de la partie de JDR n'ont aucun rôle dans le groupe.
+    for (const who of [mjA, joueurA]) {
+      for (const call of ['post', 'delete'] as const) {
+        const res = await who.agent[call](`/scenarios/seances/${groupSeance}/inscription`).expect(
+          403,
+        );
+        expect(body<ErrorLike>(res).message).toBe(NO_ACCESS_MESSAGE);
+      }
+    }
+    // Et l'administrateur du groupe n'en a aucun dans la partie de JDR.
+    for (const call of ['post', 'delete'] as const) {
+      const res = await mjB.agent[call](`/scenarios/seances/${jdrSeance}/inscription`).expect(403);
+      expect(body<ErrorLike>(res).message).toBe(NO_ACCESS_MESSAGE);
+    }
+    expect(await h.prisma.inscription.count({ where: { seanceId: groupSeance } })).toBe(0);
+    expect(await h.prisma.inscription.count({ where: { seanceId: jdrSeance } })).toBe(0);
+  });
+
   it("un scénario (événement) d'une autre partie est refusé au MJ de A (403), sans écriture", async () => {
     const res = await mjA.agent
       .patch(`/scenarios/${scenarioB.id}`)

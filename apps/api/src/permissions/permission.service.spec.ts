@@ -492,6 +492,9 @@ describe('PermissionService', () => {
       // Story 40.1 : proposer une conjonction (dont on est l'hôte) et lister celles du groupe.
       'EVENT_CREATE',
       'EVENT_LIST',
+      // Story 40.3 : s'inscrire à une conjonction et s'en désinscrire (routes partagées avec le JDR).
+      'SEANCE_INSCRIBE',
+      'SEANCE_UNSUBSCRIBE',
     ];
     /** Story 40.2 : la cellule de rôle est ouverte à l'admin ET au membre, mais l'action vise un
      *  événement (`{ eventId }`) et n'est accordée qu'à son hôte — testée à part, sur cette cible. */

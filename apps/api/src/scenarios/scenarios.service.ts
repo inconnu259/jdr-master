@@ -8,6 +8,7 @@ import { isUUID } from 'class-validator';
 import { Prisma, type Event, type Scenario, type ScenarioDocument } from '@prisma/client';
 import type {
   CharacterNoteDto,
+  EventCardDto,
   DaySlot,
   PartieKind,
   PartieRole,
@@ -16,8 +17,12 @@ import type {
   SeanceDto,
   SessionPollDto,
 } from '@master-jdr/shared';
+// Import RUNTIME du registre des systèmes (Story 40.3) : la famille de la partie choisit la branche
+// des routes d'inscription partagées. Jamais `import type` sur une valeur.
+import { familyOf } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsService } from '../events/events.service';
+import { GroupEventsService } from '../events/group-events.service';
 import { PartiesService } from '../parties/parties.service';
 import { countParticipants } from '../common/participant-count.util';
 import { PermissionService } from '../permissions/permission.service';
@@ -65,6 +70,8 @@ export class ScenariosService {
     // Story 37.6 (AD-6) : tout droit sur une partie, un scénario (événement) ou une séance est
     // décidé par ce service — la partie est résolue depuis la cible, jamais depuis la route.
     private readonly permissions: PermissionService,
+    // Story 40.3 : branche « groupe » des routes d'inscription (conjonctions d'un ralliement).
+    private readonly groupEvents: GroupEventsService,
   ) {}
 
   /** Scénario aplati avec son événement de base (Story 37.3), `null` s'il n'existe pas. */
@@ -785,12 +792,17 @@ export class ScenariosService {
 
   // AD-5 (verbatim) : verrou de ligne explicite SELECT ... FOR UPDATE obligatoire — READ COMMITTED
   // seul ne suffit pas à empêcher un dépassement de max entre deux inscriptions concurrentes.
-  async inscrire(seanceId: string, userId: string): Promise<ScenarioDto> {
+  async inscrire(seanceId: string, userId: string): Promise<ScenarioDto | EventCardDto> {
     const grant = await this.permissions.assert(userId, 'SEANCE_INSCRIBE', { seanceId });
     const seance = await this.prisma.seance.findUnique({
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
+    // Story 40.3 : la séance d'un groupe de ralliement est celle d'une conjonction (aucun scénario) —
+    // branche décidée par la famille de la partie de la séance, avant toute règle du JDR.
+    if (familyOf(grant.partie.gameSystemId) === 'ralliement') {
+      return this.groupEvents.inscrire(grant, userId);
+    }
     const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
     const { partie } = grant;
 
@@ -826,12 +838,16 @@ export class ScenariosService {
   // bord dangereux possible, aucune garde de kind/capacité nécessaire (cf. Dev Notes Story 8.3).
   // Story 17.2 (AC1) : décision explicite de ne PAS ajouter de garde de statut scénario non plus —
   // un retrait d'inscription reste sûr et réversible quel que soit le statut (y compris PASSE).
-  async desinscrire(seanceId: string, userId: string): Promise<ScenarioDto> {
+  async desinscrire(seanceId: string, userId: string): Promise<ScenarioDto | EventCardDto> {
     const grant = await this.permissions.assert(userId, 'SEANCE_UNSUBSCRIBE', { seanceId });
     const seance = await this.prisma.seance.findUnique({
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
+    // Story 40.3 : même branche « groupe » que `inscrire`.
+    if (familyOf(grant.partie.gameSystemId) === 'ralliement') {
+      return this.groupEvents.desinscrire(grant, userId);
+    }
     const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
     const { partie } = grant;
 

@@ -2,6 +2,7 @@ export type EmailTemplate =
   | 'invitation'
   | 'group-invitation'
   | 'session-reminder'
+  | 'conjonction-reminder'
   | 'password-reset'
   | 'password-changed'
   | 'level-up'

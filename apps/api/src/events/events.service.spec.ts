@@ -2,7 +2,12 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
-import { EventsService, PAST_EVENT_MESSAGE } from './events.service';
+import {
+  EventsService,
+  FULL_EVENT_MESSAGE,
+  PAST_EVENT_MESSAGE,
+  PAST_ROSTER_MESSAGE,
+} from './events.service';
 import { testGrant } from '../common/test-utils/grant';
 import { callArg, mockCalls, objectLike } from '../common/test-utils/jest-typed';
 import { VISIBLE_SEANCE_WHERE } from '../permissions/scenario-visibility';
@@ -31,6 +36,8 @@ function makePrisma() {
     seance: {
       create: jest.fn().mockResolvedValue({ id: 'se1' }),
       findUniqueOrThrow: jest.fn(),
+      // Story 40.3 : séance (et hôte de son événement) relue sous le verrou de l'événement.
+      findUnique: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
       updateMany: jest.fn(),
@@ -45,6 +52,7 @@ function makePrisma() {
       findUnique: jest.fn().mockResolvedValue(null),
       count: jest.fn().mockResolvedValue(0),
       create: jest.fn(),
+      deleteMany: jest.fn(),
     },
   };
   return {
@@ -846,6 +854,287 @@ describe('EventsService (Story 37.3)', () => {
         where: { seanceId: 'se1', userId: 'u1' },
       });
       expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+  });
+
+  // Story 40.3 : inscription et désinscription à une conjonction (groupe de ralliement).
+  describe('inscrireConjonction() / desinscrireConjonction() (Story 40.3)', () => {
+    const GRANT_SE1 = testGrant({ id: 'p1', ownerId: 'a' }, 'member', {
+      eventId: 'e1',
+      seanceId: 'se1',
+    });
+    const inDays = (days: number) => new Date(Date.now() + days * 86_400_000);
+
+    /** Séance relue sous le verrou : date, capacité et hôte de l'événement. */
+    function locked(
+      over: {
+        startDate?: Date | null;
+        inscriptionMax?: number | null;
+        ownerId?: string | null;
+      } = {},
+    ) {
+      prisma.tx.seance.findUnique.mockImplementation((args: { select: Record<string, unknown> }) =>
+        Promise.resolve(
+          'eventId' in args.select
+            ? { eventId: 'e1' }
+            : {
+                startDate: 'startDate' in over ? over.startDate : inDays(3),
+                inscriptionMax: 'inscriptionMax' in over ? over.inscriptionMax : 4,
+                event: { ownerId: 'ownerId' in over ? over.ownerId : 'hote' },
+              },
+        ),
+      );
+    }
+
+    it('verrouille la ligne Event AVANT de relire la séance et de compter, puis inscrit et émet', async () => {
+      locked();
+      prisma.tx.inscription.count.mockResolvedValue(1);
+
+      await service.inscrireConjonction(GRANT_SE1, 'se1', 'u1');
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(callArg<string[]>(prisma.tx.$queryRaw, 0, 0).join('?')).toContain('FROM "Event"');
+      expect(callArg<string>(prisma.tx.$queryRaw, 0, 1)).toBe('e1');
+      expect(prisma.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.tx.inscription.count.mock.invocationCallOrder[0],
+      );
+      expect(prisma.tx.inscription.create).toHaveBeenCalledWith({
+        data: { seanceId: 'se1', userId: 'u1' },
+      });
+      expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('capacité nulle (« Tous les membres ») : aucun comptage, aucune limite', async () => {
+      locked({ inscriptionMax: null });
+
+      await service.inscrireConjonction(GRANT_SE1, 'se1', 'u1');
+
+      expect(prisma.tx.inscription.count).not.toHaveBeenCalled();
+      expect(prisma.tx.inscription.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('places prises = l’hôte (sans ligne) + les inscrits : la dernière place est accordée', async () => {
+      locked({ inscriptionMax: 4 });
+      prisma.tx.inscription.count.mockResolvedValue(2);
+
+      await service.inscrireConjonction(GRANT_SE1, 'se1', 'u1');
+
+      expect(prisma.tx.inscription.count).toHaveBeenCalledWith({
+        where: { seanceId: 'se1', userId: { not: 'hote' } },
+      });
+      expect(prisma.tx.inscription.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('événement sans hôte (compte supprimé) : comptage SANS filtre sur l’hôte, la dernière place est accordée', async () => {
+      locked({ ownerId: null, inscriptionMax: 2 });
+      prisma.tx.inscription.count.mockResolvedValue(1);
+
+      await service.inscrireConjonction(GRANT_SE1, 'se1', 'u1');
+
+      expect(prisma.tx.inscription.count).toHaveBeenCalledWith({ where: { seanceId: 'se1' } });
+      expect(prisma.tx.inscription.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('événement sans hôte : inscrits = capacité → 409, rien n’est écrit', async () => {
+      locked({ ownerId: null, inscriptionMax: 2 });
+      prisma.tx.inscription.count.mockResolvedValue(2);
+
+      await expect(service.inscrireConjonction(GRANT_SE1, 'se1', 'u1')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+    });
+
+    it('complet : hôte + inscrits = capacité → 409, rien n’est écrit ni émis', async () => {
+      locked({ inscriptionMax: 3 });
+      prisma.tx.inscription.count.mockResolvedValue(2);
+
+      const refusal = service.inscrireConjonction(GRANT_SE1, 'se1', 'u1');
+
+      await expect(refusal).rejects.toBeInstanceOf(ConflictException);
+      await expect(refusal).rejects.toThrow(FULL_EVENT_MESSAGE);
+      expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+      expect(realtime.emit).not.toHaveBeenCalled();
+    });
+
+    it('inscription tardive : la date est posée mais pas passée → acceptée, la séance n’est pas modifiée', async () => {
+      locked({ startDate: inDays(1) });
+
+      await service.inscrireConjonction(GRANT_SE1, 'se1', 'u1');
+
+      expect(prisma.tx.inscription.create).toHaveBeenCalledTimes(1);
+      expect(prisma.tx.seance.update).not.toHaveBeenCalled();
+    });
+
+    it('déjà inscrit : idempotent, aucun comptage ni création — même sur une conjonction pleine', async () => {
+      locked({ inscriptionMax: 3 });
+      prisma.tx.inscription.findUnique.mockResolvedValue({ id: 'i1' });
+
+      await expect(service.inscrireConjonction(GRANT_SE1, 'se1', 'u1')).resolves.toBeUndefined();
+
+      expect(prisma.tx.inscription.count).not.toHaveBeenCalled();
+      expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+    });
+
+    it('l’hôte qui s’inscrit : idempotent, aucune ligne créée', async () => {
+      locked();
+
+      await service.inscrireConjonction(GRANT_SE1, 'se1', 'hote');
+
+      expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+    });
+
+    it.each(['inscrireConjonction', 'desinscrireConjonction'] as const)(
+      'jour passé : %s est refusé (400), rien n’est écrit ni émis',
+      async (method) => {
+        locked({ startDate: inDays(-1) });
+
+        const refusal = service[method](GRANT_SE1, 'se1', 'u1');
+
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(PAST_ROSTER_MESSAGE);
+        expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+        expect(prisma.tx.inscription.deleteMany).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      },
+    );
+
+    it('aujourd’hui n’est pas passé : inscription acceptée', async () => {
+      locked({ startDate: new Date(Date.UTC(2000, 0, 1)) });
+      jest.useFakeTimers().setSystemTime(new Date('2000-01-01T23:00:00.000Z'));
+      try {
+        await service.inscrireConjonction(GRANT_SE1, 'se1', 'u1');
+      } finally {
+        jest.useRealTimers();
+      }
+      expect(prisma.tx.inscription.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('séance disparue (supprimée entre-temps) → 404', async () => {
+      prisma.tx.seance.findUnique.mockResolvedValue(null);
+
+      await expect(service.inscrireConjonction(GRANT_SE1, 'se1', 'u1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      await expect(service.desinscrireConjonction(GRANT_SE1, 'se1', 'u1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('séance d’une autre partie que celle de l’autorisation → 404 avant toute transaction', async () => {
+      prisma.seance.count.mockResolvedValue(0);
+      const grantAutre = testGrant({ id: 'p1', ownerId: 'a' }, 'member', { eventId: 'e9' });
+
+      await expect(service.inscrireConjonction(grantAutre, 'se9', 'u1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      await expect(service.desinscrireConjonction(grantAutre, 'se9', 'u1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('désinscrire : sous le même verrou, retire la ligne de l’appelant (deleteMany) puis émet', async () => {
+      locked();
+
+      await service.desinscrireConjonction(GRANT_SE1, 'se1', 'u1');
+
+      expect(callArg<string[]>(prisma.tx.$queryRaw, 0, 0).join('?')).toContain('FROM "Event"');
+      expect(prisma.tx.inscription.deleteMany).toHaveBeenCalledWith({
+        where: { seanceId: 'se1', userId: 'u1' },
+      });
+      expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('désinscrire : l’hôte ne se désinscrit pas de sa propre conjonction (aucun retrait)', async () => {
+      locked();
+
+      await service.desinscrireConjonction(GRANT_SE1, 'se1', 'hote');
+
+      expect(prisma.tx.inscription.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reminderRecipients() (Story 40.3)', () => {
+    const u = (id: string) => ({ id, email: `${id}@example.com` });
+    const partie = (over: Record<string, unknown> = {}) => ({
+      kind: 'CAMPAGNE_EPISODIQUE' as const,
+      gameSystemId: 'ralliement',
+      owner: u('admin'),
+      memberships: [u('admin'), u('a'), u('b'), u('c')].map((user) => ({ user })),
+      ...over,
+    });
+    const ids = (list: { id: string }[]) => list.map((r) => r.id);
+
+    it('groupe : l’hôte puis les inscrits — ni l’administrateur ni les autres membres', () => {
+      const recipients = service.reminderRecipients({
+        inscriptions: [{ user: u('b') }, { user: u('c') }],
+        event: { owner: u('a'), partie: partie() },
+      });
+
+      expect(ids(recipients)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('groupe : un hôte aussi inscrit n’est listé qu’une fois ; hôte disparu → les inscrits seuls', () => {
+      expect(
+        ids(
+          service.reminderRecipients({
+            inscriptions: [{ user: u('a') }, { user: u('b') }],
+            event: { owner: u('a'), partie: partie() },
+          }),
+        ),
+      ).toEqual(['a', 'b']);
+      expect(
+        ids(
+          service.reminderRecipients({
+            inscriptions: [{ user: u('b') }],
+            event: { owner: null, partie: partie() },
+          }),
+        ),
+      ).toEqual(['b']);
+    });
+
+    it('groupe sans aucun inscrit : l’hôte seul', () => {
+      expect(
+        ids(
+          service.reminderRecipients({
+            inscriptions: [],
+            event: { owner: u('a'), partie: partie() },
+          }),
+        ),
+      ).toEqual(['a']);
+    });
+
+    it('JDR : le propriétaire et les membres, dédoublonnés ; les inscrits ne changent rien', () => {
+      const recipients = service.reminderRecipients({
+        inscriptions: [{ user: u('b') }],
+        event: {
+          owner: u('a'),
+          partie: partie({ kind: 'CAMPAGNE_EPISODIQUE', gameSystemId: 'ryuutama' }),
+        },
+      });
+
+      expect(ids(recipients)).toEqual(['admin', 'a', 'b', 'c']);
+    });
+
+    it('rencontre isolée de ralliement : garde les destinataires historiques (propriétaire + membres)', () => {
+      const recipients = service.reminderRecipients({
+        inscriptions: [],
+        event: { owner: u('a'), partie: partie({ kind: 'ONE_SHOT' }) },
+      });
+
+      expect(ids(recipients)).toEqual(['admin', 'a', 'b', 'c']);
+    });
+
+    it('JDR, brouillon caché : le propriétaire seul (anti-spoil)', () => {
+      const recipients = service.reminderRecipients({
+        event: {
+          scenario: { status: 'BROUILLON' },
+          partie: partie({ kind: 'CAMPAGNE_LINEAIRE', gameSystemId: 'ryuutama' }),
+        },
+      });
+
+      expect(ids(recipients)).toEqual(['admin']);
     });
   });
 

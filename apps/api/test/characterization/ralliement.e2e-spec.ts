@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import request from 'supertest';
+import request, { type Response } from 'supertest';
 import { EventsService } from '../../src/events/events.service';
 import { PartiesService } from '../../src/parties/parties.service';
 import {
@@ -1924,5 +1924,308 @@ describe('Ralliement — consulter et modifier une conjonction (Story 40.2)', ()
       payload({ title: 'Quota', capacity: null }),
     ).expect(200);
     expect(body<CardLike>(open).seance?.capacity).toBeNull();
+  });
+});
+
+describe("Ralliement — s'inscrire à une conjonction et s'en désinscrire (Story 40.3)", () => {
+  let h: Harness;
+  let admin: TestUser;
+  let host: TestUser;
+  let guest: TestUser;
+  let third: TestUser;
+  let stranger: TestUser;
+  let otherAdmin: TestUser;
+  let groupId: string;
+  let otherGroupId: string;
+
+  type CardLike = {
+    id: string;
+    title: string;
+    hostId: string | null;
+    seance: {
+      id: string;
+      date: string | null;
+      slot: string | null;
+      capacity: number | null;
+    } | null;
+    participants: { userId: string; isHost: boolean }[];
+  };
+  type ErrorLike = { statusCode: number; message: string | string[] };
+
+  const FULL = 'Cette conjonction est complète : plus aucune place disponible';
+  const PAST_ROSTER = 'Cette conjonction est passée : les inscriptions ne peuvent plus changer';
+
+  const propose = async (who: TestUser, partieId: string, over: Record<string, unknown> = {}) =>
+    body<CardLike>(
+      await who.agent
+        .post(`/parties/${partieId}/events`)
+        .send({ title: 'Soirée plateaux', date: isoDay(6), slot: 'EVENING', ...over })
+        .expect(201),
+    );
+  const signUp = (who: TestUser, seanceId: string) =>
+    who.agent.post(`/scenarios/seances/${seanceId}/inscription`);
+  const unsubscribe = (who: TestUser, seanceId: string) =>
+    who.agent.delete(`/scenarios/seances/${seanceId}/inscription`);
+  const registered = async (seanceId: string) =>
+    (
+      await h.prisma.inscription.findMany({ where: { seanceId }, orderBy: { createdAt: 'asc' } })
+    ).map((i) => i.userId);
+  const ids = (card: CardLike) => card.participants.map((p) => p.userId);
+  const message = (res: { body: unknown }) => (res.body as ErrorLike).message;
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, host, guest, third, stranger, otherAdmin] = await Promise.all([
+      h.createUser('insc-admin'),
+      h.createUser('insc-hote'),
+      h.createUser('insc-invite'),
+      h.createUser('insc-tiers'),
+      h.createUser('insc-etranger'),
+      h.createUser('insc-autre-admin'),
+    ]);
+    ({ id: groupId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'insc', 'ralliement'));
+    await h.addMember(groupId, host);
+    await h.addMember(groupId, guest);
+    await h.addMember(groupId, third);
+    ({ id: otherGroupId } = await h.createPartie(
+      otherAdmin,
+      'CAMPAGNE_EPISODIQUE',
+      'insc-autre',
+      'ralliement',
+    ));
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it('« Tous les membres » : un membre s’inscrit (201 + carte), figure dans les participants, tous sont prévenus en direct', async () => {
+    const card = await propose(host, groupId, { title: 'Pour tous' });
+    expect(card.seance?.capacity).toBeNull();
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    let res: Response;
+    try {
+      res = await signUp(guest, card.seance!.id).expect(201);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      // La liste d'accueil des membres (statut, « mes conjonctions ») est prévenue après l'écriture.
+      expect(emit).toHaveBeenCalledWith(userTopic(admin.id));
+      expect(emit).toHaveBeenCalledWith(userTopic(third.id));
+    } finally {
+      emit.mockRestore();
+    }
+
+    const updated = body<CardLike>(res);
+    expect(updated.id).toBe(card.id);
+    expect(ids(updated)).toEqual([host.id, guest.id]);
+    expect(await registered(card.seance!.id)).toEqual([guest.id]);
+    // Aucune limite : tous les autres peuvent s'inscrire, l'administrateur compris.
+    await signUp(third, card.seance!.id).expect(201);
+    await signUp(admin, card.seance!.id).expect(201);
+    expect(await registered(card.seance!.id)).toHaveLength(3);
+    // Les autres membres lisent la même liste.
+    const list = body<CardLike[]>(
+      await third.agent.get(`/parties/${groupId}/events/list`).expect(200),
+    );
+    expect(ids(list.find((c) => c.id === card.id)!)).toEqual([
+      host.id,
+      guest.id,
+      third.id,
+      admin.id,
+    ]);
+  });
+
+  it('places limitées : l’hôte tient une place, premier arrivé premier servi, complet → 409 français, rien d’écrit', async () => {
+    const card = await propose(host, groupId, { title: 'Trois places', capacity: 3 });
+    const seanceId = card.seance!.id;
+
+    await signUp(guest, seanceId).expect(201);
+    expect(await registered(seanceId)).toEqual([guest.id]);
+    await signUp(third, seanceId).expect(201);
+
+    const full = await signUp(admin, seanceId);
+    expect(full.status).toBe(409);
+    expect(message(full)).toBe(FULL);
+    expect(await registered(seanceId)).toEqual([guest.id, third.id]);
+  });
+
+  it('dernière place, deux membres en même temps : exactement un est accepté, l’autre reçoit « complet »', async () => {
+    const card = await propose(host, groupId, { title: 'Dernière place', capacity: 2 });
+    const seanceId = card.seance!.id;
+
+    const [a, b] = await Promise.all([signUp(guest, seanceId), signUp(third, seanceId)]);
+
+    expect([a.status, b.status].sort()).toEqual([201, 409]);
+    const loser = a.status === 409 ? a : b;
+    expect(message(loser)).toBe(FULL);
+    expect(await registered(seanceId)).toHaveLength(1);
+  });
+
+  it('trois membres en même temps sur deux places : jamais plus de places que la capacité', async () => {
+    const card = await propose(host, groupId, { title: 'Course', capacity: 3 });
+    const seanceId = card.seance!.id;
+
+    const results = await Promise.all([
+      signUp(guest, seanceId),
+      signUp(third, seanceId),
+      signUp(admin, seanceId),
+    ]);
+
+    expect(results.filter((r) => r.status === 201)).toHaveLength(2);
+    expect(results.filter((r) => r.status === 409)).toHaveLength(1);
+    expect(await registered(seanceId)).toHaveLength(2);
+  });
+
+  it('inscription tardive : la date est déjà posée, l’inscription est acceptée et la date ne bouge pas', async () => {
+    const day = isoDay(2);
+    const card = await propose(host, groupId, { title: 'Datée', date: day, slot: 'AFTERNOON' });
+
+    const res = await signUp(guest, card.seance!.id).expect(201);
+
+    const updated = body<CardLike>(res);
+    expect(updated.seance).toMatchObject({ date: day, slot: 'AFTERNOON' });
+    const seance = await h.prisma.seance.findUniqueOrThrow({ where: { id: card.seance!.id } });
+    expect(seance.startDate?.toISOString()).toBe(`${day}T00:00:00.000Z`);
+    expect(seance.startSlot).toBe('AFTERNOON');
+  });
+
+  it('désinscription : la ligne et la place sont libérées (un autre peut la prendre), tous sont prévenus', async () => {
+    const card = await propose(host, groupId, { title: 'Libre-service', capacity: 2 });
+    const seanceId = card.seance!.id;
+    await signUp(guest, seanceId).expect(201);
+    expect((await signUp(third, seanceId)).status).toBe(409);
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    let res: Response;
+    try {
+      res = await unsubscribe(guest, seanceId).expect(200);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(emit).toHaveBeenCalledWith(userTopic(admin.id));
+    } finally {
+      emit.mockRestore();
+    }
+
+    expect(ids(body<CardLike>(res))).toEqual([host.id]);
+    expect(await registered(seanceId)).toEqual([]);
+    await signUp(third, seanceId).expect(201);
+    expect(await registered(seanceId)).toEqual([third.id]);
+  });
+
+  it('idempotence : s’inscrire deux fois, l’hôte qui s’inscrit ou se désinscrit, un non-inscrit qui se désinscrit — la carte revient, rien ne change', async () => {
+    const card = await propose(host, groupId, { title: 'Idempotente', capacity: 3 });
+    const seanceId = card.seance!.id;
+
+    await signUp(guest, seanceId).expect(201);
+    const again = body<CardLike>(await signUp(guest, seanceId).expect(201));
+    expect(ids(again)).toEqual([host.id, guest.id]);
+    expect(await registered(seanceId)).toEqual([guest.id]);
+
+    const hostSignUp = body<CardLike>(await signUp(host, seanceId).expect(201));
+    expect(ids(hostSignUp)).toEqual([host.id, guest.id]);
+    const hostLeave = body<CardLike>(await unsubscribe(host, seanceId).expect(200));
+    expect(ids(hostLeave)).toEqual([host.id, guest.id]);
+    expect(await registered(seanceId)).toEqual([guest.id]);
+
+    const notRegistered = body<CardLike>(await unsubscribe(third, seanceId).expect(200));
+    expect(ids(notRegistered)).toEqual([host.id, guest.id]);
+    // Un inscrit n'est jamais rejeté par une conjonction devenue pleine.
+    await signUp(third, seanceId).expect(201);
+    await signUp(guest, seanceId).expect(201);
+    expect(await registered(seanceId)).toEqual([guest.id, third.id]);
+  });
+
+  it('jour passé : ni inscription ni désinscription (400 français), rien ne change', async () => {
+    const card = await propose(host, groupId, { title: 'Hier', capacity: 5 });
+    const seanceId = card.seance!.id;
+    await signUp(guest, seanceId).expect(201);
+    const yesterday = new Date(`${isoDay(-2)}T00:00:00.000Z`);
+    await h.prisma.seance.update({
+      where: { id: seanceId },
+      data: { startDate: yesterday, endDate: yesterday },
+    });
+
+    const lateSignUp = await signUp(third, seanceId);
+    expect(lateSignUp.status).toBe(400);
+    expect(message(lateSignUp)).toBe(PAST_ROSTER);
+    const lateLeave = await unsubscribe(guest, seanceId);
+    expect(lateLeave.status).toBe(400);
+    expect(message(lateLeave)).toBe(PAST_ROSTER);
+    expect(await registered(seanceId)).toEqual([guest.id]);
+  });
+
+  describe('refus (rien n’est écrit)', () => {
+    let card: CardLike;
+    beforeAll(async () => {
+      card = await propose(host, groupId, { title: 'Fermée aux autres', capacity: 4 });
+    });
+
+    it('un étranger et l’administrateur d’un autre groupe : 403 « pas accès », en inscription comme en désinscription', async () => {
+      for (const who of [stranger, otherAdmin]) {
+        const up = await signUp(who, card.seance!.id);
+        expect(up.status).toBe(403);
+        expect(message(up)).toBe(NO_ACCESS);
+        const down = await unsubscribe(who, card.seance!.id);
+        expect(down.status).toBe(403);
+        expect(message(down)).toBe(NO_ACCESS);
+      }
+      expect(await registered(card.seance!.id)).toEqual([]);
+    });
+
+    it('la séance d’un autre groupe n’est atteinte que par ses membres : le membre de A reçoit 403 sur la séance de B, rien n’est écrit', async () => {
+      const foreign = await propose(otherAdmin, otherGroupId, { title: 'Chez les autres' });
+      const res = await signUp(guest, foreign.seance!.id);
+      expect(res.status).toBe(403);
+      expect(message(res)).toBe(NO_ACCESS);
+      expect(await registered(foreign.seance!.id)).toEqual([]);
+      // Son propre groupe reste intact.
+      expect(await registered(card.seance!.id)).toEqual([]);
+    });
+
+    it('une séance inconnue : 404', async () => {
+      await signUp(guest, randomUUID()).expect(404);
+      await unsubscribe(guest, randomUUID()).expect(404);
+    });
+
+    it('une rencontre isolée (ONE_SHOT) : 403 « indisponible », même à son administrateur', async () => {
+      const { id: isoleeId } = await h.createPartie(admin, 'ONE_SHOT', 'insc-isolee', 'ralliement');
+      const seance = await h.prisma.seance.findFirstOrThrow({
+        where: { event: { partieId: isoleeId } },
+      });
+      for (const call of [signUp, unsubscribe]) {
+        const res = await call(admin, seance.id);
+        expect(res.status).toBe(403);
+        expect(message(res)).toBe(UNAVAILABLE);
+      }
+      expect(await registered(seance.id)).toEqual([]);
+    });
+
+    it('une partie de JDR : un membre du groupe n’y a aucun accès, et le MJ garde sa sémantique historique', async () => {
+      const { id: jdrId } = await h.createPartie(otherAdmin, 'CAMPAGNE_EPISODIQUE', 'insc-jdr');
+      const scenario = body<{ id: string; seances: { id: string }[] }>(
+        await otherAdmin.agent
+          .post(`/parties/${jdrId}/scenarios`)
+          .send({ title: 'Scénario' })
+          .expect(201),
+      );
+      const seanceId = scenario.seances[0].id;
+      const res = await signUp(guest, seanceId);
+      expect(res.status).toBe(403);
+      expect(message(res)).toBe(NO_ACCESS);
+      // Scénario encore en brouillon : le MJ lui-même reçoit son 400 historique, jamais une carte.
+      const jdr = await signUp(otherAdmin, seanceId);
+      expect(jdr.status).toBe(400);
+      expect(await registered(seanceId)).toEqual([]);
+    });
+  });
+
+  it('participants : la carte de la liste et la réponse portent les mêmes inscrits, par ordre d’inscription', async () => {
+    const card = await propose(host, groupId, { title: 'Ordre' });
+    await signUp(third, card.seance!.id).expect(201);
+    await signUp(guest, card.seance!.id).expect(201);
+
+    const list = body<CardLike[]>(
+      await admin.agent.get(`/parties/${groupId}/events/list`).expect(200),
+    );
+    expect(ids(list.find((c) => c.id === card.id)!)).toEqual([host.id, third.id, guest.id]);
   });
 });

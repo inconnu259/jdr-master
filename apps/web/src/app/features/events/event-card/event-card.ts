@@ -16,6 +16,9 @@ import {
  * omise s'il est vide), « Ma situation » + chip. Rien de plus sur la carte ; l'état est TOUJOURS
  * écrit (badge, chip), jamais porté par la seule couleur ou la seule épaisseur du filet.
  *
+ * Story 40.3 : le badge devient « Complet » (grisé) pour un membre non inscrit quand toutes les places
+ * sont prises ; les inscrits et l'hôte gardent leur badge normal.
+ *
  * Story 40.2 : la carte s'ouvre au clic n'importe où sur elle, à Entrée et à Espace : son titre est
  * un bouton natif (nom accessible = titre) étiré sur toute la carte. Elle émet `open` avec ce bouton,
  * que l'onglet retrouve à la fermeture pour lui rendre le focus. Rendu pur sinon : aucune donnée n'est lue ni écrite ici.
@@ -43,7 +46,7 @@ export class EventCard {
   protected readonly past = computed(() => isPastEvent(this.card(), this.todayKey()));
   protected readonly imminent = computed(() => isImminentEvent(this.card(), this.todayKey()));
   protected readonly badge = computed(() =>
-    eventBadge(this.card(), this.todayKey(), this.theme.tone()),
+    eventBadge(this.card(), this.todayKey(), this.theme.tone(), this.currentUserId()),
   );
   protected readonly dateLabel = computed(() => eventDateLabel(this.card(), this.theme.tone()));
   protected readonly hostLabel = computed(() =>

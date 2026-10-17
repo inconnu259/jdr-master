@@ -14,11 +14,14 @@ import { GroupEventsService } from './group-events.service';
  * `PermissionsModule` (transverse, sans module métier) et le port des signaux de partie
  * (`PARTIE_SIGNALS_PORT`, fourni par le `PortsModule` global) — jamais `PartiesModule`/
  * `PartiesService`, qui importe ce module.
+ *
+ * Story 40.3 : `GroupEventsService` est exporté — les routes d'inscription partagées avec le JDR
+ * (`scenarios/seances/:id/inscription`) y délèguent la branche « groupe ».
  */
 @Module({
   imports: [PermissionsModule],
   controllers: [EventsController],
   providers: [EventsService, GroupEventsService],
-  exports: [EventsService],
+  exports: [EventsService, GroupEventsService],
 })
 export class EventsModule {}

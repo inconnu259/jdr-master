@@ -1,12 +1,16 @@
 import type { EventCardDto } from '@master-jdr/shared';
 import { TONE_MAP } from '../../core/theme/tones';
 import {
+  canSignUp,
+  canUnsubscribe,
   eventBadge,
   eventDateLabel,
   eventSituation,
   eventSituationTextKey,
   frUnit,
   initialsOf,
+  isFull,
+  isFullForViewer,
   isHostOf,
   isParticipantOf,
   participationLine,
@@ -76,7 +80,12 @@ describe('event-card.util (Story 40.1)', () => {
   it('date en gras : « Sam. 10 oct. · soir » ; sans date : « Date à fixer »', () => {
     expect(eventDateLabel(card('a', '2026-10-10'), TONE)).toBe('Sam. 10 oct. · soir');
     expect(
-      eventDateLabel(card('b', '2026-10-25', { seance: { ...card('b', '2026-10-25').seance!, slot: 'AFTERNOON' } }), TONE),
+      eventDateLabel(
+        card('b', '2026-10-25', {
+          seance: { ...card('b', '2026-10-25').seance!, slot: 'AFTERNOON' },
+        }),
+        TONE,
+      ),
     ).toBe('Dim. 25 oct. · après-midi');
     expect(eventDateLabel(card('c', null), TONE)).toBe(TONE['partie.ralliement_event_no_date']);
   });
@@ -157,12 +166,24 @@ describe('event-card.util (Story 40.1)', () => {
     it('texte du panneau de situation : hôte / inscrit / non inscrit, au présent ou à l’imparfait', () => {
       const futur = withPeople(8, 2);
       const passe = card('p', '2026-10-01', { participants: futur.participants });
-      expect(eventSituationTextKey(futur, 'hote', TODAY)).toBe('partie.ralliement_event_situation_host');
-      expect(eventSituationTextKey(futur, 'u1', TODAY)).toBe('partie.ralliement_event_situation_registered');
-      expect(eventSituationTextKey(futur, 'x', TODAY)).toBe('partie.ralliement_event_situation_none');
-      expect(eventSituationTextKey(passe, 'hote', TODAY)).toBe('partie.ralliement_event_situation_host_past');
-      expect(eventSituationTextKey(passe, 'u1', TODAY)).toBe('partie.ralliement_event_situation_registered_past');
-      expect(eventSituationTextKey(passe, 'x', TODAY)).toBe('partie.ralliement_event_situation_none_past');
+      expect(eventSituationTextKey(futur, 'hote', TODAY)).toBe(
+        'partie.ralliement_event_situation_host',
+      );
+      expect(eventSituationTextKey(futur, 'u1', TODAY)).toBe(
+        'partie.ralliement_event_situation_registered',
+      );
+      expect(eventSituationTextKey(futur, 'x', TODAY)).toBe(
+        'partie.ralliement_event_situation_none',
+      );
+      expect(eventSituationTextKey(passe, 'hote', TODAY)).toBe(
+        'partie.ralliement_event_situation_host_past',
+      );
+      expect(eventSituationTextKey(passe, 'u1', TODAY)).toBe(
+        'partie.ralliement_event_situation_registered_past',
+      );
+      expect(eventSituationTextKey(passe, 'x', TODAY)).toBe(
+        'partie.ralliement_event_situation_none_past',
+      );
     });
 
     it('participation : « 8 places · 5 inscrits · 3 libres » (l’hôte compte), accords du français, « Tous les membres »', () => {
@@ -179,6 +200,88 @@ describe('event-card.util (Story 40.1)', () => {
       expect(initialsOf('  léa ')).toBe('L');
       expect(initialsOf('Jean de la Fontaine')).toBe('JF');
       expect(initialsOf('')).toBe('?');
+    });
+  });
+
+  describe('Story 40.3 — inscription, « Complet »', () => {
+    const people = (capacity: number | null, ids: string[], date = '2026-10-20') =>
+      card('x', date, {
+        seance: { ...card('x', date).seance!, capacity },
+        participants: ids.map((id) => ({
+          userId: id,
+          displayName: id,
+          isHost: id === 'hote',
+          isAdmin: false,
+        })),
+      });
+    // Capacité 3 : l'hôte et deux inscrits la remplissent.
+    const full = people(3, ['hote', 'u1', 'u2']);
+
+    it('complet = places limitées toutes prises (l’hôte compte) ; « Tous les membres » ne l’est jamais', () => {
+      expect(isFull(full)).toBe(true);
+      expect(isFull(people(3, ['hote', 'u1']))).toBe(false);
+      expect(isFull(people(null, ['hote', 'u1', 'u2', 'u3']))).toBe(false);
+      expect(isFull(card('sans', null, { seance: null }))).toBe(false);
+    });
+
+    it('« Complet » ne s’applique qu’à un membre NON inscrit, sur une conjonction à venir', () => {
+      expect(isFullForViewer(full, 'autre', TODAY)).toBe(true);
+      expect(isFullForViewer(full, 'u1', TODAY)).toBe(false);
+      expect(isFullForViewer(full, 'hote', TODAY)).toBe(false);
+      expect(isFullForViewer(people(3, ['hote', 'u1', 'u2'], '2026-10-01'), 'autre', TODAY)).toBe(
+        false,
+      );
+    });
+
+    it('badge : « Complet » en gris (teinte done, libellé écrit) pour le non-inscrit ; badge normal pour l’inscrit et l’hôte', () => {
+      expect(eventBadge(full, TODAY, TONE, 'autre')).toEqual({
+        tone: 'done',
+        labelKey: 'status.scenario_passe',
+        draft: false,
+        text: 'Complet',
+      });
+      for (const viewer of ['u1', 'hote']) {
+        expect(eventBadge(full, TODAY, TONE, viewer)).toEqual(
+          expect.objectContaining({ tone: 'soon', text: 'Dans 3 jours' }),
+        );
+      }
+      // Pas complet : badge normal pour tout le monde. Passée : « Passé », pas « Complet ».
+      expect(eventBadge(people(3, ['hote']), TODAY, TONE, 'autre').text).toBe('Dans 3 jours');
+      expect(
+        eventBadge(people(3, ['hote', 'u1', 'u2'], '2026-10-01'), TODAY, TONE, 'autre').labelKey,
+      ).toBe('status.scenario_passe');
+      expect(
+        eventBadge(people(3, ['hote', 'u1', 'u2'], '2026-10-01'), TODAY, TONE, 'autre').text,
+      ).toBeUndefined();
+    });
+
+    it('s’inscrire : membre non inscrit, conjonction à venir et pas complète — ni l’hôte, ni un inscrit, ni sans identité', () => {
+      const open = people(3, ['hote', 'u1']);
+      expect(canSignUp(open, 'autre', TODAY)).toBe(true);
+      expect(canSignUp(open, 'u1', TODAY)).toBe(false);
+      expect(canSignUp(open, 'hote', TODAY)).toBe(false);
+      expect(canSignUp(open, null, TODAY)).toBe(false);
+      expect(canSignUp(full, 'autre', TODAY)).toBe(false);
+      expect(canSignUp(people(null, ['hote'], '2026-10-01'), 'autre', TODAY)).toBe(false);
+      expect(canSignUp(people(null, ['hote'], TODAY), 'autre', TODAY)).toBe(true);
+    });
+
+    it('sans séance : ni « S’inscrire » ni « Me désinscrire » (le clic ne ferait rien)', () => {
+      const noSeance = card('n', null, {
+        seance: null,
+        participants: [{ userId: 'u1', displayName: 'u1', isHost: false, isAdmin: false }],
+      });
+      expect(canSignUp(noSeance, 'autre', TODAY)).toBe(false);
+      expect(canUnsubscribe(noSeance, 'u1', TODAY)).toBe(false);
+    });
+
+    it('se désinscrire : un inscrit non hôte, tant que la conjonction n’est pas passée', () => {
+      const open = people(3, ['hote', 'u1']);
+      expect(canUnsubscribe(open, 'u1', TODAY)).toBe(true);
+      expect(canUnsubscribe(open, 'hote', TODAY)).toBe(false);
+      expect(canUnsubscribe(open, 'autre', TODAY)).toBe(false);
+      expect(canUnsubscribe(people(3, ['hote', 'u1'], '2026-10-01'), 'u1', TODAY)).toBe(false);
+      expect(canUnsubscribe(full, 'u1', TODAY)).toBe(true);
     });
   });
 });

@@ -35,6 +35,28 @@ export class EventsApiService {
     );
   }
 
+  /** Story 40.3 : s'inscrire à la conjonction dont la séance est `seanceId` — route partagée avec le
+   *  JDR (`POST /scenarios/seances/:id/inscription`), qui répond ici la carte à jour. Idempotent côté
+   *  serveur ; refus en français (complet 409, passée 400). */
+  inscrire(seanceId: string): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.post<EventCardDto>(
+        `${API_BASE}/scenarios/seances/${seanceId}/inscription`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  /** Story 40.3 : se désinscrire (`DELETE /scenarios/seances/:id/inscription`) — la carte à jour. */
+  desinscrire(seanceId: string): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.delete<EventCardDto>(`${API_BASE}/scenarios/seances/${seanceId}/inscription`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
   /** Story 40.2 : l'hôte remplace sa conjonction (`PATCH /parties/:id/events/:eventId`) — renvoie
    *  la carte à jour, participants compris. */
   update(partieId: string, eventId: string, dto: UpdateEventDto): Promise<EventCardDto> {

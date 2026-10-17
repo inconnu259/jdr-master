@@ -428,6 +428,16 @@ export const atelierCuivre: Record<ToneKey, string> = {
   'partie.ralliement_event_situation_registered_past': 'Vous participiez à cette réunion.',
   'partie.ralliement_event_situation_none': 'Vous n’êtes pas inscrit·e à cette réunion.',
   'partie.ralliement_event_situation_none_past': 'Vous n’étiez pas inscrit·e à cette réunion.',
+  /* — s’inscrire à une conjonction et s’en désinscrire (Story 40.3) : mots du contrat identiques, état « Complet » et replis d’erreur selon le thème — */
+  'partie.ralliement_event_signup_btn': 'S’inscrire',
+  'partie.ralliement_event_unsubscribe_btn': 'Me désinscrire',
+  'partie.ralliement_event_badge_full': 'Complet',
+  'partie.ralliement_event_situation_full':
+    'Complet : toutes les places de cette réunion sont prises.',
+  'partie.ralliement_event_signup_error':
+    'Votre inscription à cette réunion n’a pu être enregistrée. Réessayez.',
+  'partie.ralliement_event_unsubscribe_error':
+    'Votre désinscription de cette réunion n’a pu être enregistrée. Réessayez.',
   /* — « Télégrammes » d’un groupe, côté administrateur (Story 39.3) : variantes sans mot de JDR — */
   'partie.ralliement_invite_title': 'Recruter pour le rassemblement',
   'partie.ralliement_search_label': 'Matricule du mécanicien',

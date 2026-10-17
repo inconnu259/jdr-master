@@ -371,3 +371,6 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-40-2-consulter-et-modifier-une-conjonction-dans-sa-fenetre.md`
   summary: A PATCH on an event deleted since the dialog opened answers « Scénario introuvable », a JDR word, in the group dialog.
   evidence: Message comes from `PermissionService.resolveTarget` (historic); events cannot be deleted before epic 42 cancellation — map it to « Conjonction introuvable » there.
+- source_spec: `_bmad-output/implementation-artifacts/spec-40-3-sinscrire-a-une-conjonction-et-sen-desinscrire.md`
+  summary: The one-shot ralliement (rencontre isolée) day-before reminder still uses the JDR `session-reminder` wording (« séance de … demain », « Voir la partie »).
+  evidence: Pre-existing; 40.3 only switches groups to `conjonction-reminder`. Epic 41 (isolated evening) must send the neutral e-mail #5 to accepted guests.

@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { EventsService } from '../events/events.service';
+import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { NotificationsService } from './notifications.service';
 
 // Test d'intégration réel contre Postgres : notifications.service.spec.ts mocke entièrement
@@ -12,16 +14,22 @@ import { NotificationsService } from './notifications.service';
 // du code. Ce test exécute la vraie requête Prisma contre la DB du docker-compose ; seul
 // EmailService est remplacé par un espion pour éviter un envoi réseau réel.
 class FakeEmailService {
-  calls: { to: string; data: Record<string, unknown> }[] = [];
-  sendMail(_template: string, to: string, data: Record<string, unknown>): Promise<{ ok: boolean }> {
-    this.calls.push({ to, data });
+  calls: { template: string; to: string; data: Record<string, unknown> }[] = [];
+  sendMail(template: string, to: string, data: Record<string, unknown>): Promise<{ ok: boolean }> {
+    this.calls.push({ template, to, data });
     return Promise.resolve({ ok: true });
   }
 }
 
 @Module({
   imports: [PrismaModule],
-  providers: [NotificationsService, { provide: EmailService, useClass: FakeEmailService }],
+  providers: [
+    NotificationsService,
+    { provide: EmailService, useClass: FakeEmailService },
+    // Story 40.3 : seul décideur des destinataires ; le temps réel n'est jamais atteint par un rappel.
+    EventsService,
+    { provide: RealtimeEventsService, useValue: { emit: () => undefined } },
+  ],
 })
 class TestAppModule {}
 
@@ -191,5 +199,66 @@ describe('NotificationsService (intégration réelle via Postgres)', () => {
       const refreshed = await prisma.seance.findUniqueOrThrow({ where: { id: s.id } });
       expect(refreshed.reminderSentAt).not.toBeNull();
     }
+  });
+
+  it('groupe de ralliement (Story 40.3) : seuls l’hôte et les inscrits reçoivent « conjonction-reminder », une fois ; le JDR garde « session-reminder »', async () => {
+    const [admin, host, inscrit, absent] = await Promise.all(
+      ['grp-admin', 'grp-host', 'grp-inscrit', 'grp-absent'].map((label) =>
+        prisma.user.create({
+          data: {
+            email: `${label}-${suffix}@test.local`,
+            pseudo: `${label}-${suffix}`,
+            displayName: `${label}-${suffix}`,
+            passwordHash: 'x',
+          },
+        }),
+      ),
+    );
+    userIds.push(admin.id, host.id, inscrit.id, absent.id);
+    const in12h = new Date(Date.now() + 12 * 60 * 60 * 1000);
+
+    const groupe = await prisma.partie.create({
+      data: {
+        name: `Groupe-${suffix}`,
+        kind: 'CAMPAGNE_EPISODIQUE',
+        gameSystemId: 'ralliement',
+        ownerId: admin.id,
+      },
+    });
+    partieIds.push(groupe.id);
+    for (const u of [admin, host, inscrit, absent]) {
+      await prisma.membership.create({
+        data: { userId: u.id, partieId: groupe.id, role: u.id === admin.id ? 'ADMIN' : 'MEMBER' },
+      });
+    }
+    const event = await prisma.event.create({
+      data: { partieId: groupe.id, title: `Catane-${suffix}`, ownerId: host.id },
+    });
+    const seance = await prisma.seance.create({
+      data: {
+        eventId: event.id,
+        startDate: in12h,
+        startSlot: 'EVENING',
+        endDate: in12h,
+        endSlot: 'EVENING',
+        lieu: 'Chez Léa',
+      },
+    });
+    await prisma.inscription.create({ data: { seanceId: seance.id, userId: inscrit.id } });
+
+    fakeEmail.calls = [];
+    await service.sendDueReminders();
+    const sent = fakeEmail.calls.filter((c) => c.data.eventTitle === `Catane-${suffix}`);
+    expect(sent.map((c) => c.to).sort()).toEqual([host.email, inscrit.email].sort());
+    expect(sent.every((c) => c.template === 'conjonction-reminder')).toBe(true);
+    expect(sent[0].data.lieu).toBe('Chez Léa');
+    expect(
+      (await prisma.seance.findUniqueOrThrow({ where: { id: seance.id } })).reminderSentAt,
+    ).not.toBeNull();
+
+    // Une seconde passe ne renvoie rien : le rappel est marqué envoyé.
+    fakeEmail.calls = [];
+    await service.sendDueReminders();
+    expect(fakeEmail.calls.filter((c) => c.data.eventTitle === `Catane-${suffix}`)).toEqual([]);
   });
 });

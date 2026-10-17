@@ -2,6 +2,8 @@ import { Logger } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { EventsService } from '../events/events.service';
+import type { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { anyOf, objectLike } from '../common/test-utils/jest-typed';
 
 describe('NotificationsService', () => {
@@ -35,9 +37,11 @@ describe('NotificationsService', () => {
       seance: { findMany: jest.fn(), updateMany: jest.fn() },
     };
     email = { sendMail: jest.fn().mockResolvedValue({ ok: true }) };
+    // Story 40.3 : l'EventsService réel — `reminderRecipients` est pur (aucune lecture en base).
     service = new NotificationsService(
       prisma as unknown as PrismaService,
       email as unknown as EmailService,
+      new EventsService(prisma as unknown as PrismaService, {} as unknown as RealtimeEventsService),
     );
   });
 
@@ -137,6 +141,102 @@ describe('NotificationsService', () => {
 
     const [, , data] = email.sendMail.mock.calls[0] as [string, string, { sessionDate: string }];
     expect(data.sessionDate).toBe('mardi 14 juillet');
+  });
+
+  describe('groupe de ralliement — rappel de la veille d’une conjonction (Story 40.3)', () => {
+    const conjonction = (over: Record<string, unknown> = {}, inscrits: string[] = ['b', 'c']) => ({
+      ...makeSeance(
+        {
+          lieu: 'Chez Léa',
+          inscriptions: inscrits.map((id) => ({ user: { id, email: `${id}@example.com` } })),
+          ...over,
+        },
+        {
+          kind: 'CAMPAGNE_EPISODIQUE',
+          gameSystemId: 'ralliement',
+          owner: { id: 'admin', email: 'admin@example.com' },
+          memberships: [
+            { user: { id: 'admin', email: 'admin@example.com' } },
+            { user: { id: 'a', email: 'a@example.com' } },
+            { user: { id: 'b', email: 'b@example.com' } },
+            { user: { id: 'c', email: 'c@example.com' } },
+            { user: { id: 'd', email: 'd@example.com' } },
+          ],
+        },
+      ),
+    });
+    const withHost = (seance: ReturnType<typeof conjonction>, title = 'Catane') => ({
+      ...seance,
+      event: { ...seance.event, title, owner: { id: 'a', email: 'a@example.com' } },
+    });
+
+    it('seuls l’hôte et les inscrits reçoivent l’e-mail neutre « conjonction-reminder », une fois chacun', async () => {
+      prisma.seance.findMany.mockResolvedValue([withHost(conjonction({}, ['b', 'c', 'a']))]);
+
+      await service.sendDueReminders();
+
+      const sent = (email.sendMail.mock.calls as [string, string, Record<string, unknown>][]).map(
+        ([template, to]) => [template, to],
+      );
+      expect(sent).toEqual([
+        ['conjonction-reminder', 'a@example.com'],
+        ['conjonction-reminder', 'b@example.com'],
+        ['conjonction-reminder', 'c@example.com'],
+      ]);
+      expect(prisma.seance.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('le message porte le titre, la date, le lieu et le lien vers la page du groupe', async () => {
+      prisma.seance.findMany.mockResolvedValue([withHost(conjonction({ startSlot: 'EVENING' }))]);
+
+      await service.sendDueReminders();
+
+      const [, , data] = email.sendMail.mock.calls[0] as [string, string, Record<string, string>];
+      expect(data.eventTitle).toBe('Catane');
+      expect(data.sessionDate).toBe('mardi 14 juillet (soir)');
+      expect(data.lieu).toBe('Chez Léa');
+      expect(data.link).toMatch(/\/parties\/p1$/);
+      expect(data).not.toHaveProperty('partieName');
+    });
+
+    it('sans lieu : lieu nul ; hôte disparu : seuls les inscrits reçoivent le rappel', async () => {
+      const seance = withHost(conjonction({ lieu: null }));
+      prisma.seance.findMany.mockResolvedValue([
+        { ...seance, event: { ...seance.event, owner: null } },
+      ]);
+
+      await service.sendDueReminders();
+
+      expect(email.sendMail).toHaveBeenCalledTimes(2);
+      const [, , data] = email.sendMail.mock.calls[0] as [string, string, Record<string, unknown>];
+      expect(data.lieu).toBeNull();
+    });
+
+    it('un échec d’envoi est loggé, ne lève jamais, et la séance est quand même marquée', async () => {
+      prisma.seance.findMany.mockResolvedValue([withHost(conjonction())]);
+      email.sendMail.mockResolvedValue({ ok: false });
+      const errorLog = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      await expect(service.sendDueReminders()).resolves.toBeUndefined();
+
+      expect(errorLog).toHaveBeenCalledTimes(3);
+      expect(prisma.seance.updateMany).toHaveBeenCalledTimes(1);
+      errorLog.mockRestore();
+    });
+
+    it('rencontre isolée de ralliement (ONE_SHOT) : session-reminder à tous, comme avant', async () => {
+      const s = conjonction();
+      prisma.seance.findMany.mockResolvedValue([
+        { ...s, event: { ...s.event, partie: { ...s.event.partie, kind: 'ONE_SHOT' } } },
+      ]);
+
+      await service.sendDueReminders();
+
+      expect(email.sendMail).toHaveBeenCalledTimes(5);
+      for (const [template] of email.sendMail.mock.calls as [string][]) {
+        expect(template).toBe('session-reminder');
+      }
+    });
   });
 
   it('interroge les séances datées dans la fenêtre de 24 h dont le rappel est non envoyé', async () => {

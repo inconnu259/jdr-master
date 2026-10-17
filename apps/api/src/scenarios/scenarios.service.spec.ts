@@ -35,6 +35,7 @@ import { PollService } from '../poll/poll.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { ScenariosService } from './scenarios.service';
 import { EventsService } from '../events/events.service';
+import { GroupEventsService } from '../events/group-events.service';
 import { PermissionService } from '../permissions/permission.service';
 import { anyOf, objectLike } from '../common/test-utils/jest-typed';
 import { testGrant } from '../common/test-utils/grant';
@@ -175,7 +176,9 @@ function makeParties() {
 /** Story 37.6 — les droits sont décidés par `PermissionService.assert()`, simulé ici : une
  *  autorisation (`testGrant`) ou un refus selon le test. */
 function makePermissions() {
-  return { assert: jest.fn() };
+  // Story 40.3 : par défaut une autorisation de partie JDR — `inscrire`/`desinscrire` lisent la famille
+  // de la partie de l'autorisation dès que la séance est trouvée. Chaque test peut la remplacer.
+  return { assert: jest.fn().mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' })) };
 }
 
 function makeCharacters() {
@@ -242,6 +245,8 @@ describe('ScenariosService', () => {
         { provide: RealtimeEventsService, useValue: realtimeEvents },
         // Story 37.3 — l'EventsService réel, sur les mêmes mocks Prisma/temps réel.
         EventsService,
+        // Story 40.3 — branche « groupe » des routes d'inscription (jamais atteinte par ces tests JDR).
+        { provide: GroupEventsService, useValue: { inscrire: jest.fn(), desinscrire: jest.fn() } },
       ],
     }).compile();
     service = module.get(ScenariosService);

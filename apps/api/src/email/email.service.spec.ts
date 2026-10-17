@@ -63,6 +63,25 @@ describe('EmailService', () => {
     });
   });
 
+  it('conjonction-reminder : sujet neutre « Demain : « <titre> » » et bouton « Voir la rencontre » (Story 40.3)', async () => {
+    await service.sendMail('conjonction-reminder', 'ami@example.com', {
+      eventTitle: 'Catane',
+      sessionDate: 'samedi 24 octobre (soir)',
+      link: 'https://x/parties/p1',
+    });
+    expect(mailer.sendMail).toHaveBeenCalledWith({
+      to: 'ami@example.com',
+      subject: 'Demain : « {{eventTitle}} »',
+      template: 'conjonction-reminder',
+      context: {
+        eventTitle: 'Catane',
+        sessionDate: 'samedi 24 octobre (soir)',
+        link: 'https://x/parties/p1',
+        actionLabel: 'Voir la rencontre',
+      },
+    });
+  });
+
   it('sujet correct par gabarit (session-reminder, password-reset)', async () => {
     await service.sendMail('session-reminder', 'joueur@example.com', {});
     expect(mailer.sendMail).toHaveBeenCalledWith(

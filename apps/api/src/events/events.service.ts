@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, type Event, type Seance } from '@prisma/client';
+import { Prisma, type Event, type ScenarioStatus, type Seance } from '@prisma/client';
 import type {
   DaySlot,
   EventCardDto,
@@ -90,12 +90,43 @@ export interface NextSession {
 /** Refus de modifier une conjonction dont le jour est passé (Story 40.2). */
 export const PAST_EVENT_MESSAGE = 'Cette conjonction est passée : elle ne peut plus être modifiée';
 
+/** Refus de s'inscrire à une conjonction dont le jour est passé, ou de s'en désinscrire (Story 40.3). */
+export const PAST_ROSTER_MESSAGE =
+  'Cette conjonction est passée : les inscriptions ne peuvent plus changer';
+/** Refus de s'inscrire à une conjonction dont toutes les places sont prises (Story 40.3). */
+export const FULL_EVENT_MESSAGE = 'Cette conjonction est complète : plus aucune place disponible';
+
+/** Destinataire d'un rappel : identité minimale, jamais plus que l'adresse à qui écrire. */
+export interface ReminderRecipient {
+  id: string;
+  email: string;
+}
+
+/** Séance due telle que lue par la tâche horaire : de quoi décider des destinataires de son rappel
+ *  (Story 40.3). `gameSystemId` est lu avec le type de partie pour reconnaître un groupe. */
+export interface ReminderSeance {
+  /** Inscrits à la séance (lus avec la séance : aucune requête par séance). */
+  inscriptions?: { user: ReminderRecipient }[];
+  event: {
+    /** Hôte de l'événement (groupe de ralliement) ; absent si son compte a disparu. */
+    owner?: ReminderRecipient | null;
+    /** Statut du scénario (extension JDR de l'événement) ; absent pour un événement sans scénario. */
+    scenario?: { status: ScenarioStatus } | null;
+    partie: {
+      kind: PartieKind;
+      gameSystemId: string;
+      owner: ReminderRecipient | null;
+      memberships: { user: ReminderRecipient }[];
+    };
+  };
+}
+
 const FROZEN_ROSTER_MESSAGE = 'Cette séance a déjà une date validée — les inscriptions sont figées';
 
 /** Story 40.1 : un GROUPE de ralliement (`CAMPAGNE_EPISODIQUE` de la famille `ralliement`) — ses
  *  séances datées engagent l'hôte de l'événement et ses inscrits (AD-15). La rencontre isolée
  *  (`ONE_SHOT`) garde la règle historique : tous les membres. */
-function isRalliementGroup(partie: { kind: PartieKind; gameSystemId: string }): boolean {
+export function isRalliementGroup(partie: { kind: PartieKind; gameSystemId: string }): boolean {
   return partie.kind === 'CAMPAGNE_EPISODIQUE' && familyOf(partie.gameSystemId) === 'ralliement';
 }
 
@@ -707,6 +738,130 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     }
     await this.prisma.inscription.deleteMany({ where: { seanceId: seance.id, userId } });
     this.realtimeEvents.emit(partieTopic(grant.partieId));
+  }
+
+  // ─── Inscriptions à une conjonction (Story 40.3) ────────────────────────────────────────────
+
+  /**
+   * Un membre du groupe s'inscrit à la séance d'une conjonction. Tout est lu et écrit dans UNE
+   * transaction, sous `SELECT … FOR UPDATE` sur la ligne `Event` (verrou commun des écritures
+   * d'inscription, posé AVANT tout comptage) : deux inscriptions simultanées sur la dernière place
+   * n'en acceptent qu'une, la seconde reçoit 409.
+   *
+   * Règles : capacité `null` = « Tous les membres » (s'inscrire confirme, aucune limite) ; sinon
+   * premier arrivé, premier servi, sans liste d'attente — les places prises sont l'hôte (qui occupe
+   * une place sans ligne d'inscription) + les inscrits. Une inscription tardive reste permise une
+   * fois la date posée (elle ne bouge pas), mais plus quand le jour de la séance est passé (400, jour
+   * UTC strictement avant aujourd'hui). S'inscrire deux fois, ou en étant l'hôte, ne change rien.
+   * `partie:{id}` est émis après validation ; les signaux de l'accueil sont ceux de l'appelant.
+   */
+  async inscrireConjonction(grant: PartieGrant, seanceId: string, userId: string): Promise<void> {
+    await this.assertSeanceInGrant(grant, seanceId);
+    await this.prisma.$transaction(async (tx) => {
+      const { seance, ownerId } = await this.lockedSeanceOfEvent(tx, seanceId);
+      this.assertNotPast(seance.startDate);
+
+      // Idempotence : l'hôte occupe déjà sa place, un inscrit reste inscrit — avant tout comptage,
+      // pour qu'une conjonction pleine ne rejette jamais quelqu'un qui en fait déjà partie.
+      if (userId === ownerId) return;
+      const existing = await tx.inscription.findUnique({
+        where: { seanceId_userId: { seanceId, userId } },
+        select: { id: true },
+      });
+      if (existing) return;
+
+      if (seance.inscriptionMax !== null) {
+        const inscrits = await tx.inscription.count({
+          where: { seanceId, ...(ownerId ? { userId: { not: ownerId } } : {}) },
+        });
+        const taken = inscrits + (ownerId ? 1 : 0);
+        if (taken >= seance.inscriptionMax) throw new ConflictException(FULL_EVENT_MESSAGE);
+      }
+      await tx.inscription.create({ data: { seanceId, userId } });
+    });
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
+  }
+
+  /**
+   * Désinscription d'une conjonction : libre tant que le jour n'est pas passé (400 sinon), idempotente
+   * — rien à retirer pour quelqu'un qui n'est pas inscrit, et l'hôte ne se désinscrit pas de sa propre
+   * conjonction. Même transaction et même verrou `Event` que l'inscription. Émet `partie:{id}`.
+   */
+  async desinscrireConjonction(
+    grant: PartieGrant,
+    seanceId: string,
+    userId: string,
+  ): Promise<void> {
+    await this.assertSeanceInGrant(grant, seanceId);
+    await this.prisma.$transaction(async (tx) => {
+      const { seance, ownerId } = await this.lockedSeanceOfEvent(tx, seanceId);
+      this.assertNotPast(seance.startDate);
+      if (userId === ownerId) return;
+      await tx.inscription.deleteMany({ where: { seanceId, userId } });
+    });
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
+  }
+
+  /** Prend le verrou de ligne de l'événement de la séance, PUIS relit la séance et l'hôte : tout ce
+   *  qui décide d'une inscription (capacité, jour) est lu sous le verrou, jamais avant. */
+  private async lockedSeanceOfEvent(
+    tx: Prisma.TransactionClient,
+    seanceId: string,
+  ): Promise<{
+    seance: { startDate: Date | null; inscriptionMax: number | null };
+    ownerId: string | null;
+  }> {
+    const ref = await tx.seance.findUnique({ where: { id: seanceId }, select: { eventId: true } });
+    if (!ref) throw new NotFoundException('Séance introuvable');
+    await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${ref.eventId} FOR UPDATE`;
+    const seance = await tx.seance.findUnique({
+      where: { id: seanceId },
+      select: { startDate: true, inscriptionMax: true, event: { select: { ownerId: true } } },
+    });
+    if (!seance) throw new NotFoundException('Séance introuvable');
+    return {
+      seance: { startDate: seance.startDate, inscriptionMax: seance.inscriptionMax },
+      ownerId: seance.event.ownerId,
+    };
+  }
+
+  /** Les inscriptions d'une conjonction se figent quand son jour est passé (jour UTC strictement avant
+   *  aujourd'hui, comme la modification). Une séance sans date n'est jamais passée. */
+  private assertNotPast(startDate: Date | null): void {
+    if (startDate && startDate.toISOString().substring(0, 10) < todayKeyUtc()) {
+      throw new BadRequestException(PAST_ROSTER_MESSAGE);
+    }
+  }
+
+  // ─── Destinataires du rappel de la veille ───────────────────────────────────────────────────
+
+  /**
+   * Destinataires du rappel de la veille d'une séance (Story 40.3) — UNE définition, lue par la tâche
+   * horaire. Groupe de ralliement : l'hôte de l'événement + les inscrits (toute ligne est confirmée
+   * jusqu'à la Story 40.4). Toute autre famille garde ses destinataires : le propriétaire et les
+   * membres de la partie — le seul propriétaire quand la séance est celle d'un brouillon caché
+   * (anti-spoil serveur). Dédoublonné par identifiant, l'ordre d'apparition est conservé.
+   */
+  reminderRecipients(seance: ReminderSeance): ReminderRecipient[] {
+    const { partie } = seance.event;
+    let recipients: ReminderRecipient[];
+    if (isRalliementGroup(partie)) {
+      recipients = [
+        ...(seance.event.owner ? [seance.event.owner] : []),
+        ...(seance.inscriptions ?? []).map((i) => i.user),
+      ];
+    } else {
+      // Propriétaire absent (AD-5, compte supprimé) : seuls les membres restent destinataires.
+      // Anti-spoil serveur : la séance d'un brouillon caché (scénario `BROUILLON` hors `ONE_SHOT`)
+      // n'est rappelée qu'au propriétaire, jamais aux membres, tant que le scénario n'est pas ouvert.
+      const scenario = seance.event.scenario;
+      const ownerOnly = !!scenario && isHiddenDraft(scenario.status, partie.kind);
+      recipients = [
+        ...(partie.owner ? [partie.owner] : []),
+        ...(ownerOnly ? [] : partie.memberships.map((m) => m.user)),
+      ];
+    }
+    return [...new Map(recipients.map((r) => [r.id, r])).values()];
   }
 
   // ─── Prochaine séance ───────────────────────────────────────────────────────────────────────

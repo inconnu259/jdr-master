@@ -30,18 +30,78 @@ export function isImminentEvent(card: EventCardDto, todayKey: string): boolean {
   return day !== null && day >= todayKey && imminenceIntensity(day, todayKey) === 'imminent';
 }
 
+/** Story 40.3 : toutes les places d'une conjonction à places limitées sont prises (l'hôte compte
+ *  parmi les participants). « Tous les membres » (sans limite) n'est jamais complet. */
+export function isFull(card: EventCardDto): boolean {
+  const capacity = card.seance?.capacity ?? null;
+  return capacity !== null && card.participants.length >= capacity;
+}
+
+/** Story 40.3 : la personne peut encore s'inscrire — conjonction avec séance, membre ni hôte ni inscrit, conjonction à venir
+ *  et pas complète. (Le serveur reste juge : une course sur la dernière place répond 409.) */
+export function canSignUp(
+  card: EventCardDto,
+  currentUserId: string | null | undefined,
+  todayKey: string,
+): boolean {
+  return (
+    !!currentUserId &&
+    card.seance !== null &&
+    !isParticipantOf(card, currentUserId) &&
+    !isPastEvent(card, todayKey) &&
+    !isFull(card)
+  );
+}
+
+/** Story 40.3 : « Complet » est écrit pour une personne NON inscrite quand la conjonction à venir n'a
+ *  plus de place ; les inscrits et l'hôte gardent leur état normal. */
+export function isFullForViewer(
+  card: EventCardDto,
+  currentUserId: string | null | undefined,
+  todayKey: string,
+): boolean {
+  return isFull(card) && !isParticipantOf(card, currentUserId) && !isPastEvent(card, todayKey);
+}
+
+/** Story 40.3 : un inscrit (jamais l'hôte, qui garde sa place) peut se désinscrire tant que la
+ *  conjonction n'est pas passée. */
+export function canUnsubscribe(
+  card: EventCardDto,
+  currentUserId: string | null | undefined,
+  todayKey: string,
+): boolean {
+  return (
+    !!currentUserId &&
+    card.seance !== null &&
+    isParticipantOf(card, currentUserId) &&
+    !isHostOf(card, currentUserId) &&
+    !isPastEvent(card, todayKey)
+  );
+}
+
 /**
- * Badge d'état (UX-DR7) : « Passé » (teinte `done`) ; « Dans *n* jours » dans la semaine qui vient
- * (teinte `soon`, intensité `near`, PLEIN au palier `imminent` — « Aujourd'hui » / « Demain ») ;
- * « À venir » au-delà ou sans date. Le libellé est toujours écrit : la teinte le double.
+ * Badge d'état (UX-DR7) : « Passé » (teinte `done`) ; « Complet » (même teinte grise) pour une
+ * personne non inscrite quand toutes les places sont prises (Story 40.3) ; « Dans *n* jours » dans la
+ * semaine qui vient (teinte `soon`, intensité `near`, PLEIN au palier `imminent` — « Aujourd'hui » /
+ * « Demain ») ; « À venir » au-delà ou sans date. Le libellé est toujours écrit : la teinte le double.
+ * `currentUserId` absent : aucune personne n'est inscrite, donc « Complet » s'applique.
  */
 export function eventBadge(
   card: EventCardDto,
   todayKey: string,
   tone: EventTone,
+  currentUserId?: string | null,
 ): StatusBadgeState {
   if (isPastEvent(card, todayKey)) {
     return { tone: 'done', labelKey: 'status.scenario_passe', draft: false };
+  }
+  if (isFullForViewer(card, currentUserId, todayKey)) {
+    return {
+      tone: 'done',
+      labelKey: 'status.scenario_passe',
+      draft: false,
+      text: tone['partie.ralliement_event_badge_full'],
+    };
   }
   const day = eventDayKey(card);
   const upcoming: StatusBadgeState = {
@@ -89,7 +149,7 @@ export function isParticipantOf(card: EventCardDto, userId: string | null | unde
 }
 
 /** Ligne « Ma situation » : l'hôte et les inscrits participent (« J'y étais » une fois passée) ; tout
- *  autre membre n'est pas inscrit (chip pointillée) — l'inscription arrive avec la Story 40.3. */
+ *  autre membre n'est pas inscrit (chip pointillée). */
 export interface EventSituation {
   labelKey:
     | 'partie.ralliement_event_chip_participating'
@@ -112,8 +172,8 @@ export function eventSituation(
 }
 
 /** Texte du panneau de situation de la fenêtre de détail (Story 40.2) : la situation de la personne,
- *  au présent ou à l'imparfait selon que la conjonction est passée. Pas de vote, pas d'inscription à
- *  ce palier. */
+ *  au présent ou à l'imparfait selon que la conjonction est passée. Le bouton « S'inscrire » (Story
+ *  40.3) vit dans le panneau, pas dans ce texte. Pas de vote à ce palier. */
 export function eventSituationTextKey(
   card: EventCardDto,
   currentUserId: string | null | undefined,

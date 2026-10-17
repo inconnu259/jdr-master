@@ -9,6 +9,7 @@ import type { EventCardDto, UpdateEventDto } from '@master-jdr/shared';
 import {
   PermissionService,
   RALLIEMENT_UNAVAILABLE_MESSAGE,
+  type PartieGrant,
 } from '../permissions/permission.service';
 import { PARTIE_SIGNALS_PORT, type PartieSignalsPort } from '../poll/ports/partie-signals.port';
 import { parseDayKey, todayKeyUtc } from './day-key';
@@ -102,6 +103,46 @@ export class GroupEventsService {
     await this.partieSignals.notifyChanged(grant.partieId);
 
     const [card] = await this.events.listCards(grant, [eventId]);
+    return card;
+  }
+
+  /**
+   * Story 40.3 : un membre s'inscrit à une conjonction (route partagée avec le JDR,
+   * `POST scenarios/seances/:id/inscription`, branche « groupe »). Le droit `SEANCE_INSCRIBE` est
+   * décidé par l'appelant, qui a déjà résolu la partie DEPUIS la séance (jamais depuis la route) et
+   * choisit cette branche selon la famille ; la rencontre isolée (`ONE_SHOT`) est refusée comme en 40.1
+   * et 40.2. Les règles et le verrou de l'événement sont dans `EventsService.inscrireConjonction`.
+   * Renvoie la carte à jour.
+   */
+  async inscrire(grant: PartieGrant, userId: string): Promise<EventCardDto> {
+    const seanceId = this.seanceOf(grant);
+    await this.events.inscrireConjonction(grant, seanceId, userId);
+    return this.afterRosterChange(grant);
+  }
+
+  /** Story 40.3 : se désinscrire d'une conjonction (`DELETE scenarios/seances/:id/inscription`, branche
+   *  « groupe »). Même cadre que `inscrire`. Renvoie la carte à jour. */
+  async desinscrire(grant: PartieGrant, userId: string): Promise<EventCardDto> {
+    const seanceId = this.seanceOf(grant);
+    await this.events.desinscrireConjonction(grant, seanceId, userId);
+    return this.afterRosterChange(grant);
+  }
+
+  /** Séance visée par l'autorisation ; garde de nature (un groupe `CAMPAGNE_EPISODIQUE` seulement). */
+  private seanceOf(grant: PartieGrant): string {
+    if (grant.partie.kind !== 'CAMPAGNE_EPISODIQUE') {
+      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
+    }
+    const seanceId = grant.target.seanceId;
+    if (!seanceId) throw new NotFoundException('Séance introuvable');
+    return seanceId;
+  }
+
+  /** Après l'écriture validée (et après `partie:{id}`, émis par `EventsService`) : la liste d'accueil
+   *  (« mes conjonctions », statut) est prévenue — ne lève jamais —, puis la carte à jour. */
+  private async afterRosterChange(grant: PartieGrant): Promise<EventCardDto> {
+    await this.partieSignals.notifyChanged(grant.partieId);
+    const [card] = await this.events.listCards(grant, [grant.target.eventId!]);
     return card;
   }
 

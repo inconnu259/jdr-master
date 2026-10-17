@@ -328,6 +328,9 @@ async function createFixture(
           list: vi.fn().mockResolvedValue(options.events ?? []),
           create: vi.fn(),
           update: vi.fn(),
+          // Story 40.3 : s'inscrire à une conjonction et s'en désinscrire.
+          inscrire: vi.fn(),
+          desinscrire: vi.fn(),
         },
       },
     ],
@@ -4654,10 +4657,11 @@ describe('PartieDetail — les conjonctions d’un groupe (Story 40.1)', () => {
     participants: [],
     ...over,
   });
-  const api = () => TestBed.inject(EventsApiService) as unknown as {
-    list: ReturnType<typeof vi.fn>;
-    create: ReturnType<typeof vi.fn>;
-  };
+  const api = () =>
+    TestBed.inject(EventsApiService) as unknown as {
+      list: ReturnType<typeof vi.fn>;
+      create: ReturnType<typeof vi.fn>;
+    };
   const settle = async (fixture: ComponentFixture<PartieDetail>) => {
     for (let i = 0; i < 10; i++) {
       await Promise.resolve();
@@ -4869,7 +4873,12 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
   const GUEST_ID = 'member-guest';
   const tone = TONE_MAP['grimoire-emeraude'];
   const groupe = (over: Partial<PartieDto> = {}) =>
-    makePartie({ gameSystemId: 'ralliement', kind: 'CAMPAGNE_EPISODIQUE', role: 'member', ...over });
+    makePartie({
+      gameSystemId: 'ralliement',
+      kind: 'CAMPAGNE_EPISODIQUE',
+      role: 'member',
+      ...over,
+    });
   const dayKey = (days: number) => {
     const d = new Date();
     d.setDate(d.getDate() + days);
@@ -4898,10 +4907,13 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
     ],
     ...over,
   });
-  const api = () => TestBed.inject(EventsApiService) as unknown as {
-    list: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-  };
+  const api = () =>
+    TestBed.inject(EventsApiService) as unknown as {
+      list: ReturnType<typeof vi.fn>;
+      update: ReturnType<typeof vi.fn>;
+      inscrire: ReturnType<typeof vi.fn>;
+      desinscrire: ReturnType<typeof vi.fn>;
+    };
   const settle = async (fixture: ComponentFixture<PartieDetail>) => {
     for (let i = 0; i < 12; i++) {
       await Promise.resolve();
@@ -4954,7 +4966,14 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
     });
     await open(fixture, el, 'a');
 
-    const order = ['.ed__title', '.ed__badge', '.ed__situation', '.ed__sheet', '.ed__participants', '.ed__footer'];
+    const order = [
+      '.ed__title',
+      '.ed__badge',
+      '.ed__situation',
+      '.ed__sheet',
+      '.ed__participants',
+      '.ed__footer',
+    ];
     const nodes = order.map((sel) => q(sel)!);
     for (let i = 1; i < nodes.length; i++) {
       expect(
@@ -4976,7 +4995,7 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
     expect(q('.detail-surface-panel')!.contains(document.activeElement)).toBe(true);
   });
 
-  it('un membre qui n’est pas inscrit lit « Pas inscrit·e » dans le panneau, sans bouton d’inscription ni de vote', async () => {
+  it('un membre qui n’est pas inscrit lit « Pas inscrit·e » dans le panneau, avec « S’inscrire » (Story 40.3) mais sans bouton de vote ni de désinscription', async () => {
     const { fixture, el } = await createFixture(groupe(), 'autre-membre', {
       members: [],
       events: [card('a', 3)],
@@ -4985,7 +5004,12 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
     expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
       tone['partie.ralliement_event_situation_none'],
     );
-    expect(q('.ed__situation button')).toBeNull();
+    // Le seul bouton du panneau est « S'inscrire » (aucun vote dans la fenêtre).
+    expect(
+      Array.from(document.body.querySelectorAll('.ed__situation button')).map((b) =>
+        b.textContent?.trim(),
+      ),
+    ).toEqual([tone['partie.ralliement_event_signup_btn']]);
     expect(q('.ed__actions button:not(.ed__close)')).toBeNull();
   });
 
@@ -5021,7 +5045,13 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
       events: [
         {
           ...base,
-          seance: { ...base.seance!, capacity: null, lieu: null, heureRdv: null, notePratique: null },
+          seance: {
+            ...base.seance!,
+            capacity: null,
+            lieu: null,
+            heureRdv: null,
+            notePratique: null,
+          },
         },
       ],
     });
@@ -5144,7 +5174,10 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
         ...base,
         title: 'Conjonction a (renommée)',
         seance: { ...base.seance!, lieu: 'Paris 11e' },
-        participants: [...base.participants, { userId: 'n1', displayName: 'Nina Nouvelle', isHost: false, isAdmin: false }],
+        participants: [
+          ...base.participants,
+          { userId: 'n1', displayName: 'Nina Nouvelle', isHost: false, isAdmin: false },
+        ],
       },
     ]);
     TestBed.inject(PartiesService).notifyChanged();
@@ -5153,7 +5186,9 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
     expect(document.body.querySelectorAll('app-participant-chip').length).toBe(4);
     expect(q('.ed__title')?.textContent?.trim()).toBe('Conjonction a (renommée)');
     expect(q('.ed__row--place dd')?.textContent?.trim()).toBe('Paris 11e');
-    expect(q('.ed__row--participation dd')?.textContent?.trim()).toBe('8 places · 4 inscrits · 4 libres');
+    expect(q('.ed__row--participation dd')?.textContent?.trim()).toBe(
+      '8 places · 4 inscrits · 4 libres',
+    );
   });
 
   it('la conjonction ouverte disparaît de la liste : la fenêtre se referme', async () => {
@@ -5301,7 +5336,10 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
       await settle(fixture);
 
       api().update.mockRejectedValueOnce({
-        error: { message: 'Le nombre de places ne peut pas être inférieur au nombre de participants actuels (3)' },
+        error: {
+          message:
+            'Le nombre de places ne peut pas être inférieur au nombre de participants actuels (3)',
+        },
       });
       q<HTMLButtonElement>('.ed__save')!.click();
       await settle(fixture);
@@ -5329,6 +5367,315 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
     });
   });
 
+  // ─── Story 40.3 : s'inscrire à une conjonction et s'en désinscrire ───────────────────────────────
+
+  describe('inscription et désinscription (Story 40.3)', () => {
+    const NEWCOMER = 'autre-membre';
+    const SIGNUP = '.ed__signup';
+    const UNSUBSCRIBE = '.ed__unsubscribe';
+    const participant = (userId: string, name: string): EventCardDto['participants'][number] => ({
+      userId,
+      displayName: name,
+      isHost: false,
+      isAdmin: false,
+    });
+    /** La carte après l'inscription de NEWCOMER (réponse du serveur). */
+    const withNewcomer = (id: string, days: number, over: Partial<EventCardDto> = {}) => {
+      const base = card(id, days, over);
+      return {
+        ...base,
+        participants: [...base.participants, participant(NEWCOMER, 'Nora Nouvelle')],
+      };
+    };
+    const buttonLabels = (selector: string) =>
+      Array.from(document.body.querySelectorAll(selector)).map((b) => b.textContent?.trim());
+
+    it('« S’inscrire » : un appel, la fenêtre et la liste reflètent le nouvel inscrit, le bouton laisse place à « Me désinscrire »', async () => {
+      const { fixture, el } = await createFixture(groupe(), NEWCOMER, {
+        members: [],
+        events: [card('a', 3)],
+      });
+      await open(fixture, el, 'a');
+      expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_situation_none'],
+      );
+      expect(q('.event-card__chip--dotted')).not.toBeNull();
+
+      const updated = withNewcomer('a', 3);
+      api().inscrire.mockResolvedValue(updated);
+      api().list.mockResolvedValue([updated]);
+      q<HTMLButtonElement>(SIGNUP)!.click();
+      await settle(fixture);
+
+      expect(api().inscrire).toHaveBeenCalledTimes(1);
+      expect(api().inscrire).toHaveBeenCalledWith('s-a');
+      // Participants, ligne de participation, texte de situation et chip suivent la carte.
+      expect(document.body.querySelectorAll('app-participant-chip').length).toBe(4);
+      expect(q('.ed__row--participation dd')?.textContent?.trim()).toBe(
+        '8 places · 4 inscrits · 4 libres',
+      );
+      expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_situation_registered'],
+      );
+      expect(q(SIGNUP)).toBeNull();
+      expect(buttonLabels('.ed__actions button')).toEqual([
+        tone['partie.ralliement_event_unsubscribe_btn'],
+        tone['partie.ralliement_event_close_btn'],
+      ]);
+      expect(
+        cardEl(el, 'a').closest('article')!.querySelector('.event-card__chip')?.textContent?.trim(),
+      ).toBe(tone['partie.ralliement_event_chip_participating']);
+      expect(q('.event-card__chip--dotted')).toBeNull();
+    });
+
+    it('« Me désinscrire » : un appel, le participant disparaît, « S’inscrire » revient', async () => {
+      const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+        members: [],
+        events: [card('a', 3)],
+      });
+      await open(fixture, el, 'a');
+      expect(buttonLabels('.ed__actions button')).toEqual([
+        tone['partie.ralliement_event_unsubscribe_btn'],
+        tone['partie.ralliement_event_close_btn'],
+      ]);
+
+      const base = card('a', 3);
+      const updated = {
+        ...base,
+        participants: base.participants.filter((p) => p.userId !== GUEST_ID),
+      };
+      api().desinscrire.mockResolvedValue(updated);
+      api().list.mockResolvedValue([updated]);
+      q<HTMLButtonElement>(UNSUBSCRIBE)!.click();
+      await settle(fixture);
+
+      expect(api().desinscrire).toHaveBeenCalledWith('s-a');
+      expect(document.body.querySelectorAll('app-participant-chip').length).toBe(2);
+      expect(q(UNSUBSCRIBE)).toBeNull();
+      expect(q(SIGNUP)).not.toBeNull();
+      expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_situation_none'],
+      );
+    });
+
+    it('l’hôte ne voit ni « S’inscrire » ni « Me désinscrire » : il garde « Modifier »', async () => {
+      const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+        members: [],
+        events: [card('a', 3)],
+      });
+      await open(fixture, el, 'a');
+      expect(q(SIGNUP)).toBeNull();
+      expect(q(UNSUBSCRIBE)).toBeNull();
+      expect(buttonLabels('.ed__actions button')).toEqual([
+        tone['partie.ralliement_event_edit_btn'],
+        tone['partie.ralliement_event_close_btn'],
+      ]);
+    });
+
+    it('une conjonction passée : aucun bouton d’inscription ni de désinscription', async () => {
+      for (const viewer of [NEWCOMER, GUEST_ID]) {
+        const { fixture, el } = await createFixture(groupe(), viewer, {
+          members: [],
+          events: [card('p', -3)],
+        });
+        await open(fixture, el, 'p');
+        expect(q(SIGNUP), viewer).toBeNull();
+        expect(q(UNSUBSCRIBE), viewer).toBeNull();
+        q<HTMLButtonElement>('.ed__close')!.click();
+        await settle(fixture);
+        TestBed.resetTestingModule();
+        document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
+      }
+    });
+
+    describe('complet', () => {
+      const fullCard = (id: string, over: Partial<EventCardDto> = {}) => {
+        const base = card(id, 3, over);
+        return { ...base, seance: { ...base.seance!, capacity: 3 } };
+      };
+
+      it('non inscrit : badge « Complet » grisé sur la carte et dans la fenêtre, « Complet » écrit à la place de « S’inscrire »', async () => {
+        const { fixture, el } = await createFixture(groupe(), NEWCOMER, {
+          members: [],
+          events: [fullCard('a')],
+        });
+        const badge = cardEl(el, 'a').closest('article')!.querySelector('.status-badge');
+        expect(badge?.textContent?.trim()).toBe(tone['partie.ralliement_event_badge_full']);
+        expect(badge?.classList).toContain('status-badge--done');
+
+        await open(fixture, el, 'a');
+        expect(q('.ed__badge')?.textContent?.trim()).toBe(
+          tone['partie.ralliement_event_badge_full'],
+        );
+        expect(q(SIGNUP)).toBeNull();
+        expect(q('.ed__full')?.textContent?.trim()).toBe(
+          tone['partie.ralliement_event_situation_full'],
+        );
+      });
+
+      it('inscrit ou hôte : badge normal, jamais « Complet »', async () => {
+        for (const viewer of [GUEST_ID, HOST_ID]) {
+          const { fixture, el } = await createFixture(groupe(), viewer, {
+            members: [],
+            events: [fullCard('a')],
+          });
+          const badge = cardEl(el, 'a').closest('article')!.querySelector('.status-badge');
+          expect(badge?.textContent?.trim(), viewer).toBe('Dans 3 jours');
+          await open(fixture, el, 'a');
+          expect(q('.ed__full'), viewer).toBeNull();
+          q<HTMLButtonElement>('.ed__close')!.click();
+          await settle(fixture);
+          TestBed.resetTestingModule();
+          document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
+        }
+      });
+
+      it('en direct : la dernière place prise par un autre membre fait apparaître « Complet » dans la fenêtre ouverte', async () => {
+        const base = card('a', 3);
+        const open7 = {
+          ...base,
+          participants: base.participants.slice(0, 2),
+          seance: { ...base.seance!, capacity: 3 },
+        };
+        const { fixture, el } = await createFixture(groupe(), NEWCOMER, {
+          members: [],
+          events: [open7],
+        });
+        await open(fixture, el, 'a');
+        expect(q(SIGNUP)).not.toBeNull();
+        expect(q('.ed__full')).toBeNull();
+
+        api().list.mockResolvedValue([fullCard('a')]);
+        TestBed.inject(PartiesService).notifyChanged();
+        await settle(fixture);
+
+        expect(q(SIGNUP)).toBeNull();
+        expect(q('.ed__full')).not.toBeNull();
+        expect(q('.ed__badge')?.textContent?.trim()).toBe(
+          tone['partie.ralliement_event_badge_full'],
+        );
+      });
+
+      it('course perdue : le serveur répond « complet », le message s’affiche dans la fenêtre et le bouton redevient actif', async () => {
+        const { fixture, el } = await createFixture(groupe(), NEWCOMER, {
+          members: [],
+          events: [card('a', 3)],
+        });
+        await open(fixture, el, 'a');
+
+        api().inscrire.mockRejectedValue({
+          status: 409,
+          error: { message: 'Cette conjonction est complète : plus aucune place disponible' },
+        });
+        q<HTMLButtonElement>(SIGNUP)!.click();
+        await settle(fixture);
+
+        expect(q('.ed__error')?.textContent?.trim()).toBe(
+          'Cette conjonction est complète : plus aucune place disponible',
+        );
+        expect(q<HTMLButtonElement>(SIGNUP)!.disabled).toBe(false);
+        expect(q('app-event-dialog')).not.toBeNull();
+      });
+    });
+
+    it('refus sans texte (réseau) : repli du thème pour l’inscription et pour la désinscription', async () => {
+      const first = await createFixture(groupe(), NEWCOMER, {
+        members: [],
+        events: [card('a', 3)],
+      });
+      await open(first.fixture, first.el, 'a');
+      api().inscrire.mockRejectedValue({ status: 0 });
+      q<HTMLButtonElement>(SIGNUP)!.click();
+      await settle(first.fixture);
+      expect(q('.ed__error')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_signup_error'],
+      );
+      TestBed.resetTestingModule();
+      document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
+
+      const second = await createFixture(groupe(), GUEST_ID, {
+        members: [],
+        events: [card('a', 3)],
+      });
+      await open(second.fixture, second.el, 'a');
+      api().desinscrire.mockRejectedValue({ status: 0 });
+      q<HTMLButtonElement>(UNSUBSCRIBE)!.click();
+      await settle(second.fixture);
+      expect(q('.ed__error')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_unsubscribe_error'],
+      );
+    });
+
+    it('garde anti double clic : le bouton est désactivé et occupé pendant l’appel, un seul appel part', async () => {
+      const { fixture, el } = await createFixture(groupe(), NEWCOMER, {
+        members: [],
+        events: [card('a', 3)],
+      });
+      await open(fixture, el, 'a');
+
+      let release!: (value: EventCardDto) => void;
+      api().inscrire.mockReturnValue(
+        new Promise<EventCardDto>((resolve) => {
+          release = resolve;
+        }),
+      );
+      const button = q<HTMLButtonElement>(SIGNUP)!;
+      button.click();
+      await settle(fixture);
+      expect(button.disabled).toBe(true);
+      expect(button.getAttribute('aria-busy')).toBe('true');
+      button.click();
+      button.click();
+      await settle(fixture);
+      expect(api().inscrire).toHaveBeenCalledTimes(1);
+
+      const updated = withNewcomer('a', 3);
+      api().list.mockResolvedValue([updated]);
+      release(updated);
+      await settle(fixture);
+      expect(q(SIGNUP)).toBeNull();
+    });
+
+    it('en direct : l’inscription d’un autre membre met à jour la fenêtre ouverte (liste, ligne de participation)', async () => {
+      const { fixture, el } = await createFixture(groupe(), NEWCOMER, {
+        members: [],
+        events: [card('a', 3)],
+      });
+      await open(fixture, el, 'a');
+      expect(document.body.querySelectorAll('app-participant-chip').length).toBe(3);
+
+      const base = card('a', 3);
+      api().list.mockResolvedValue([
+        { ...base, participants: [...base.participants, participant('n9', 'Noé Neuf')] },
+      ]);
+      TestBed.inject(PartiesService).notifyChanged();
+      await settle(fixture);
+
+      expect(document.body.querySelectorAll('app-participant-chip').length).toBe(4);
+      expect(q('.ed__row--participation dd')?.textContent?.trim()).toBe(
+        '8 places · 4 inscrits · 4 libres',
+      );
+      // Toujours non inscrit : « S'inscrire » reste proposé.
+      expect(q(SIGNUP)).not.toBeNull();
+    });
+
+    it('aucun mot de JDR dans les libellés d’inscription, de désinscription et de complet', async () => {
+      const { fixture, el } = await createFixture(groupe(), NEWCOMER, {
+        members: [],
+        events: [
+          card('a', 3),
+          (() => {
+            const base = card('b', 4);
+            return { ...base, seance: { ...base.seance!, capacity: 3 } };
+          })(),
+        ],
+      });
+      await open(fixture, el, 'a');
+      expect(NON_JDR_BANNED_WORDS.test(q('app-event-dialog')?.textContent ?? '')).toBe(false);
+      expect(NON_JDR_BANNED_WORDS.test(el.textContent ?? '')).toBe(false);
+    });
+  });
+
   it('aucun mot de JDR dans la fenêtre', async () => {
     const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
       members: [],
@@ -5338,6 +5685,5 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
     expect(NON_JDR_BANNED_WORDS.test(q('app-event-dialog')?.textContent ?? '')).toBe(false);
   });
 
-  const titleOfCard = (el: HTMLElement, id: string) =>
-    cardEl(el, id).textContent?.trim();
+  const titleOfCard = (el: HTMLElement, id: string) => cardEl(el, id).textContent?.trim();
 });

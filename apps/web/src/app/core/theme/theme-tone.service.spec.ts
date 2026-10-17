@@ -976,6 +976,11 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_event_unit_place',
     'partie.ralliement_event_unit_registered',
     'partie.ralliement_event_unit_free',
+    // Story 40.3 : « S'inscrire », « Me désinscrire » et « Complet » verbatim du contrat d’UI ; l’état
+    // écrit du panneau et les replis d’erreur ont une voix
+    'partie.ralliement_event_signup_btn',
+    'partie.ralliement_event_unsubscribe_btn',
+    'partie.ralliement_event_badge_full',
     // Gabarits structurels et libellés techniques
     'partie.signal_more_count',
     'parties.detail_link_expires_short',
@@ -1383,7 +1388,10 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_places_hint']).toBe(
       'places · tu es l’hôte (1 place)',
     );
-    for (const key of ['partie.ralliement_event_create_error', 'partie.ralliement_event_list_error']) {
+    for (const key of [
+      'partie.ralliement_event_create_error',
+      'partie.ralliement_event_list_error',
+    ]) {
       expect(new Set(THEMES.map((theme) => TONE_MAP[theme][key])).size, key).toBe(THEMES.length);
     }
   });
@@ -1417,20 +1425,59 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
       expect(new Set(valeurs).size, key).toBe(THEMES.length);
     }
     // « Rendez-vous à » reste commun au Grimoire et à l'Atelier ; seule la forêt dit « Retrouvailles ».
-    expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_panel_time']).toBe('Retrouvailles à {time}');
+    expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_panel_time']).toBe(
+      'Retrouvailles à {time}',
+    );
     expect(TONE_MAP['grimoire-emeraude']['partie.ralliement_event_edit_title']).toBe(
       'Modifier la conjonction',
     );
-    expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_edit_title']).toBe('Modifier la halte');
-    expect(TONE_MAP['atelier-cuivre']['partie.ralliement_event_edit_title']).toBe('Modifier la réunion');
+    expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_edit_title']).toBe(
+      'Modifier la halte',
+    );
+    expect(TONE_MAP['atelier-cuivre']['partie.ralliement_event_edit_title']).toBe(
+      'Modifier la réunion',
+    );
     for (const theme of THEMES) {
       expect(TONE_MAP[theme]['partie.ralliement_event_panel_time'], theme).toContain('{time}');
       for (const key of ['place', 'registered', 'free']) {
-        expect(TONE_MAP[theme][`partie.ralliement_event_unit_${key}`], theme).toMatch(/^[^|]+\|[^|]+$/);
+        expect(TONE_MAP[theme][`partie.ralliement_event_unit_${key}`], theme).toMatch(
+          /^[^|]+\|[^|]+$/,
+        );
       }
     }
     expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_situation_host']).toBe(
       'Tu es l’hôte de cette halte.',
+    );
+  });
+
+  // Story 40.3 : s'inscrire à une conjonction et s'en désinscrire. Les trois mots du contrat sont
+  // identiques ; l'état « Complet » écrit dans le panneau et les replis d'erreur ont une voix.
+  it('Story 40.3 : inscription et désinscription gardent les mots du contrat et prennent la voix du thème, sans mot de JDR', () => {
+    const neutres: Record<string, string> = {
+      'partie.ralliement_event_signup_btn': 'S’inscrire',
+      'partie.ralliement_event_unsubscribe_btn': 'Me désinscrire',
+      'partie.ralliement_event_badge_full': 'Complet',
+    };
+    for (const [key, attendu] of Object.entries(neutres)) {
+      for (const theme of THEMES) expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(attendu);
+    }
+    const voix = [
+      'partie.ralliement_event_situation_full',
+      'partie.ralliement_event_signup_error',
+      'partie.ralliement_event_unsubscribe_error',
+    ];
+    for (const key of voix) {
+      const valeurs = THEMES.map((theme) => TONE_MAP[theme][key]);
+      expect(new Set(valeurs).size, key).toBe(THEMES.length);
+      for (const valeur of valeurs) expect(valeur, key).not.toMatch(NON_JDR_BANNED_WORDS);
+    }
+    for (const key of [...Object.keys(neutres), ...voix]) {
+      for (const theme of THEMES) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).not.toMatch(NON_JDR_BANNED_WORDS);
+      }
+    }
+    expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_situation_full']).toBe(
+      'Complet : toutes les places de cette halte sont prises.',
     );
   });
 

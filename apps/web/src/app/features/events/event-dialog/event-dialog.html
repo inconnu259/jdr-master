@@ -18,13 +18,29 @@
   @if (editing()) {
     <app-event-form [prefill]="card()" (submitted)="save()" />
   } @else {
-    <!-- Panneau de situation : ma situation, puis date, heure et lieu en grand. Ni vote ni
-         inscription à ce palier. -->
+    <!-- Panneau de situation : ma situation (avec « S'inscrire », ou « Complet » écrit quand il n'y a
+         plus de place), puis date, heure et lieu en grand. Pas de vote à ce palier. -->
     <section class="ed__situation" [attr.aria-labelledby]="uid + '-situation'">
       <h3 class="ed__situation-label" [id]="uid + '-situation'">
         {{ theme.tone()['partie.ralliement_event_situation'] }}
       </h3>
       <p class="ed__situation-text">{{ situationText() }}</p>
+      @if (showSignUp()) {
+        <button
+          mat-flat-button
+          type="button"
+          class="ed__signup"
+          [disabled]="busy()"
+          [attr.aria-busy]="busy()"
+          (click)="signUp()"
+        >
+          {{ theme.tone()['partie.ralliement_event_signup_btn'] }}
+        </button>
+      } @else if (showFull()) {
+        <p class="ed__full" role="status">
+          {{ theme.tone()['partie.ralliement_event_situation_full'] }}
+        </p>
+      }
       <p class="ed__big ed__big--date">{{ dateLabel() }}</p>
       @if (timeText(); as time) {
         <p class="ed__big ed__big--time">{{ time }}</p>
@@ -111,6 +127,18 @@
           {{ theme.tone()['partie.ralliement_event_save_btn'] }}
         </button>
       } @else {
+        @if (showUnsubscribe()) {
+          <button
+            mat-stroked-button
+            type="button"
+            class="ed__unsubscribe"
+            [disabled]="busy()"
+            [attr.aria-busy]="busy()"
+            (click)="unsubscribe()"
+          >
+            {{ theme.tone()['partie.ralliement_event_unsubscribe_btn'] }}
+          </button>
+        }
         @if (canEdit()) {
           <button mat-stroked-button type="button" class="ed__edit" (click)="startEdit()">
             {{ theme.tone()['partie.ralliement_event_edit_btn'] }}

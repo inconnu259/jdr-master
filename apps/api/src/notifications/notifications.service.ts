@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import type { DaySlot, PartieKind, ScenarioStatus } from '@prisma/client';
-import { isHiddenDraft } from '../permissions/scenario-visibility';
+import type { DaySlot } from '@prisma/client';
+import { EventsService, isRalliementGroup, type ReminderSeance } from '../events/events.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 
@@ -12,20 +12,16 @@ const SLOT_LABELS: Record<DaySlot, string> = {
   FULL_DAY: 'toute la journée',
 };
 
-type DueSeance = {
+/** Séance due telle que lue par la tâche : les champs de `ReminderSeance` (qui décide des
+ *  destinataires, Story 40.3) plus ce que le message affiche. */
+type DueSeance = ReminderSeance & {
   id: string;
   startDate: Date | null;
   startSlot: DaySlot | null;
-  event: {
-    /** Statut du scénario (extension JDR de l'événement) ; absent pour un événement sans scénario. */
-    scenario?: { status: ScenarioStatus } | null;
-    partie: {
-      id: string;
-      name: string;
-      kind: PartieKind;
-      owner: { id: string; email: string } | null;
-      memberships: { user: { id: string; email: string } }[];
-    };
+  lieu?: string | null;
+  event: ReminderSeance['event'] & {
+    title?: string;
+    partie: ReminderSeance['event']['partie'] & { id: string; name: string };
   };
 };
 
@@ -42,6 +38,8 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
+    // Story 40.3 : seul décideur des destinataires du rappel (`reminderRecipients`).
+    private readonly events: EventsService,
   ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
@@ -71,14 +69,22 @@ export class NotificationsService {
       },
       orderBy: [{ startDate: 'asc' }, { id: 'asc' }],
       include: {
+        // Story 40.3 : les inscrits d'une conjonction, lus avec la séance (jamais une requête par séance).
+        inscriptions: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: { user: { select: { id: true, email: true } } },
+        },
         event: {
           select: {
+            title: true,
+            owner: { select: { id: true, email: true } },
             scenario: { select: { status: true } },
             partie: {
               select: {
                 id: true,
                 name: true,
                 kind: true,
+                gameSystemId: true,
                 owner: { select: { id: true, email: true } },
                 memberships: {
                   include: { user: { select: { id: true, email: true } } },
@@ -105,22 +111,27 @@ export class NotificationsService {
 
   private async remindSeance(seance: DueSeance): Promise<void> {
     const partie = seance.event.partie;
-    // Propriétaire absent (AD-5, compte supprimé) : seuls les membres restent destinataires.
-    // Anti-spoil serveur : la séance d'un brouillon caché (scénario `BROUILLON` hors `ONE_SHOT`)
-    // n'est rappelée qu'au propriétaire, jamais aux membres, tant que le scénario n'est pas ouvert.
-    const scenario = seance.event.scenario;
-    const ownerOnly = !!scenario && isHiddenDraft(scenario.status, partie.kind);
-    const allRecipients = [
-      ...(partie.owner ? [partie.owner] : []),
-      ...(ownerOnly ? [] : partie.memberships.map((m) => m.user)),
-    ];
-    const recipients = [...new Map(allRecipients.map((r) => [r.id, r])).values()];
+    // Destinataires : une seule définition, dans `events/` (propriétaire + membres pour le JDR, avec
+    // l'anti-spoil des brouillons cachés ; hôte + inscrits pour un groupe).
+    const recipients = this.events.reminderRecipients(seance);
+    const group = isRalliementGroup(partie);
+    const link = `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${partie.id}`;
+    const sessionDate = this.formatSessionDate(seance.startDate!, seance.startSlot);
     for (const recipient of recipients) {
-      const result = await this.email.sendMail('session-reminder', recipient.email, {
-        partieName: partie.name,
-        sessionDate: this.formatSessionDate(seance.startDate!, seance.startSlot),
-        link: `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${partie.id}`,
-      });
+      // Story 40.3 : un groupe reçoit l'e-mail neutre de la conjonction (hôte et inscrits seulement) ;
+      // le JDR et la rencontre isolée gardent `session-reminder`.
+      const result = group
+        ? await this.email.sendMail('conjonction-reminder', recipient.email, {
+            eventTitle: seance.event.title,
+            sessionDate,
+            lieu: seance.lieu ?? null,
+            link,
+          })
+        : await this.email.sendMail('session-reminder', recipient.email, {
+            partieName: partie.name,
+            sessionDate,
+            link,
+          });
       if (!result.ok) {
         this.logger.error(
           `Échec d'envoi du rappel à ${recipient.email} (partie ${partie.id}, séance ${seance.id})`,

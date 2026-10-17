@@ -28,7 +28,13 @@ const CARD = {
 
 describe('GroupEventsService (Story 40.1)', () => {
   let permissions: { assert: jest.Mock };
-  let events: { createHosted: jest.Mock; updateHosted: jest.Mock; listCards: jest.Mock };
+  let events: {
+    createHosted: jest.Mock;
+    updateHosted: jest.Mock;
+    inscrireConjonction: jest.Mock;
+    desinscrireConjonction: jest.Mock;
+    listCards: jest.Mock;
+  };
   let signals: { notifyChanged: jest.Mock };
   let service: GroupEventsService;
   const order: string[] = [];
@@ -46,6 +52,14 @@ describe('GroupEventsService (Story 40.1)', () => {
       }),
       updateHosted: jest.fn(() => {
         order.push('update');
+        return Promise.resolve();
+      }),
+      inscrireConjonction: jest.fn(() => {
+        order.push('inscrire');
+        return Promise.resolve();
+      }),
+      desinscrireConjonction: jest.fn(() => {
+        order.push('desinscrire');
         return Promise.resolve();
       }),
       listCards: jest.fn().mockResolvedValue([CARD]),
@@ -212,6 +226,63 @@ describe('GroupEventsService (Story 40.1)', () => {
       events.updateHosted.mockRejectedValue(new BadRequestException('trop petit'));
 
       await expect(service.update('g1', 'e1', 'u1', dto())).rejects.toThrow('trop petit');
+      expect(signals.notifyChanged).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('inscrire() / desinscrire() — Story 40.3', () => {
+    const grantSeance = (over: Record<string, unknown> = {}) =>
+      testGrant({ ...GROUPE, ...over }, 'member', { eventId: 'e1', seanceId: 'se1' });
+
+    it('inscrire : écrit sous le verrou de l’événement avec la séance de l’autorisation, puis signaux et carte', async () => {
+      const grant = grantSeance();
+
+      const card = await service.inscrire(grant, 'u2');
+
+      expect(events.inscrireConjonction).toHaveBeenCalledWith(grant, 'se1', 'u2');
+      expect(order).toEqual(['inscrire', 'signals']);
+      expect(signals.notifyChanged).toHaveBeenCalledWith('g1');
+      expect(callArg<string[]>(events.listCards, 0, 1)).toEqual(['e1']);
+      expect(card).toEqual(CARD);
+    });
+
+    it('desinscrire : retire puis signale, renvoie la carte', async () => {
+      const grant = grantSeance();
+
+      const card = await service.desinscrire(grant, 'u2');
+
+      expect(events.desinscrireConjonction).toHaveBeenCalledWith(grant, 'se1', 'u2');
+      expect(order).toEqual(['desinscrire', 'signals']);
+      expect(card).toEqual(CARD);
+    });
+
+    it.each(['inscrire', 'desinscrire'] as const)(
+      '%s : rencontre isolée (ONE_SHOT) → 403 « indisponible », rien n’est écrit',
+      async (method) => {
+        const refusal = service[method](grantSeance({ kind: 'ONE_SHOT' }), 'u2');
+
+        await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(refusal).rejects.toThrow(RALLIEMENT_UNAVAILABLE_MESSAGE);
+        expect(events.inscrireConjonction).not.toHaveBeenCalled();
+        expect(events.desinscrireConjonction).not.toHaveBeenCalled();
+        expect(signals.notifyChanged).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['inscrire', 'desinscrire'] as const)(
+      '%s : une autorisation qui ne vise pas de séance → 404, rien n’est écrit',
+      async (method) => {
+        const grant = testGrant(GROUPE, 'member', { eventId: 'e1' });
+
+        await expect(service[method](grant, 'u2')).rejects.toBeInstanceOf(NotFoundException);
+        expect(events.inscrireConjonction).not.toHaveBeenCalled();
+      },
+    );
+
+    it('un refus de l’écriture (complet, passé) ne signale rien', async () => {
+      events.inscrireConjonction.mockRejectedValue(new BadRequestException('complet'));
+
+      await expect(service.inscrire(grantSeance(), 'u2')).rejects.toThrow('complet');
       expect(signals.notifyChanged).not.toHaveBeenCalled();
     });
   });
