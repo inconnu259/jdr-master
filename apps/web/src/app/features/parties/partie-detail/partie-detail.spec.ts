@@ -39,6 +39,7 @@ import { NON_JDR_BANNED_WORDS } from '../../../core/theme/non-jdr-words.fixture'
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { fillTone } from '../../../core/theme/tone-format';
 import { EventsApiService } from '../../events/events-api.service';
+import { ConjonctionDraftService } from '../../events/conjonction-draft.service';
 
 const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
@@ -3760,7 +3761,15 @@ describe('PartieDetail — un groupe s’ouvre sur ses conjonctions (Story 39.1)
       expect(buttons.map((b) => (b.textContent ?? '').trim())).toEqual([
         tone['partie.ralliement_event_new_btn'],
       ]);
-      expect(el.querySelector('.conjonctions a, app-event-card')).toBeNull();
+      expect(el.querySelector('.conjonctions app-event-card')).toBeNull();
+      // ⚠️ Story 40.5b : l'en-tête porte aussi le lien écrit « Calendrier du groupe » vers la page du
+      // groupe (auparavant « un groupe n'a aucun lien de calendrier », Story 39.1) — le seul lien de
+      // l'onglet, jamais une icône seule.
+      const links = Array.from(el.querySelectorAll<HTMLAnchorElement>('.conjonctions a'));
+      expect(links.map((a) => (a.textContent ?? '').trim())).toEqual([
+        tone['partie.ralliement_calendar_link'],
+      ]);
+      expect(links[0].getAttribute('href')).toBe('/parties/party-1/guild-calendar');
     },
   );
 
@@ -6075,4 +6084,206 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
   });
 
   const titleOfCard = (el: HTMLElement, id: string) => cardEl(el, id).textContent?.trim();
+});
+
+// ─── Calendrier du groupe : entrées, aller-retour de la création (Story 40.5b) ────────────────
+
+describe('PartieDetail — du groupe vers son calendrier (Story 40.5b)', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
+    vi.restoreAllMocks();
+  });
+
+  const HOST_ID = 'member-host';
+  const GUEST_ID = 'member-guest';
+  const tone = TONE_MAP['grimoire-emeraude'];
+  const groupe = (over: Partial<PartieDto> = {}) =>
+    makePartie({
+      gameSystemId: 'ralliement',
+      kind: 'CAMPAGNE_EPISODIQUE',
+      role: 'member',
+      ...over,
+    });
+  const pollCard = (over: Partial<EventCardDto> = {}): EventCardDto => ({
+    id: 'a',
+    title: 'Soirée plateaux',
+    hostId: HOST_ID,
+    hostDisplayName: 'Hélène Hôte',
+    seance: {
+      id: 's-a',
+      date: null,
+      slot: null,
+      lieu: null,
+      heureRdv: null,
+      notePratique: null,
+      capacity: null,
+      placesTaken: 1,
+    },
+    participants: [
+      {
+        userId: HOST_ID,
+        displayName: 'Hélène Hôte',
+        isHost: true,
+        isAdmin: false,
+        status: 'CONFIRMED',
+      },
+    ],
+    myInscription: null,
+    poll: {
+      id: 'p-a',
+      expiresAt: '2099-12-30T23:59:59.999Z',
+      status: 'OPEN',
+      eligibleVoterIds: [HOST_ID, GUEST_ID],
+      options: [
+        { id: 'o1', date: '2099-12-24', slot: 'EVENING', availableCount: 2 },
+        { id: 'o2', date: '2099-12-25', slot: 'MORNING', availableCount: 1 },
+      ],
+      votes: [],
+    },
+    ...over,
+  });
+  const settle = async (fixture: ComponentFixture<PartieDetail>) => {
+    for (let i = 0; i < 12; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+  };
+  const q = <T extends Element>(sel: string) => document.body.querySelector<T>(sel);
+  const open = async (fixture: ComponentFixture<PartieDetail>, el: HTMLElement) => {
+    el.querySelector<HTMLElement>('button[data-event-id="a"]')!.click();
+    await settle(fixture);
+  };
+
+  it('le lien « Calendrier du groupe » est écrit, focalisable et mène à la page du groupe, sans carte ni icône seule', async () => {
+    const { el } = await createFixture(groupe(), GUEST_ID, { members: [], events: [pollCard()] });
+    const link = el.querySelector<HTMLAnchorElement>('.conjonctions__header a')!;
+    expect(link.textContent?.trim()).toBe('Calendrier du groupe');
+    expect(link.getAttribute('href')).toBe('/parties/party-1/guild-calendar');
+    expect(link.tabIndex).toBeGreaterThanOrEqual(0);
+    link.focus();
+    expect(document.activeElement).toBe(link);
+  });
+
+  it('« Voter dans le calendrier » : la fenêtre remplace son entrée d’historique par la page du groupe', async () => {
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [pollCard()],
+    });
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    await open(fixture, el);
+
+    const button = q<HTMLButtonElement>('.ed__poll-vote')!;
+    expect(button.textContent?.trim()).toBe('Voter dans le calendrier');
+    expect(q('.ed__poll-compose')).toBeNull();
+    button.click();
+    await settle(fixture);
+
+    // `replaceUrl` : le retour arrière ramène à la liste, sans entrée de fenêtre fantôme derrière.
+    expect(navigate).toHaveBeenCalledWith(['/parties', 'party-1', 'guild-calendar'], {
+      replaceUrl: true,
+    });
+  });
+
+  it('« Composer les créneaux » : réservé à l’hôte, mène au même endroit', async () => {
+    const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+      members: [],
+      events: [pollCard()],
+    });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    await open(fixture, el);
+
+    const button = q<HTMLButtonElement>('.ed__poll-compose')!;
+    expect(button.textContent?.trim()).toBe('Composer les créneaux');
+    expect(q('.ed__poll-vote')).toBeNull();
+    button.click();
+    await settle(fixture);
+    expect(navigate).toHaveBeenCalledWith(['/parties', 'party-1', 'guild-calendar'], {
+      replaceUrl: true,
+    });
+  });
+
+  it('aller-retour de la création : le brouillon part, revient avec ses créneaux, et la fenêtre se rouvre', async () => {
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, { members: [] });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    el.querySelector<HTMLButtonElement>('.conjonctions__new')!.click();
+    await settle(fixture);
+
+    // Mode sondage, nom, lieu, échéance : tout ce que la fenêtre contient part avec la personne.
+    const toggles = Array.from(
+      document.body.querySelectorAll<HTMLElement>('.ec__date-mode mat-button-toggle button'),
+    );
+    toggles[1].click();
+    await settle(fixture);
+    const type = async (sel: string, value: string) => {
+      const input = q<HTMLInputElement>(sel)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+      await settle(fixture);
+    };
+    await type('.ec__name', 'Brunch du dimanche');
+    await type('.ec__place', 'Parc');
+    await type('.ec__poll-deadline', '2099-12-20');
+
+    const pick = q<HTMLButtonElement>('.ec__poll-calendar-btn')!;
+    expect(pick.textContent?.trim()).toBe('Choisir les créneaux dans le calendrier');
+    pick.click();
+    await settle(fixture);
+    expect(navigate).toHaveBeenCalledWith(['/parties', 'party-1', 'guild-calendar']);
+
+    // Le calendrier du groupe reprend le brouillon (aucun appel au serveur), puis le rend avec ses créneaux.
+    const drafts = TestBed.inject(ConjonctionDraftService);
+    const taken = drafts.takeComposeRequest('party-1');
+    expect(taken?.title).toBe('Brunch du dimanche');
+    expect(taken?.lieu).toBe('Parc');
+    expect(taken?.pollDeadline).toBe('2099-12-20');
+    const api = TestBed.inject(EventsApiService) as unknown as {
+      create: ReturnType<typeof vi.fn>;
+    };
+    expect(api.create).not.toHaveBeenCalled();
+    drafts.finishCompose('party-1', [
+      { date: '2099-12-24', slot: 'EVENING' },
+      { date: '2099-12-26', slot: 'MORNING' },
+    ]);
+
+    // La page du groupe est remontée (le calendrier l'a remplacée) : la fenêtre rouvre avec le brouillon.
+    fixture.destroy();
+    document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
+    const back = TestBed.createComponent(PartieDetail);
+    back.detectChanges();
+    await settle(back);
+
+    expect(q('app-event-create')).not.toBeNull();
+    expect(q<HTMLInputElement>('.ec__name')!.value).toBe('Brunch du dimanche');
+    expect(q<HTMLInputElement>('.ec__place')!.value).toBe('Parc');
+    expect(q<HTMLInputElement>('.ec__poll-deadline')!.value).toBe('2099-12-20');
+    expect(q('.ec__poll-summary')?.textContent?.trim()).toMatch(/^2 créneaux · .+→.+/);
+    expect(document.body.querySelectorAll('.ec__chip--slot').length).toBe(2);
+
+    // « Renoncer » abandonne le brouillon : une nouvelle visite ne rouvre rien.
+    q<HTMLButtonElement>('.ec__cancel')!.click();
+    await settle(back);
+    expect(q('app-event-create')).toBeNull();
+    expect(drafts.takeReopen('party-1')).toBeNull();
+  });
+
+  it('sans aller-retour en cours, la page du groupe n’ouvre pas la fenêtre de création', async () => {
+    const { el } = await createFixture(groupe(), GUEST_ID, { members: [] });
+    expect(q('app-event-create')).toBeNull();
+    expect(el.querySelector('.conjonctions')).not.toBeNull();
+  });
+
+  it('aucun mot de JDR dans le lien, les boutons du sondage et la fenêtre de création', async () => {
+    const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+      members: [],
+      events: [pollCard()],
+    });
+    expect(NON_JDR_BANNED_WORDS.test(el.querySelector('.conjonctions__header')?.textContent ?? '')).toBe(
+      false,
+    );
+    await open(fixture, el);
+    expect(NON_JDR_BANNED_WORDS.test(q('app-event-dialog')?.textContent ?? '')).toBe(false);
+    expect(tone['partie.ralliement_calendar_link']).toBe('Calendrier du groupe');
+  });
 });

@@ -76,6 +76,12 @@
       <span class="ec__label" [id]="uid + '-poll-slots'">{{
         theme.tone()['partie.ralliement_event_poll_slots_label']
       }}</span>
+      @if (canPickInCalendar()) {
+        <!-- Story 40.5b : choisir les créneaux sur la grille du groupe ; le brouillon fait l'aller-retour. -->
+        <button type="button" class="ec__poll-calendar-btn" (click)="composeRequested.emit()">
+          {{ theme.tone()['partie.ralliement_event_poll_calendar_btn'] }}
+        </button>
+      }
       <div class="ec__row ec__poll-add">
         <div class="ec__field">
           <label class="ec__label" [for]="uid + '-poll-day'">{{

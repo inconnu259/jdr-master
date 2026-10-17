@@ -492,6 +492,36 @@ export const atelierCuivre: Record<ToneKey, string> = {
     'Vous êtes l’hôte. Le vote se termine {when} — {n} créneaux proposés.',
   'partie.ralliement_event_poll_not_eligible':
     'Seuls les inscrits à cette réunion votent pour la date.',
+  /* — calendrier du groupe pour un sondage de dates (Story 40.5b) : mots du contrat identiques, noms de la rencontre et tutoiement selon le thème — */
+  'partie.ralliement_calendar_link': 'Calendrier du groupe',
+  'partie.ralliement_event_poll_calendar_btn': 'Choisir les créneaux dans le calendrier',
+  'partie.ralliement_event_vote_in_calendar_btn': 'Voter dans le calendrier',
+  'partie.ralliement_event_compose_in_calendar_btn': 'Composer les créneaux',
+  'partie.ralliement_calendar_polls_heading': 'Votes de dates en cours',
+  'partie.ralliement_calendar_confirm_slots_one': '{n} créneau',
+  'partie.ralliement_calendar_confirm_slots_many': '{n} créneaux',
+  'partie.ralliement_calendar_confirm_responses_one': '{n} réponse',
+  'partie.ralliement_calendar_confirm_responses_many': '{n} réponses',
+  'partie.ralliement_calendar_confirm_summary_one': '{n} créneau proposé.',
+  'partie.ralliement_calendar_confirm_summary_many': '{n} créneaux proposés.',
+  'partie.ralliement_calendar_compose_arm': 'Composer les créneaux : {title}',
+  'partie.ralliement_calendar_compose_target_poll': 'Créneaux de la réunion : {title}',
+  'partie.ralliement_calendar_compose_target_new': 'Créneaux d’une nouvelle réunion',
+  'partie.ralliement_calendar_compose_full_day':
+    'Une réunion se propose sur un créneau précis : matin, après-midi ou soir. Pas de journée entière — passez en vue Semaine pour choisir le créneau.',
+  'partie.ralliement_calendar_compose_save_error':
+    'Les créneaux de la réunion n’ont pu être consignés. Réessayez.',
+  'partie.ralliement_calendar_compose_stale_voters':
+    'Une nouvelle réponse est parvenue depuis l’avertissement — revalidez pour obtenir le relevé à jour.',
+  'partie.ralliement_calendar_events_error':
+    'Les réunions du groupe n’ont pu être relevées. Réessayez.',
+  'partie.ralliement_calendar_poll_can_vote': 'Vous pouvez répondre jusqu’au {date}.',
+  'partie.ralliement_calendar_polls_empty': 'Aucun vote de dates en cours dans ce rassemblement.',
+  'partie.ralliement_calendar_confirm_title': 'Ajuster les créneaux de la réunion',
+  'partie.ralliement_calendar_confirm_note':
+    'Les réponses portées par les créneaux conservés ne sont pas touchées.',
+  'partie.ralliement_calendar_confirm_warning_one': 'Retirer {slots} purgera {votes} déjà posée.',
+  'partie.ralliement_calendar_confirm_warning_many': 'Retirer {slots} purgera {votes} déjà posées.',
   /* — « Télégrammes » d’un groupe, côté administrateur (Story 39.3) : variantes sans mot de JDR — */
   'partie.ralliement_invite_title': 'Recruter pour le rassemblement',
   'partie.ralliement_search_label': 'Matricule du mécanicien',

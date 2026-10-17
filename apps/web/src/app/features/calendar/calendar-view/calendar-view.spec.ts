@@ -27,6 +27,8 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { TONE_MAP } from '../../../core/theme/tones';
 import { CalendarSessionLayersService } from '../calendar-session-layers.service';
+import { ConjonctionDraftService } from '../../events/conjonction-draft.service';
+import { EventsApiService } from '../../events/events-api.service';
 
 const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
@@ -3933,5 +3935,713 @@ describe('CalendarView — le regroupement ne touche PAS les grilles (Story 36.1
       members: [{ userId: 'u1', pseudo: 'lea', displayName: 'Léa', joinedAt: '' }],
     });
     expect((fixture.componentInstance as any).missingByPoll()).toEqual({});
+  });
+});
+
+// ─── Le calendrier d'un groupe (Story 40.5b) ────────────────────────────────────────────────────
+
+describe('CalendarView — le calendrier d’un groupe (Story 40.5b)', () => {
+  const ME = 'me';
+  const HOST = 'host';
+  const OTHER = 'other';
+  const GROUP_PARTY = {
+    id: 'g1',
+    gameSystemId: 'ralliement',
+    kind: 'CAMPAGNE_EPISODIQUE',
+    role: 'member',
+  };
+  const JDR_PARTY = { id: 'p1', gameSystemId: 'ryuutama', kind: 'CAMPAGNE_LINEAIRE', role: 'mj' };
+
+  /** Fin du jour d'échéance (UTC), `days` jours à partir d'aujourd'hui (négatif : dépassée). */
+  function deadline(days: number): string {
+    const d = new Date(Date.now() + days * 86_400_000);
+    return `${d.toISOString().substring(0, 10)}T23:59:59.999Z`;
+  }
+
+  /** Une conjonction à sondage ouvert : 3 créneaux, 3 votants éligibles, l'hôte est `HOST`. */
+  function groupCard(over: Record<string, unknown> = {}, pollOver: Record<string, unknown> = {}) {
+    return {
+      id: 'e1',
+      title: 'Soirée plateaux',
+      hostId: HOST,
+      hostDisplayName: 'Léa',
+      seance: {
+        id: 's1',
+        date: null as string | null,
+        slot: null as string | null,
+        lieu: 'Chez Léa',
+        heureRdv: '19:30',
+        notePratique: 'Apportez à boire',
+        capacity: 6,
+        placesTaken: 2,
+      },
+      participants: [],
+      myInscription: null,
+      poll: {
+        id: 'p1',
+        expiresAt: deadline(3),
+        status: 'OPEN',
+        eligibleVoterIds: [HOST, ME, OTHER],
+        options: [
+          { id: 'o1', date: '2099-11-24', slot: 'EVENING', availableCount: 2 },
+          { id: 'o2', date: '2099-11-25', slot: 'MORNING', availableCount: 1 },
+          { id: 'o3', date: '2099-11-26', slot: 'EVENING', availableCount: 0 },
+        ],
+        votes: [
+          { optionId: 'o1', userId: HOST, answer: 'YES' },
+          { optionId: 'o1', userId: OTHER, answer: 'MAYBE' },
+          { optionId: 'o2', userId: OTHER, answer: 'NO' },
+        ],
+        ...pollOver,
+      },
+      ...over,
+    };
+  }
+
+  interface GroupOptions {
+    userId?: string;
+    party?: Record<string, unknown>;
+    events?: unknown[];
+    beforeCreate?: () => void;
+  }
+
+  async function createGroupView(opts: GroupOptions = {}) {
+    const availabilitySvc = makeAvailabilityService();
+    const authSvc = {
+      currentUser: signal<Partial<AuthUser> | null>({
+        id: opts.userId ?? ME,
+        defaultCalendarLayers: DEFAULT_CALENDAR_LAYER_KEYS,
+      }),
+    };
+    const pollSvc = makePollService();
+    const snack = makeSnackBar();
+    const dialog = makeMatDialog();
+    const partiesSvc = {
+      ...makePartiesService([]),
+      get: vi.fn().mockResolvedValue(opts.party ?? GROUP_PARTY),
+    };
+    const scenariosSvc = makeScenariosService([]);
+    const eventsApi = {
+      list: vi.fn().mockResolvedValue(opts.events ?? [groupCard()]),
+      update: vi.fn().mockResolvedValue(groupCard()),
+    };
+
+    await TestBed.configureTestingModule({
+      imports: [CalendarView],
+      providers: [
+        provideRouter([]),
+        provideAnimationsAsync(),
+        { provide: ActivatedRoute, useValue: makeActivatedRoute('g1') },
+        { provide: AvailabilityService, useValue: availabilitySvc },
+        { provide: AuthService, useValue: authSvc },
+        { provide: PartiesService, useValue: partiesSvc },
+        { provide: PollService, useValue: pollSvc },
+        { provide: MatSnackBar, useValue: snack },
+        { provide: MatDialog, useValue: dialog },
+        { provide: ScenariosService, useValue: scenariosSvc },
+        { provide: RealtimeService, useValue: makeRealtimeService() },
+        { provide: EventsApiService, useValue: eventsApi },
+        { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
+      ],
+    }).compileComponents();
+
+    const location = TestBed.inject(Location);
+    vi.spyOn(location, 'back').mockImplementation(() => {});
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const drafts = TestBed.inject(ConjonctionDraftService);
+    opts.beforeCreate?.();
+
+    const fixture = TestBed.createComponent(CalendarView);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const comp = fixture.componentInstance as any;
+    const tick = async () => {
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+    };
+    await tick();
+    return {
+      fixture,
+      comp,
+      tick,
+      pollSvc,
+      availabilitySvc,
+      partiesSvc,
+      scenariosSvc,
+      eventsApi,
+      dialog,
+      navigate,
+      drafts,
+    };
+  }
+
+  function cell(iso: string, slot: string) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return { date: new Date(y, m - 1, d), slot };
+  }
+
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
+  });
+
+  // ── Ce que la page lit ──
+
+  it('un groupe lit ses conjonctions et ne fait AUCUN appel que le serveur lui refuse', async () => {
+    const { pollSvc, scenariosSvc, partiesSvc, availabilitySvc, eventsApi } =
+      await createGroupView();
+
+    expect(eventsApi.list).toHaveBeenCalledWith('g1');
+    expect(pollSvc.getAvailableSlots).not.toHaveBeenCalled();
+    expect(pollSvc.getHeatmap).not.toHaveBeenCalled();
+    expect(scenariosSvc.listAll).not.toHaveBeenCalled();
+    expect(partiesSvc.members).not.toHaveBeenCalled();
+    // Ses propres disponibilités et couches continuent de fonctionner.
+    expect(availabilitySvc.getMyDeclarations).toHaveBeenCalled();
+  });
+
+  it('jamais de couche « disponibilité du groupe », même si le compte l’a par défaut', async () => {
+    const { comp } = await createGroupView();
+    expect(DEFAULT_CALENDAR_LAYER_KEYS).toContain('disponibilite-groupe');
+    expect(comp.availableLayerKeys()).not.toContain('disponibilite-groupe');
+    expect(comp.activeLayers()).not.toContain('disponibilite-groupe');
+    expect(comp.activeLayers()).toContain('votes-en-cours');
+    // Le défaut proposé au rétablissement est le même : l'écran n'est pas « filtré » à son arrivée.
+    expect(comp.isOverridden()).toBe(false);
+  });
+
+  it('une quête (famille JDR) garde ses lectures et ne lit jamais la liste des conjonctions', async () => {
+    const { pollSvc, scenariosSvc, eventsApi, comp } = await createGroupView({ party: JDR_PARTY });
+    expect(comp.isGroup()).toBe(false);
+    expect(pollSvc.getAvailableSlots).toHaveBeenCalled();
+    expect(pollSvc.getHeatmap).toHaveBeenCalled();
+    expect(scenariosSvc.listAll).toHaveBeenCalledWith('g1');
+    expect(eventsApi.list).not.toHaveBeenCalled();
+  });
+
+  it('une piste par créneau : compteurs, ma réponse et effectif = votants éligibles', async () => {
+    const { comp } = await createGroupView({
+      events: [
+        groupCard(
+          {},
+          {
+            votes: [
+              { optionId: 'o1', userId: HOST, answer: 'YES' },
+              { optionId: 'o1', userId: ME, answer: 'MAYBE' },
+              { optionId: 'o1', userId: OTHER, answer: 'YES' },
+              // Un ancien votant qui n'est plus éligible ne compte pas.
+              { optionId: 'o1', userId: 'parti', answer: 'YES' },
+            ],
+          },
+        ),
+      ],
+    });
+    const entries = comp.calendarEntries().filter((e: any) => e.type === 'votes-en-cours');
+    expect(entries).toHaveLength(3);
+    const first = entries.find((e: any) => e.vote.optionId === 'o1');
+    expect(first.label).toBe('Soirée plateaux');
+    expect(first.date).toBe('2099-11-24');
+    expect(first.slot).toBe('EVENING');
+    expect(first.vote).toEqual({
+      partieId: 'g1',
+      pollId: 'p1',
+      optionId: 'o1',
+      yes: 2,
+      maybe: 1,
+      no: 0,
+      total: 3,
+      myAnswer: 'MAYBE',
+    });
+  });
+
+  it('une conjonction à date fixée, un sondage clos ou sans sondage ne donne aucune piste', async () => {
+    const base = groupCard();
+    const { comp } = await createGroupView({
+      events: [
+        groupCard({ id: 'dated', seance: { ...base.seance, date: '2099-11-30', slot: 'EVENING' } }),
+        groupCard({ id: 'closed' }, { id: 'pc', status: 'CLOSED' }),
+        groupCard({ id: 'plain', poll: null }),
+      ],
+    });
+    expect(comp.groupPolls()).toEqual([]);
+    expect(comp.calendarEntries().filter((e: any) => e.type === 'votes-en-cours')).toEqual([]);
+  });
+
+  it('un échec de lecture se voit et garde le dernier état connu', async () => {
+    const { comp, fixture, eventsApi, scenariosSvc, tick } = await createGroupView();
+    expect(comp.groupPolls()).toHaveLength(1);
+
+    eventsApi.list.mockRejectedValueOnce(new Error('réseau'));
+    scenariosSvc.changed.set({ partieId: 'g1' });
+    await tick();
+
+    expect(comp.groupPolls()).toHaveLength(1);
+    const alert = fixture.nativeElement.querySelector('.calendar-error--events');
+    expect(alert?.textContent?.trim()).toBe(
+      GRIMOIRE_TONE['partie.ralliement_calendar_events_error'],
+    );
+  });
+
+  it('suit le signal temps réel des scénarios : la liste est relue, pas les scénarios', async () => {
+    const { eventsApi, scenariosSvc, tick, comp } = await createGroupView();
+    expect(eventsApi.list).toHaveBeenCalledTimes(1);
+
+    eventsApi.list.mockResolvedValueOnce([
+      groupCard({}, { votes: [{ optionId: 'o2', userId: ME, answer: 'YES' }] }),
+    ]);
+    scenariosSvc.changed.set({ partieId: 'g1' });
+    await tick();
+
+    expect(eventsApi.list).toHaveBeenCalledTimes(2);
+    expect(scenariosSvc.listAll).not.toHaveBeenCalled();
+    const mine = comp.calendarEntries().find((e: any) => e.vote?.optionId === 'o2').vote.myAnswer;
+    expect(mine).toBe('YES');
+  });
+
+  // ── Voter ──
+
+  it('un membre éligible répond : le vote part par la route partagée, puis la liste est relue', async () => {
+    const { comp, pollSvc, eventsApi, tick, fixture } = await createGroupView();
+    const anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    const vote = comp.calendarEntries().find((e: any) => e.vote?.optionId === 'o1').vote;
+
+    comp.onVoteOptionActivated({ vote, date: new Date(2099, 10, 24), slot: 'EVENING', anchor });
+    await tick();
+    expect(comp.pickerVote()).not.toBeNull();
+
+    document.body
+      .querySelector<HTMLButtonElement>('app-vote-answer-picker .opt2--answer[data-answer="YES"]')!
+      .click();
+    await tick();
+
+    expect(pollSvc.castVote).toHaveBeenCalledWith('g1', 'p1', { optionId: 'o1', answer: 'YES' });
+    expect(eventsApi.list).toHaveBeenCalledTimes(2);
+    expect(comp.pickerVote()).toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-error')).toBeNull();
+  });
+
+  it('lecture seule : un membre non éligible, ou l’échéance dépassée, n’ouvre aucun sélecteur', async () => {
+    const anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+
+    const stranger = await createGroupView({ userId: 'stranger' });
+    const vote = stranger.comp.calendarEntries().find((e: any) => e.vote?.optionId === 'o1').vote;
+    stranger.comp.onVoteOptionActivated({
+      vote,
+      date: new Date(2099, 10, 24),
+      slot: 'EVENING',
+      anchor,
+    });
+    await stranger.tick();
+    expect(stranger.comp.pickerVote()).toBeNull();
+    // Les pistes et les compteurs restent affichés, l'état est écrit.
+    expect(stranger.comp.calendarEntries().some((e: any) => e.vote?.optionId === 'o1')).toBe(true);
+    expect(
+      stranger.fixture.nativeElement.querySelector('.group-poll__state')?.textContent?.trim(),
+    ).toBe(GRIMOIRE_TONE['partie.ralliement_event_poll_not_eligible']);
+    TestBed.resetTestingModule();
+
+    const late = await createGroupView({ events: [groupCard({}, { expiresAt: deadline(-1) })] });
+    const vote2 = late.comp.calendarEntries().find((e: any) => e.vote?.optionId === 'o1').vote;
+    late.comp.onVoteOptionActivated({
+      vote: vote2,
+      date: new Date(2099, 10, 24),
+      slot: 'EVENING',
+      anchor,
+    });
+    await late.tick();
+    expect(late.comp.pickerVote()).toBeNull();
+    expect(
+      late.fixture.nativeElement.querySelector('.group-poll__state')?.textContent?.trim(),
+    ).toBe(GRIMOIRE_TONE['partie.ralliement_event_poll_ended']);
+  });
+
+  it('un membre éligible lit « Vous pouvez répondre jusqu’au … » (une seule fois le point final)', async () => {
+    const { fixture } = await createGroupView();
+    const state = fixture.nativeElement.querySelector('.group-poll__state')?.textContent?.trim();
+    expect(state).toMatch(/^Vous pouvez répondre jusqu’au .+\.$/);
+    expect(state).not.toMatch(/\.\.$/);
+  });
+
+  it.each([
+    ['2099-03-10', 'mars'],
+    ['2099-05-12', 'mai'],
+    ['2099-06-09', 'juin'],
+    ['2099-08-11', 'août'],
+  ])('mois sans point (%s) : le dernier caractère du mois n’est pas retiré', async (day, month) => {
+    const { fixture } = await createGroupView({
+      events: [groupCard({}, { expiresAt: `${day}T23:59:59.999Z` })],
+    });
+    const state = fixture.nativeElement.querySelector('.group-poll__state')?.textContent?.trim();
+    expect(state).toMatch(new RegExp(` ${Number(day.slice(8))} ${month}\\.$`));
+  });
+
+  it('le refus du serveur est écrit tel quel', async () => {
+    const { comp, pollSvc, tick, fixture } = await createGroupView();
+    const anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    pollSvc.castVote.mockRejectedValueOnce({ error: { message: 'Le vote est terminé.' } });
+    const vote = comp.calendarEntries().find((e: any) => e.vote?.optionId === 'o1').vote;
+    comp.onVoteOptionActivated({ vote, date: new Date(2099, 10, 24), slot: 'EVENING', anchor });
+    await tick();
+    document.body
+      .querySelector<HTMLButtonElement>('app-vote-answer-picker .opt2--answer[data-answer="NO"]')!
+      .click();
+    await tick();
+
+    expect(fixture.nativeElement.querySelector('.calendar-error')?.textContent?.trim()).toBe(
+      'Le vote est terminé.',
+    );
+  });
+
+  // ── Composer pour un sondage ouvert ──
+
+  it('seul l’hôte d’un sondage ouvert a le bouton « composer », écrit avec le nom de la conjonction', async () => {
+    const member = await createGroupView();
+    expect(member.fixture.nativeElement.querySelector('.compose-arm--group')).toBeNull();
+    member.comp.startGroupCompose('e1');
+    expect(member.comp.composing()).toBe(false);
+    TestBed.resetTestingModule();
+
+    const host = await createGroupView({ userId: HOST });
+    const btn = host.fixture.nativeElement.querySelector('.compose-arm--group');
+    expect(btn?.textContent?.trim()).toBe('Composer les créneaux : Soirée plateaux');
+  });
+
+  it('armer la composition part des créneaux actuels et passe en vue Semaine', async () => {
+    const { comp, fixture } = await createGroupView({ userId: HOST });
+    fixture.nativeElement.querySelector('.compose-arm--group').click();
+    fixture.detectChanges();
+
+    expect(comp.composing()).toBe(true);
+    expect(comp.composeTarget()).toEqual({ kind: 'group-poll', eventId: 'e1' });
+    expect(comp.composedCells().map((c: any) => `${c.slot}`)).toEqual([
+      'EVENING',
+      'MORNING',
+      'EVENING',
+    ]);
+    expect(comp.view()).toBe('week');
+    expect(fixture.nativeElement.querySelector('app-compose-bar')).not.toBeNull();
+    expect(comp.composeTargetLabel()).toBe('Créneaux de la conjonction : Soirée plateaux');
+  });
+
+  it('la grille s’ouvre sur le premier créneau composé, hors de la semaine affichée', async () => {
+    const { comp } = await createGroupView({ userId: HOST });
+    // Aujourd'hui n'est pas en 2099 : sans déplacement, la semaine affichée serait vide.
+    comp.startGroupCompose('e1');
+    expect(comp.sharedDate().toISOString().substring(0, 10)).toBe('2099-11-24');
+  });
+
+  it('la journée entière est refusée avec sa raison écrite ; un créneau précis est accepté', async () => {
+    const { comp, fixture } = await createGroupView({ userId: HOST });
+    comp.startGroupCompose('e1');
+    const before = comp.composedCells().length;
+
+    comp.onComposeToggled(cell('2099-11-27', 'FULL_DAY'));
+    fixture.detectChanges();
+    expect(comp.composedCells()).toHaveLength(before);
+    const refusal = fixture.nativeElement.querySelector('.calendar-error--compose');
+    expect(refusal?.textContent?.trim()).toBe(
+      GRIMOIRE_TONE['partie.ralliement_calendar_compose_full_day'],
+    );
+
+    comp.onComposeToggled(cell('2099-11-27', 'AFTERNOON'));
+    fixture.detectChanges();
+    expect(comp.composedCells()).toHaveLength(before + 1);
+    expect(fixture.nativeElement.querySelector('.calendar-error--compose')).toBeNull();
+  });
+
+  it('au moins deux créneaux, sans plafond métier', async () => {
+    const { comp } = await createGroupView({ userId: HOST });
+    comp.startGroupCompose('e1');
+    comp.composedCells.set([cell('2099-11-24', 'EVENING')]);
+    expect(comp.composeCanConfirm()).toBe(false);
+    expect(comp.composeBlockedReason()).toBe(
+      GRIMOIRE_TONE['partie.ralliement_event_poll_min_hint'],
+    );
+
+    // Bien au-delà de la borne 40 d'un vote de JDR.
+    comp.composedCells.set(
+      Array.from({ length: 60 }, (_, i) =>
+        cell(`2099-12-${String((i % 28) + 1).padStart(2, '0')}`, i < 28 ? 'MORNING' : 'EVENING'),
+      ),
+    );
+    expect(comp.composeCanConfirm()).toBe(true);
+    expect(comp.composeBlockedReason()).toBe('');
+  });
+
+  it('valider sans réponse perdue : un PATCH complet avec les autres champs de la carte, sans date ni créneau', async () => {
+    const card = groupCard({}, { votes: [] });
+    const { comp, eventsApi, dialog, tick } = await createGroupView({
+      userId: HOST,
+      events: [card],
+    });
+    comp.startGroupCompose('e1');
+    comp.onComposeToggled(cell('2099-11-27', 'AFTERNOON'));
+    await comp.confirmCompose();
+
+    expect(dialog.open).not.toHaveBeenCalled();
+    expect(eventsApi.update).toHaveBeenCalledTimes(1);
+    const [partieId, eventId, dto] = eventsApi.update.mock.calls[0];
+    expect(partieId).toBe('g1');
+    expect(eventId).toBe('e1');
+    expect(dto).toEqual({
+      title: 'Soirée plateaux',
+      lieu: 'Chez Léa',
+      heureRdv: '19:30',
+      notePratique: 'Apportez à boire',
+      capacity: 6,
+      pollOptions: [
+        { date: '2099-11-24', slot: 'EVENING' },
+        { date: '2099-11-25', slot: 'MORNING' },
+        { date: '2099-11-26', slot: 'EVENING' },
+        { date: '2099-11-27', slot: 'AFTERNOON' },
+      ],
+      pollDeadline: card.poll.expiresAt.substring(0, 10),
+    });
+    expect('date' in dto).toBe(false);
+    expect('slot' in dto).toBe(false);
+    await tick();
+    expect(comp.composing()).toBe(false);
+  });
+
+  it('retirer un créneau déjà voté avertit du nombre de réponses perdues avant d’écrire', async () => {
+    const { comp, eventsApi, dialog } = await createGroupView({ userId: HOST });
+    comp.startGroupCompose('e1');
+    // o1 porte 2 réponses (HOST oui, OTHER peut-être), o2 une (OTHER non) : on retire o1.
+    comp.onComposeToggled(cell('2099-11-24', 'EVENING'));
+
+    dialog.__result = { seanceId: null };
+    await comp.confirmCompose();
+
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    const data = dialog.open.mock.calls[0][1]!.data;
+    expect(data).toMatchObject({
+      mode: 'poll',
+      group: true,
+      slotCount: 2,
+      removedCount: 1,
+      voterCount: 2,
+    });
+    expect(eventsApi.update).toHaveBeenCalledTimes(1);
+    // Les créneaux conservés sont renvoyés tels quels : le serveur leur garde leurs réponses.
+    expect(eventsApi.update.mock.calls[0][2].pollOptions).toEqual([
+      { date: '2099-11-25', slot: 'MORNING' },
+      { date: '2099-11-26', slot: 'EVENING' },
+    ]);
+  });
+
+  it('des réponses arrivent sur un créneau retiré pendant l’avertissement : rien n’est écrit, le nouveau chiffre est redemandé', async () => {
+    const { comp, eventsApi, dialog } = await createGroupView({ userId: HOST });
+    comp.startGroupCompose('e1');
+    comp.onComposeToggled(cell('2099-11-24', 'EVENING'));
+    const base = groupCard();
+    dialog.open.mockImplementationOnce((component: unknown, config?: { data?: any }) => {
+      // Pendant que l'avertissement est lu, la liste vivante reçoit une réponse de plus sur o1.
+      comp.groupEvents.set([
+        groupCard(
+          {},
+          { votes: [...base.poll.votes, { optionId: 'o1', userId: ME, answer: 'YES' }] },
+        ),
+      ]);
+      return { component, config, afterClosed: () => of({ seanceId: null }) } as any;
+    });
+    await comp.confirmCompose();
+
+    expect(eventsApi.update).not.toHaveBeenCalled();
+    expect(comp.error()).toBe(GRIMOIRE_TONE['partie.ralliement_calendar_compose_stale_voters']);
+    expect(comp.composing()).toBe(true);
+  });
+
+  it('une modification de la carte arrivée pendant l’avertissement n’est pas écrasée : le PATCH part de la carte relue', async () => {
+    const { comp, eventsApi, dialog } = await createGroupView({ userId: HOST });
+    comp.startGroupCompose('e1');
+    comp.onComposeToggled(cell('2099-11-24', 'EVENING'));
+    const base = groupCard();
+    dialog.open.mockImplementationOnce((component: unknown, config?: { data?: any }) => {
+      comp.groupEvents.set([
+        groupCard({
+          title: 'Soirée jeux de société',
+          seance: { ...base.seance, lieu: 'Chez Max', heureRdv: '20:00', notePratique: null, capacity: 8 },
+        }),
+      ]);
+      return { component, config, afterClosed: () => of({ seanceId: null }) } as any;
+    });
+    await comp.confirmCompose();
+
+    expect(eventsApi.update).toHaveBeenCalledTimes(1);
+    expect(eventsApi.update.mock.calls[0][2]).toMatchObject({
+      title: 'Soirée jeux de société',
+      lieu: 'Chez Max',
+      heureRdv: '20:00',
+      notePratique: null,
+      capacity: 8,
+    });
+  });
+
+  it('renoncer à l’avertissement n’écrit rien et garde la composition', async () => {
+    const { comp, eventsApi, dialog } = await createGroupView({ userId: HOST });
+    comp.startGroupCompose('e1');
+    comp.onComposeToggled(cell('2099-11-24', 'EVENING'));
+    dialog.__result = null;
+    await comp.confirmCompose();
+
+    expect(eventsApi.update).not.toHaveBeenCalled();
+    expect(comp.composing()).toBe(true);
+    expect(comp.composedCells()).toHaveLength(2);
+  });
+
+  it('un 400 du serveur est écrit et la composition reste ouverte', async () => {
+    const { comp, eventsApi, fixture, tick } = await createGroupView({
+      userId: HOST,
+      events: [groupCard({}, { votes: [] })],
+    });
+    comp.startGroupCompose('e1');
+    comp.onComposeToggled(cell('2099-11-27', 'AFTERNOON'));
+    eventsApi.update.mockRejectedValueOnce({
+      error: { message: 'Un sondage de dates demande au moins deux créneaux.' },
+    });
+    await comp.confirmCompose();
+    await tick();
+
+    expect(comp.composing()).toBe(true);
+    expect(fixture.nativeElement.querySelector('.calendar-error')?.textContent?.trim()).toBe(
+      'Un sondage de dates demande au moins deux créneaux.',
+    );
+  });
+
+  it('le sondage devient une date fixée en cours de composition : le mode se ferme', async () => {
+    const { comp, eventsApi, scenariosSvc, tick } = await createGroupView({ userId: HOST });
+    comp.startGroupCompose('e1');
+    expect(comp.composing()).toBe(true);
+
+    const base = groupCard();
+    eventsApi.list.mockResolvedValueOnce([
+      groupCard({ seance: { ...base.seance, date: '2099-11-24', slot: 'EVENING' } }),
+    ]);
+    scenariosSvc.changed.set({ partieId: 'g1' });
+    await tick();
+
+    expect(comp.composing()).toBe(false);
+    expect(comp.composeTarget()).toBeNull();
+  });
+
+  // ── Route réutilisée par Angular sur un simple changement de :id ──
+
+  it('un autre :id (quête) pendant une composition : le groupe est oublié, la composition fermée', async () => {
+    const { comp, partiesSvc, eventsApi, tick } = await createGroupView({ userId: HOST });
+    comp.startGroupCompose('e1');
+    expect(comp.composing()).toBe(true);
+    expect(comp.groupPolls()).toHaveLength(1);
+
+    partiesSvc.get.mockResolvedValue(JDR_PARTY);
+    (TestBed.inject(ActivatedRoute) as any).paramMap.next(convertToParamMap({ id: 'p1' }));
+    await tick();
+
+    expect(comp.isGroup()).toBe(false);
+    expect(comp.composing()).toBe(false);
+    expect(comp.groupPolls()).toEqual([]);
+    expect(eventsApi.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('un autre :id (autre groupe) : conjonctions relues pour lui, composition fermée', async () => {
+    const { comp, eventsApi, tick } = await createGroupView({ userId: HOST });
+    comp.startGroupCompose('e1');
+    eventsApi.list.mockResolvedValue([groupCard({ id: 'e2', title: 'Autre groupe' }, { id: 'p2' })]);
+    (TestBed.inject(ActivatedRoute) as any).paramMap.next(convertToParamMap({ id: 'g2' }));
+    await tick();
+
+    expect(eventsApi.list).toHaveBeenLastCalledWith('g2');
+    expect(comp.isGroup()).toBe(true);
+    expect(comp.composing()).toBe(false);
+    expect(comp.groupPolls().map((e: any) => e.card.id)).toEqual(['e2']);
+  });
+
+  // ── Aller-retour de la fenêtre de création ──
+
+  const DRAFT = {
+    partieId: 'g1',
+    title: 'Brunch du dimanche',
+    pollOptions: [
+      { date: '2099-11-24', slot: 'EVENING' as const },
+      { date: '2099-11-25', slot: 'MORNING' as const },
+    ],
+    pollDeadline: '2099-11-20',
+    lieu: 'Parc',
+    heureRdv: '11:00',
+    notePratique: '',
+    participation: 'all' as const,
+    places: 4,
+    reserved: [],
+  };
+  const sendDraft = () => TestBed.inject(ConjonctionDraftService).beginCompose(DRAFT);
+
+  it('la fenêtre de création envoie son brouillon : composition d’une nouvelle conjonction, sans appel au serveur', async () => {
+    const { comp, eventsApi, fixture } = await createGroupView({ beforeCreate: sendDraft });
+
+    expect(comp.composing()).toBe(true);
+    expect(comp.composeTarget()).toEqual({ kind: 'group-new' });
+    expect(comp.composedCells()).toHaveLength(2);
+    // Vue Mois par défaut sur ordinateur : armer passe en Semaine, sur le premier créneau du brouillon.
+    expect(comp.view()).toBe('week');
+    expect(comp.sharedDate().toISOString().substring(0, 10)).toBe('2099-11-24');
+    expect(comp.composeTargetLabel()).toBe(
+      GRIMOIRE_TONE['partie.ralliement_calendar_compose_target_new'],
+    );
+    expect(fixture.nativeElement.querySelector('app-compose-bar')).not.toBeNull();
+    expect(eventsApi.update).not.toHaveBeenCalled();
+  });
+
+  it('valider : les créneaux rejoignent le brouillon, retour à la page du groupe', async () => {
+    const { comp, navigate, drafts, eventsApi, dialog } = await createGroupView({
+      beforeCreate: sendDraft,
+    });
+    comp.onComposeToggled(cell('2099-11-26', 'AFTERNOON'));
+    await comp.confirmCompose();
+
+    expect(eventsApi.update).not.toHaveBeenCalled();
+    expect(dialog.open).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenLastCalledWith(['/parties', 'g1'], { replaceUrl: true });
+    expect(comp.composing()).toBe(false);
+    const back = drafts.takeReopen('g1');
+    expect(back?.title).toBe('Brunch du dimanche');
+    expect(back?.pollOptions).toEqual([
+      { date: '2099-11-24', slot: 'EVENING' },
+      { date: '2099-11-25', slot: 'MORNING' },
+      { date: '2099-11-26', slot: 'AFTERNOON' },
+    ]);
+  });
+
+  it('annuler (ou « Retour ») : le brouillon revient intact', async () => {
+    const first = await createGroupView({ beforeCreate: sendDraft });
+    first.comp.onComposeToggled(cell('2099-11-26', 'AFTERNOON'));
+    first.comp.cancelCompose();
+    expect(first.navigate).toHaveBeenLastCalledWith(['/parties', 'g1'], { replaceUrl: true });
+    expect(first.drafts.takeReopen('g1')?.pollOptions).toEqual(DRAFT.pollOptions);
+    TestBed.resetTestingModule();
+
+    const second = await createGroupView({ beforeCreate: sendDraft });
+    second.comp.goBack();
+    expect(second.navigate).toHaveBeenLastCalledWith(['/parties', 'g1'], { replaceUrl: true });
+    expect(second.drafts.takeReopen('g1')?.title).toBe('Brunch du dimanche');
+  });
+
+  it('quitter la page en pleine composition (retour du navigateur) rend le brouillon : la fenêtre de création le retrouvera', async () => {
+    const { fixture, drafts } = await createGroupView({ beforeCreate: sendDraft });
+    expect(drafts.takeReopen('g1')).toBeNull();
+
+    fixture.destroy();
+
+    expect(drafts.takeReopen('g1')?.title).toBe('Brunch du dimanche');
+  });
+
+  it('sans brouillon en attente, la page ne compose rien d’elle-même', async () => {
+    const { comp } = await createGroupView();
+    expect(comp.composing()).toBe(false);
   });
 });

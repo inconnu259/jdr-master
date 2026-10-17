@@ -1017,6 +1017,21 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_event_poll_ends_today',
     'partie.ralliement_event_poll_ends_tomorrow',
     'partie.ralliement_event_poll_ends_in_days',
+    // Story 40.5b : calendrier du groupe — liens et boutons verbatim du contrat d’UI (« Calendrier du
+    // groupe », « Choisir les créneaux dans le calendrier », « Voter dans le calendrier », « Composer
+    // les créneaux »), titre du panneau des votes et unités de l’avertissement de retrait de créneaux
+    'partie.ralliement_calendar_link',
+    'partie.ralliement_event_poll_calendar_btn',
+    'partie.ralliement_event_vote_in_calendar_btn',
+    'partie.ralliement_event_compose_in_calendar_btn',
+    'partie.ralliement_calendar_polls_heading',
+    'partie.ralliement_calendar_confirm_slots_one',
+    'partie.ralliement_calendar_confirm_slots_many',
+    'partie.ralliement_calendar_confirm_responses_one',
+    'partie.ralliement_calendar_confirm_responses_many',
+    'partie.ralliement_calendar_confirm_summary_one',
+    'partie.ralliement_calendar_confirm_summary_many',
+    'partie.ralliement_calendar_confirm_note',
     // Gabarits structurels et libellés techniques
     'partie.signal_more_count',
     'parties.detail_link_expires_short',
@@ -1612,6 +1627,67 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     }
     for (const key of Object.keys(TONE_MAP['grimoire-emeraude']).filter((k) =>
       k.startsWith('partie.ralliement_event_poll_'),
+    )) {
+      for (const theme of THEMES) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).not.toMatch(NON_JDR_BANNED_WORDS);
+      }
+    }
+  });
+
+  // Story 40.5b : le calendrier du groupe. Les liens et boutons du contrat d'UI sont identiques dans les
+  // trois thèmes ; le nom de la rencontre, le tutoiement et les raisons du mode « composer » ont une
+  // voix. Aucun mot de JDR.
+  it('Story 40.5b : le calendrier du groupe garde les mots du contrat et prend la voix du thème, sans mot de JDR', () => {
+    const neutres: Record<string, string> = {
+      'partie.ralliement_calendar_link': 'Calendrier du groupe',
+      'partie.ralliement_event_poll_calendar_btn': 'Choisir les créneaux dans le calendrier',
+      'partie.ralliement_event_vote_in_calendar_btn': 'Voter dans le calendrier',
+      'partie.ralliement_event_compose_in_calendar_btn': 'Composer les créneaux',
+    };
+    for (const [key, attendu] of Object.entries(neutres)) {
+      for (const theme of THEMES) expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(attendu);
+    }
+    const voix = [
+      'partie.ralliement_calendar_compose_target_poll',
+      'partie.ralliement_calendar_compose_target_new',
+      'partie.ralliement_calendar_compose_full_day',
+      'partie.ralliement_calendar_compose_save_error',
+      'partie.ralliement_calendar_compose_stale_voters',
+      'partie.ralliement_calendar_events_error',
+      'partie.ralliement_calendar_polls_empty',
+      'partie.ralliement_calendar_confirm_title',
+      'partie.ralliement_calendar_confirm_warning_one',
+      'partie.ralliement_calendar_confirm_warning_many',
+    ];
+    for (const key of voix) {
+      const valeurs = THEMES.map((theme) => TONE_MAP[theme][key]);
+      expect(new Set(valeurs).size, key).toBe(THEMES.length);
+    }
+    // Les trous des gabarits du mode « composer » et du panneau des votes.
+    for (const theme of THEMES) {
+      const tone = TONE_MAP[theme];
+      expect(tone['partie.ralliement_calendar_compose_arm'], theme).toContain('{title}');
+      expect(tone['partie.ralliement_calendar_compose_target_poll'], theme).toContain('{title}');
+      expect(tone['partie.ralliement_calendar_poll_can_vote'], theme).toContain('{date}');
+      expect(tone['partie.ralliement_calendar_confirm_warning_many'], theme).toMatch(
+        /{slots}.*{votes}/,
+      );
+    }
+    // La raison du refus d'une journée entière nomme les trois créneaux permis.
+    for (const theme of THEMES) {
+      const raison = TONE_MAP[theme]['partie.ralliement_calendar_compose_full_day'];
+      expect(raison, theme).toMatch(/matin/);
+      expect(raison, theme).toMatch(/après-midi/);
+      expect(raison, theme).toMatch(/soir/);
+    }
+    for (const key of Object.keys(TONE_MAP['grimoire-emeraude']).filter(
+      (k) =>
+        k.startsWith('partie.ralliement_calendar_') ||
+        [
+          'partie.ralliement_event_poll_calendar_btn',
+          'partie.ralliement_event_vote_in_calendar_btn',
+          'partie.ralliement_event_compose_in_calendar_btn',
+        ].includes(k),
     )) {
       for (const theme of THEMES) {
         expect(TONE_MAP[theme][key], `${theme} / ${key}`).not.toMatch(NON_JDR_BANNED_WORDS);

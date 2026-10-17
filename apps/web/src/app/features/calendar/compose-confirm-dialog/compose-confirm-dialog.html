@@ -2,7 +2,7 @@
   @if (data.mode === 'new') {
     {{ theme.tone()['common.lancer_le_vote'] }}
   } @else {
-    {{ theme.tone()['calendar.compose_confirm_title_modify'] }}
+    {{ modifyTitle() }}
   }
 </h2>
 
@@ -31,7 +31,7 @@
     <!-- AC6 : l'avertissement précède l'écriture et NOMME le nombre de réponses supprimées. -->
     <p class="compose-confirm__warning" role="alert">{{ warning() }}</p>
     <p class="compose-confirm__note">
-      {{ theme.tone()['calendar.compose_confirm_note'] }}
+      {{ note() }}
     </p>
   }
 </mat-dialog-content>

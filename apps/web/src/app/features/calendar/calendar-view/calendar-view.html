@@ -11,6 +11,15 @@
     @if (error()) {
       <p class="calendar-error" role="alert">{{ error() }}</p>
     }
+    <!-- Story 40.5b — la lecture des conjonctions d'un groupe a échoué : le dernier état connu reste
+         affiché, l'échec se voit. -->
+    @if (groupEventsError()) {
+      <p class="calendar-error calendar-error--events" role="alert">{{ groupEventsError() }}</p>
+    }
+    <!-- Story 40.5b — pourquoi un créneau n'a pas été désigné (journée entière) : écrit, jamais muet. -->
+    @if (composeRefusal()) {
+      <p class="calendar-error calendar-error--compose" role="alert">{{ composeRefusal() }}</p>
+    }
     <div class="calendar-controls">
       <!-- Story 36.14, AC1 — ⚠️ REMPLACE la bande de chips permanente de la story 30.6. Cinq
            chips plus la chip Destinée ne tenaient pas sur une ligne : la barre passait à DEUX
@@ -72,6 +81,22 @@
         <button type="button" class="compose-arm" (click)="startCompose()">
           {{ theme.tone()['calendar.view_compose_arm'] }}
         </button>
+      }
+
+      <!-- Story 40.5b — l'hôte d'un sondage ouvert arme la composition de SES créneaux : un bouton écrit
+           par sondage dont il est l'hôte (jamais une icône seule). Même frère de la Destinée que ci-dessus. -->
+      @if (isGroup() && !composing()) {
+        @for (row of groupPollRows(); track row.eventId) {
+          @if (row.canCompose) {
+            <button
+              type="button"
+              class="compose-arm compose-arm--group"
+              (click)="startGroupCompose(row.eventId)"
+            >
+              {{ row.armLabel }}
+            </button>
+          }
+        }
       }
 
       <!-- AC1 — la bascule de vues PARTAGE cette ligne ; elle formait auparavant un bloc centré
@@ -263,7 +288,7 @@
          lisible sans elle » suppose de pouvoir la lire EN REGARDANT la grille
          [Source: DESIGN.md:390]. Fermée par défaut ; son seul réglage est dans le panneau. -->
     @if (legendVisible()) {
-      <app-calendar-legend [partieContext]="!!partieId()" />
+      <app-calendar-legend [partieContext]="!!partieId() && !isGroup()" />
     }
   </div>
 
@@ -352,7 +377,32 @@
     </div>
   }
 
-  @if (!isMjMode() && partieId()) {
+  <!-- Story 40.5b — le calendrier d'un GROUPE : les votes de dates de ses conjonctions, chacun avec
+       l'état du vote en toutes lettres (on peut répondre jusqu'au…, ou lecture seule et pourquoi).
+       Ni plage de dates, ni créneaux calculés : le serveur les refuse à un groupe. -->
+  @if (isGroup()) {
+    <section class="guild-slots-panel group-polls" aria-labelledby="group-polls-title">
+      <h2 class="group-polls__title" id="group-polls-title">
+        {{ theme.tone()['partie.ralliement_calendar_polls_heading'] }}
+      </h2>
+      @if (groupPollRows().length === 0) {
+        <p class="hint group-polls__empty">
+          {{ theme.tone()['partie.ralliement_calendar_polls_empty'] }}
+        </p>
+      } @else {
+        <ul class="group-polls__list">
+          @for (row of groupPollRows(); track row.eventId) {
+            <li class="group-poll">
+              <p class="group-poll__title">{{ row.title }}</p>
+              <p class="group-poll__state">{{ row.state }}</p>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+
+  @if (!isMjMode() && partieId() && groupResolved() && !isGroup()) {
     <div class="guild-slots-panel">
       <!-- ⚠️ Story 36.7, AC3 — `<app-poll-response>` a été RETIRÉ d'ici, et d'ici seulement.
            Il portait le « second chemin de retrait » que l'AC3 interdit dans le calendrier

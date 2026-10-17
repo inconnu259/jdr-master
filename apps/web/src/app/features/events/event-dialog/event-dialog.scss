@@ -239,6 +239,12 @@
   overflow-wrap: anywhere;
 }
 
+/* Story 40.5b — liens écrits vers le calendrier du groupe, sous le résumé du sondage. */
+.ed__poll-calendar {
+  min-height: 44px;
+  margin: 8px 8px 0 0;
+}
+
 /* Fiche : chaque créneau candidat et le nombre d'inscrits libres. */
 .ed__slot-list {
   display: grid;

@@ -105,3 +105,44 @@ describe('ComposeConfirmDialog — textes du registre (Story 35.2)', () => {
     expect(el.querySelector('.compose-confirm__warning')).toBeNull();
   });
 });
+
+// Story 40.5b — la conjonction d'un groupe : mêmes questions, mots du groupe (créneaux, jamais « séance »).
+describe('ComposeConfirmDialog — conjonction d’un groupe (Story 40.5b)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('l’avertissement nomme les créneaux et les réponses perdus avec les textes du groupe', async () => {
+    const el = await createComponent(makeData({ group: true, removedCount: 2, voterCount: 4 }));
+
+    expect(text(el, 'h2')).toBe(GRIMOIRE_TONE['partie.ralliement_calendar_confirm_title']);
+    expect(text(el, '.compose-confirm__warning')).toBe(
+      fillTone(GRIMOIRE_TONE['partie.ralliement_calendar_confirm_warning_many'], {
+        slots: fillTone(GRIMOIRE_TONE['partie.ralliement_calendar_confirm_slots_many'], { n: 2 }),
+        votes: fillTone(GRIMOIRE_TONE['partie.ralliement_calendar_confirm_responses_many'], { n: 4 }),
+      }),
+    );
+    expect(text(el, '.compose-confirm__note')).toBe(
+      GRIMOIRE_TONE['partie.ralliement_calendar_confirm_note'],
+    );
+  });
+
+  it('singulier et résumé accordés en nombre', async () => {
+    const el = await createComponent(
+      makeData({ group: true, slotCount: 1, removedCount: 1, voterCount: 1 }),
+    );
+    expect(text(el, '.compose-confirm__warning')).toBe(
+      fillTone(GRIMOIRE_TONE['partie.ralliement_calendar_confirm_warning_one'], {
+        slots: fillTone(GRIMOIRE_TONE['partie.ralliement_calendar_confirm_slots_one'], { n: 1 }),
+        votes: fillTone(GRIMOIRE_TONE['partie.ralliement_calendar_confirm_responses_one'], { n: 1 }),
+      }),
+    );
+    expect(text(el, '.compose-confirm__summary')).toBe(
+      fillTone(GRIMOIRE_TONE['partie.ralliement_calendar_confirm_summary_one'], { n: 1 }),
+    );
+  });
+
+  it('sans l’indicateur de groupe, les textes du JDR ne changent pas', async () => {
+    const el = await createComponent(makeData());
+    expect(text(el, 'h2')).toBe(GRIMOIRE_TONE['calendar.compose_confirm_title_modify']);
+    expect(text(el, '.compose-confirm__note')).toBe(GRIMOIRE_TONE['calendar.compose_confirm_note']);
+  });
+});

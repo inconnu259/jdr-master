@@ -64,6 +64,11 @@ let nextUid = 0;
  * pastille pointillée — une action « Retirer la réservation ». Les membres du groupe sont lus une seule
  * fois, à l'ouverture.
  *
+ * Story 40.5b : le panneau du sondage offre un lien écrit vers le calendrier du groupe — « Voter dans le
+ * calendrier » à un votant éligible tant que le vote est ouvert, « Composer les créneaux » à l'hôte d'un
+ * sondage ouvert. Ni l'un ni l'autre ne vote ni ne compose ici : la fenêtre demande à l'onglet
+ * (`calendarRequested`) d'ouvrir la page, sans viser un vote en particulier (c'est le Palier 10.4).
+ *
  * La carte vient de la liste vivante de l'onglet (lue par identifiant) : toute mise à jour reçue en
  * temps réel se reflète ici sans rechargement. « Modifier » bascule la MÊME fenêtre en mode édition
  * (les champs de la création, via `EventForm`), pied « Renoncer » · « Enregistrer » ; le refus du
@@ -90,6 +95,8 @@ export class EventDialog {
    *  l'onglet la met à jour tout de suite. */
   readonly saved = output<EventCardDto>();
   readonly closed = output<void>();
+  /** Story 40.5b : la personne veut voter ou composer ses créneaux dans le calendrier du groupe. */
+  readonly calendarRequested = output<void>();
 
   protected readonly uid = `event-dialog-${++nextUid}`;
   private readonly form = viewChild(EventForm);
@@ -156,6 +163,15 @@ export class EventDialog {
     pollPanel(this.card(), this.currentUserId(), this.todayKey(), this.theme.tone(), (id) =>
       this.nameOf(id),
     ),
+  );
+  /** Story 40.5b : « Voter dans le calendrier » — un votant éligible, tant que le vote est ouvert. */
+  protected readonly showVoteInCalendar = computed(() => {
+    const p = this.poll();
+    return !!p && (p.kind === 'member-todo' || p.kind === 'member-done') && !p.ended;
+  });
+  /** Story 40.5b : « Composer les créneaux » — l'hôte d'un sondage ouvert. */
+  protected readonly showComposeInCalendar = computed(
+    () => this.poll()?.kind === 'host' && this.card().poll?.status === 'OPEN',
   );
   /** Créneaux candidats de la fiche, avec le nombre d'inscrits libres sur chacun. */
   protected readonly slotRows = computed(() => pollSlotRows(this.card(), this.theme.tone()));

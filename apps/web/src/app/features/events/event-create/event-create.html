@@ -12,7 +12,13 @@
     {{ theme.tone()['partie.ralliement_event_create_title'] }}
   </h2>
 
-  <app-event-form [members]="members()" [hostId]="hostId()" (submitted)="submit()" />
+  <app-event-form
+    [members]="members()"
+    [hostId]="hostId()"
+    [draft]="draft()"
+    (submitted)="submit()"
+    (composeRequested)="pickInCalendar()"
+  />
 
 
   <div detail-footer class="ec__footer">

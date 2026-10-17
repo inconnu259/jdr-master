@@ -3,6 +3,7 @@ import {
   DestroyRef,
   ElementRef,
   Injector,
+  OnInit,
   afterNextRender,
   computed,
   effect,
@@ -13,11 +14,13 @@ import {
   untracked,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { Router, RouterLink } from '@angular/router';
 import type { EventCardDto } from '@master-jdr/shared';
 import { AuthService } from '../../../core/auth/auth.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { toDateKey } from '../../calendar/day-detail.utils';
+import { ConjonctionDraftService, type ConjonctionDraft } from '../conjonction-draft.service';
 import { EventCard } from '../event-card/event-card';
 import { splitEvents } from '../event-card.util';
 import { EventCreate } from '../event-create/event-create';
@@ -42,6 +45,12 @@ import { EventsApiService } from '../events-api.service';
  * Rechargement protégé : compteur de requêtes (une réponse périmée n'écrase pas une plus fraîche) et
  * dernier état connu conservé sur un échec transitoire (jamais de `.set([])`).
  *
+ * Story 40.5b : l'en-tête porte le lien « Calendrier du groupe » (écrit, jamais une icône seule) ; la
+ * fenêtre de détail y envoie aussi (« Voter dans le calendrier », « Composer les créneaux ») en REMPLAÇANT
+ * l'entrée d'historique qu'elle avait poussée, pour qu'un retour arrière revienne à la liste sans fenêtre
+ * fantôme. Au retour de l'aller-retour « Choisir les créneaux dans le calendrier », la fenêtre de création
+ * se rouvre avec son brouillon (`ConjonctionDraftService`, à usage unique).
+ *
  * `countChange` remonte le nombre réel de conjonctions du groupe (passées comprises) — l'avertissement
  * du dernier administrateur (Story 39.4) le cite.
  */
@@ -50,15 +59,17 @@ const HISTORY_KEY = 'conjonctionDialog';
 
 @Component({
   selector: 'app-conjonctions-tab',
-  imports: [MatButtonModule, EventCard, EventCreate, EventDialog],
+  imports: [MatButtonModule, RouterLink, EventCard, EventCreate, EventDialog],
   templateUrl: './conjonctions-tab.html',
   styleUrl: './conjonctions-tab.scss',
 })
-export class ConjonctionsTab {
+export class ConjonctionsTab implements OnInit {
   protected readonly theme = inject(ThemeToneService);
   private readonly api = inject(EventsApiService);
   private readonly parties = inject(PartiesService);
   private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+  private readonly drafts = inject(ConjonctionDraftService);
 
   readonly partieId = input.required<string>();
   readonly countChange = output<number>();
@@ -67,6 +78,8 @@ export class ConjonctionsTab {
   protected readonly loaded = signal(false);
   protected readonly loadError = signal(false);
   protected readonly creating = signal(false);
+  /** Story 40.5b : brouillon rendu par le calendrier du groupe, que la fenêtre de création restaure. */
+  protected readonly creationDraft = signal<ConjonctionDraft | null>(null);
   /** Conjonction dont la fenêtre est ouverte (Story 40.2) ; sa carte est relue dans `events`. */
   protected readonly selectedId = signal<string | null>(null);
 
@@ -121,6 +134,16 @@ export class ConjonctionsTab {
     });
   }
 
+  ngOnInit(): void {
+    // Retour du calendrier du groupe (« Choisir les créneaux dans le calendrier ») : la fenêtre de
+    // création se rouvre avec ce que la personne y avait saisi, créneaux choisis compris.
+    const draft = this.drafts.takeReopen(this.partieId());
+    if (draft) {
+      this.creationDraft.set(draft);
+      this.creating.set(true);
+    }
+  }
+
   /** Ouvre la fenêtre de la carte `card` (clic ou Entrée) : une entrée d'historique, même URL. */
   protected openDialog(card: EventCardDto, trigger: HTMLElement): void {
     this.trigger = trigger;
@@ -151,6 +174,15 @@ export class ConjonctionsTab {
     await this.reload(this.partieId());
   }
 
+  /** Story 40.5b : la fenêtre de détail envoie vers le calendrier du groupe. L'entrée d'historique poussée
+   *  à l'ouverture est REMPLACÉE par le calendrier (et non laissée derrière) : un retour arrière ramène à
+   *  la liste, sans fenêtre fantôme ni second retour à faire. */
+  protected openCalendar(): void {
+    this.pushed = false;
+    window.removeEventListener('popstate', this.onPopState);
+    void this.router.navigate(['/parties', this.partieId(), 'guild-calendar'], { replaceUrl: true });
+  }
+
   private dismiss(): void {
     window.removeEventListener('popstate', this.onPopState);
     const id = this.selectedId();
@@ -179,12 +211,16 @@ export class ConjonctionsTab {
 
   protected closeCreate(): void {
     this.creating.set(false);
+    this.creationDraft.set(null);
+    this.drafts.clear();
   }
 
   /** Conjonction créée : la fenêtre se referme, la carte apparaît tout de suite (puis la liste est
    *  relue — les autres membres la reçoivent par le signal temps réel). */
   protected async onCreated(card: EventCardDto): Promise<void> {
     this.creating.set(false);
+    this.creationDraft.set(null);
+    this.drafts.clear();
     if (!this.events().some((e) => e.id === card.id)) {
       this.events.update((list) => [...list, card]);
       this.countChange.emit(this.events().length);

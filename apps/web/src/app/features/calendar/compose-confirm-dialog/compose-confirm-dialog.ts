@@ -26,6 +26,9 @@ export interface ComposeConfirmData {
   /** Mode `new` : les séances éligibles. Jamais vide — sans séance, la validation n'est pas
    *  proposée du tout (AC11). */
   seances: ComposeSeanceChoice[];
+  /** Story 40.5b : conjonction d'un groupe — mêmes questions, avec les mots du groupe (créneaux, pas
+   *  de séance). Absent pour un vote de JDR, dont les textes ne changent pas. */
+  group?: boolean;
 }
 
 /**
@@ -41,6 +44,9 @@ export interface ComposeConfirmData {
  *   supprimée — le premier geste redevient la grille, ce que FR-52 demande.
  * - **Modifier** (`mode: 'poll'`) — avertir AVANT, en nommant le nombre de votants concernés,
  *   et laisser renoncer (AC6, Q-22). Retirer une option supprime les réponses qu'elle portait.
+ *
+ * Story 40.5b : pour la conjonction d'un groupe (`data.group`), seule la face « modifier » existe (la
+ * création n'écrit rien avant la fenêtre de création) ; les textes viennent des clés `ralliement`.
  *
  * Il n'écrit rien : il rend une décision à `CalendarView`, qui émet l'unique appel.
  */
@@ -63,6 +69,20 @@ export class ComposeConfirmDialog {
     this.data.seances.length === 1 ? this.data.seances[0].seanceId : null,
   );
 
+  /** Clé de texte selon l'origine : JDR (`calendar.compose_confirm_*`) ou groupe. */
+  protected tk(suffix: string): string {
+    return this.data.group
+      ? `partie.ralliement_calendar_confirm_${suffix}`
+      : `calendar.compose_confirm_${suffix}`;
+  }
+
+  /** Titre de la face « modifier ». */
+  protected readonly modifyTitle = computed(
+    () => this.theme.tone()[this.data.group ? this.tk('title') : this.tk('title_modify')],
+  );
+  /** Note sous l'avertissement : les réponses des créneaux conservés ne sont pas touchées. */
+  protected readonly note = computed(() => this.theme.tone()[this.tk('note')]);
+
   protected readonly canConfirm = computed(
     () => this.data.mode === 'poll' || this.seanceId() !== null,
   );
@@ -71,18 +91,9 @@ export class ComposeConfirmDialog {
   protected readonly warning = computed(() => {
     const { removedCount, voterCount } = this.data;
     const tone = this.theme.tone();
-    const slotsKey =
-      removedCount > 1
-        ? 'calendar.compose_confirm_slots_many'
-        : 'calendar.compose_confirm_slots_one';
-    const votesKey =
-      voterCount > 1
-        ? 'calendar.compose_confirm_responses_many'
-        : 'calendar.compose_confirm_responses_one';
-    const warningKey =
-      voterCount > 1
-        ? 'calendar.compose_confirm_warning_many'
-        : 'calendar.compose_confirm_warning_one';
+    const slotsKey = this.tk(removedCount > 1 ? 'slots_many' : 'slots_one');
+    const votesKey = this.tk(voterCount > 1 ? 'responses_many' : 'responses_one');
+    const warningKey = this.tk(voterCount > 1 ? 'warning_many' : 'warning_one');
     return fillTone(tone[warningKey], {
       slots: fillTone(tone[slotsKey], { n: removedCount }),
       votes: fillTone(tone[votesKey], { n: voterCount }),
@@ -92,10 +103,7 @@ export class ComposeConfirmDialog {
   /** Nombre de créneaux que la composition va poser, accordé en nombre. */
   protected readonly summary = computed(() => {
     const { slotCount } = this.data;
-    const key =
-      slotCount > 1
-        ? 'calendar.compose_confirm_summary_many'
-        : 'calendar.compose_confirm_summary_one';
+    const key = this.tk(slotCount > 1 ? 'summary_many' : 'summary_one');
     return fillTone(this.theme.tone()[key], { n: slotCount });
   });
 

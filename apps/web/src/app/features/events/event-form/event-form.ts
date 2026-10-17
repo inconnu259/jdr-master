@@ -14,6 +14,7 @@ import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { fillTone } from '../../../core/theme/tone-format';
 import { SLOT_LABELS } from '../../calendar/agenda-badge.utils';
 import { toDateKey } from '../../calendar/day-detail.utils';
+import type { ConjonctionDraft } from '../conjonction-draft.service';
 import { pollSlotLabel, pollSummaryLabel } from '../event-card.util';
 
 /** Nombre de places proposé par défaut quand on passe à « Places limitées » (hôte compris). */
@@ -53,6 +54,11 @@ let nextUid = 0;
  * conjonction) ; la liste des créneaux et l'échéance se corrigent. Les créneaux sont choisis ici, dans
  * la fenêtre — le calendrier du groupe est l'objet de la Story 40.5b.
  *
+ * Story 40.5b : à la création en mode sondage, « Choisir les créneaux dans le calendrier » demande au
+ * parent (`composeRequested`) d'ouvrir le calendrier du groupe ; `draft` restaure, au retour, ce que la
+ * fenêtre contenait (lu une seule fois, comme `prefill`) et `snapshot()` en donne l'instantané. La
+ * liste des créneaux de la fenêtre reste : les deux chemins alimentent les mêmes créneaux.
+ *
  * Rendu des champs seulement : le parent tient le pied (boutons, double envoi, refus du serveur) et
  * lit `dto()` / `valid()` par `viewChild`. `prefill` pré-remplit le formulaire d'une conjonction
  * existante (lu une seule fois à l'initialisation). Le serveur reste juge de toutes les règles.
@@ -70,6 +76,10 @@ export class EventForm implements OnInit {
   readonly prefill = input<EventCardDto | null>(null);
   /** Entrée dans un champ : le parent soumet (comme un bouton « Enregistrer »). */
   readonly submitted = output<void>();
+  /** Story 40.5b : brouillon restauré au retour du calendrier (création seulement, lu une fois). */
+  readonly draft = input<ConjonctionDraft | null>(null);
+  /** Story 40.5b : la personne veut choisir ses créneaux dans le calendrier du groupe. */
+  readonly composeRequested = output<void>();
   /** Story 40.4 : membres du groupe à qui l'hôte peut réserver une place (création seulement). */
   readonly members = input<PartieMemberDto[]>([]);
   /** Story 40.4 : l'hôte (la personne connectée), exclu du sélecteur — il occupe déjà une place. */
@@ -167,6 +177,8 @@ export class EventForm implements OnInit {
   }));
 
   ngOnInit(): void {
+    const draft = this.draft();
+    if (draft && this.prefill() === null) this.restore(draft);
     const card = this.prefill();
     if (!card) return;
     const seance = card.seance;
@@ -189,6 +201,41 @@ export class EventForm implements OnInit {
       this.places.set(Math.max(MIN_PLACES, seance.capacity));
     }
   }
+
+  /** Story 40.5b : remet dans les champs ce que la fenêtre contenait avant le détour par le calendrier. */
+  private restore(draft: ConjonctionDraft): void {
+    this.mode.set('poll');
+    this.title.set(draft.title);
+    this.pollOptions.set(sortSlots(draft.pollOptions));
+    this.pollDeadline.set(draft.pollDeadline);
+    this.lieu.set(draft.lieu);
+    this.heureRdv.set(draft.heureRdv);
+    this.notePratique.set(draft.notePratique);
+    this.participation.set(draft.participation);
+    this.places.set(Math.max(MIN_PLACES, draft.places));
+    this.reserved.set(draft.participation === 'limited' ? [...draft.reserved] : []);
+  }
+
+  /** Story 40.5b : instantané des champs, pour le brouillon qui fait l'aller-retour par le calendrier.
+   *  Textes bruts (rien n'est nettoyé ni validé) : la fenêtre les retrouve à l'identique. */
+  snapshot(partieId: string): ConjonctionDraft {
+    return {
+      partieId,
+      title: this.title(),
+      pollOptions: this.pollOptions().map((o) => ({ date: o.date, slot: o.slot })),
+      pollDeadline: this.pollDeadline(),
+      lieu: this.lieu(),
+      heureRdv: this.heureRdv(),
+      notePratique: this.notePratique(),
+      participation: this.participation(),
+      places: this.places(),
+      reserved: [...this.reserved()],
+    };
+  }
+
+  /** Story 40.5b : le chemin « calendrier » n'est offert qu'à la création (la fenêtre de détail a le
+   *  sien : « Composer les créneaux »). */
+  protected readonly canPickInCalendar = computed(() => this.prefill() === null);
 
   /** Story 40.5 : à la création seulement ; à la modification le mode de la conjonction est figé. */
   protected setMode(value: 'fixed' | 'poll'): void {

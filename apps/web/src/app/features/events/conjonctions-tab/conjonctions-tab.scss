@@ -26,6 +26,14 @@
   font-weight: 600;
 }
 
+.conjonctions__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.conjonctions__calendar,
 .conjonctions__new {
   min-height: 44px;
   border-radius: 999px;

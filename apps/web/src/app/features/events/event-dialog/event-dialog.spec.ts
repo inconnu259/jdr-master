@@ -69,11 +69,13 @@ function pollCard(over: Partial<EventCardDto['poll'] & object> = {}, host = HOST
     [card]="card()"
     todayKey="2026-10-17"
     [currentUserId]="userId()"
+    (calendarRequested)="calendarRequests = calendarRequests + 1"
   />`,
 })
 class Host {
   card = signal<EventCardDto>(pollCard());
   userId = signal<string | null>(ME);
+  calendarRequests = 0;
 }
 
 describe('EventDialog — sondage de dates (Story 40.5)', () => {
@@ -121,8 +123,8 @@ describe('EventDialog — sondage de dates (Story 40.5)', () => {
     return { fixture, settle, q, text, parties };
   }
 
-  it('membre éligible qui n’a pas voté : cadre « à faire », « Vote à faire », « Vos réponses : 0 créneau sur 3 », aucun bouton de vote ni de date', async () => {
-    const { q, text } = await mount(pollCard());
+  it('membre éligible qui n’a pas voté : cadre « à faire », « Vote à faire », « Vos réponses : 0 créneau sur 3 », « Voter dans le calendrier » mais ni « Fixer » ni « Prolonger »', async () => {
+    const { fixture, q, text } = await mount(pollCard());
 
     expect(q('.ed__poll')?.classList).toContain('ed__poll--todo');
     expect(text('.ed__poll-text')).toBe(
@@ -134,11 +136,46 @@ describe('EventDialog — sondage de dates (Story 40.5)', () => {
     // Le badge dit « Vote en cours » ; la ligne de date « Date à voter · jusqu’au … ».
     expect(text('.ed__badge')).toBe('Vote en cours');
     expect(text('.ed__big--date')).toBe('Date à voter · jusqu’au mar. 20 oct.');
-    // Ni « Fixer la date », ni « Prolonger », ni « Voter dans le calendrier » à ce palier.
+    // Ni « Fixer la date » ni « Prolonger » (Stories 40.6 et 40.7) ; « Voter dans le calendrier » (Story
+    // 40.5b) est écrit, focalisable, et demande à l'onglet d'ouvrir le calendrier du groupe.
     const buttons = Array.from(document.body.querySelectorAll('.detail-surface-panel button')).map(
       (b) => b.textContent?.trim() ?? '',
     );
-    expect(buttons.join('|')).not.toMatch(/Fixer|Prolonger|calendrier/);
+    expect(buttons.join('|')).not.toMatch(/Fixer|Prolonger/);
+    expect(buttons).toContain(TONE['partie.ralliement_event_vote_in_calendar_btn']);
+    expect(buttons).not.toContain(TONE['partie.ralliement_event_compose_in_calendar_btn']);
+    q<HTMLButtonElement>('.ed__poll-vote')!.click();
+    expect(fixture.componentInstance.calendarRequests).toBe(1);
+  });
+
+  it('Story 40.5b : un membre qui a déjà répondu garde « Voter dans le calendrier » (modifier ses réponses) et il ouvre le calendrier', async () => {
+    const { fixture, q, text } = await mount(
+      pollCard({ votes: [{ optionId: 'o1', userId: ME, answer: 'YES' }] }),
+    );
+    expect(q('.ed__poll')?.classList).not.toContain('ed__poll--todo');
+    expect(text('.ed__poll-vote')).toBe(TONE['partie.ralliement_event_vote_in_calendar_btn']);
+    q<HTMLButtonElement>('.ed__poll-vote')!.click();
+    expect(fixture.componentInstance.calendarRequests).toBe(1);
+  });
+
+  it('Story 40.5b : l’hôte d’un sondage ouvert voit « Composer les créneaux » (pas « Voter dans le calendrier »), qui ouvre le calendrier', async () => {
+    const { fixture, q, text } = await mount(pollCard(), HOST);
+    expect(text('.ed__poll-compose')).toBe(TONE['partie.ralliement_event_compose_in_calendar_btn']);
+    expect(q('.ed__poll-vote')).toBeNull();
+    q<HTMLButtonElement>('.ed__poll-compose')!.click();
+    expect(fixture.componentInstance.calendarRequests).toBe(1);
+  });
+
+  it('Story 40.5b : un membre non éligible, ou un vote terminé, n’a aucun lien vers le calendrier', async () => {
+    const notEligible = await mount(pollCard({ eligibleVoterIds: [HOST, OTHER] }));
+    expect(notEligible.q('.ed__poll-calendar')).toBeNull();
+    TestBed.resetTestingModule();
+    document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
+
+    // Échéance dépassée (16 octobre, aujourd'hui le 17) : « Le vote est terminé. », plus de bouton de vote.
+    const ended = await mount(pollCard({ expiresAt: '2026-10-16T23:59:59.999Z' }));
+    expect(ended.text('.ed__poll-text')).toBe('Le vote est terminé.');
+    expect(ended.q('.ed__poll-calendar')).toBeNull();
   });
 
   it('membre qui a répondu : plus de cadre « à faire », ses réponses et le meilleur créneau sont écrits ; suit les réponses en direct', async () => {

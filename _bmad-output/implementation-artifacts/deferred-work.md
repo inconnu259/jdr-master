@@ -386,3 +386,6 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-40-5-proposer-une-conjonction-par-sondage-de-dates.md`
   summary: A group poll whose deadline has passed still shows « Date à voter · jusqu'au … » on the card and has no end state or action.
   evidence: Stories 40.6 (set the date) and 40.7 (extend the vote) must give an ended poll its label and exits.
+- source_spec: `_bmad-output/implementation-artifacts/spec-40-5b-calendrier-du-groupe-pour-un-sondage.md`
+  summary: No `calendar-view` spec checks that the legend of a group page omits the « disponibilité du groupe » entry (`[partieContext]="!!partieId() && !isGroup()"`).
+  evidence: Reverting the binding leaves all specs green; the legend would describe a layer a group page never offers.

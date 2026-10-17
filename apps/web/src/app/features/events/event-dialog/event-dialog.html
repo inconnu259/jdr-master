@@ -95,6 +95,27 @@
         @if (p.waitingLine; as line) {
           <p class="ed__poll-line ed__poll-waiting">{{ line }}</p>
         }
+        <!-- Story 40.5b : le vote et la composition des créneaux se font dans le calendrier du groupe. -->
+        @if (showVoteInCalendar()) {
+          <button
+            mat-flat-button
+            type="button"
+            class="ed__poll-calendar ed__poll-vote"
+            (click)="calendarRequested.emit()"
+          >
+            {{ theme.tone()['partie.ralliement_event_vote_in_calendar_btn'] }}
+          </button>
+        }
+        @if (showComposeInCalendar()) {
+          <button
+            mat-stroked-button
+            type="button"
+            class="ed__poll-calendar ed__poll-compose"
+            (click)="calendarRequested.emit()"
+          >
+            {{ theme.tone()['partie.ralliement_event_compose_in_calendar_btn'] }}
+          </button>
+        }
       </section>
     }
 

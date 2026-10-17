@@ -3,9 +3,19 @@
 <section class="conjonctions">
   <header class="conjonctions__header">
     <h2 class="conjonctions__title">{{ theme.tone()['partie.ralliement_conjonctions_tab'] }}</h2>
-    <button mat-flat-button type="button" class="conjonctions__new" (click)="openCreate()">
-      {{ theme.tone()['partie.ralliement_event_new_btn'] }}
-    </button>
+    <div class="conjonctions__actions">
+      <!-- Story 40.5b : le calendrier du groupe (votes de dates), écrit en toutes lettres. -->
+      <a
+        mat-stroked-button
+        class="conjonctions__calendar"
+        [routerLink]="['/parties', partieId(), 'guild-calendar']"
+      >
+        {{ theme.tone()['partie.ralliement_calendar_link'] }}
+      </a>
+      <button mat-flat-button type="button" class="conjonctions__new" (click)="openCreate()">
+        {{ theme.tone()['partie.ralliement_event_new_btn'] }}
+      </button>
+    </div>
   </header>
 
   @if (loadError()) {
@@ -62,6 +72,7 @@
 @if (creating()) {
   <app-event-create
     [partieId]="partieId()"
+    [draft]="creationDraft()"
     (created)="onCreated($event)"
     (closed)="closeCreate()"
   />
@@ -74,6 +85,7 @@
     [todayKey]="todayKey"
     [currentUserId]="currentUserId()"
     (saved)="onSaved($event)"
+    (calendarRequested)="openCalendar()"
     (closed)="closeDialog()"
   />
 }
