@@ -1,5 +1,10 @@
 import request from 'supertest';
 import { PartiesService } from '../../src/parties/parties.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+  userTopic,
+} from '../../src/realtime/realtime-events.service';
 import { Harness, body, type TestUser } from './harness';
 
 // Story 38.2 — création et droits d'un ralliement, au niveau HTTP : les deux formes (rencontre
@@ -861,7 +866,7 @@ describe('Ralliement — inviter dans un groupe (Story 39.3)', () => {
     });
 
     it.each([
-      ['le créateur', 'admin2', 'admin'],
+      ['le créateur resté administrateur', 'admin2', 'admin'],
       ['un autre administrateur', 'admin', 'admin2'],
       ['soi-même', 'admin', 'admin'],
     ] as const)('refuse de retirer %s : 409, adhésion intacte', async (_label, caller, target) => {
@@ -871,6 +876,38 @@ describe('Ralliement — inviter dans un groupe (Story 39.3)', () => {
         .expect(409);
       expect(body<{ message: string }>(res).message).toContain('membre ordinaire');
       expect(await membershipOf(users[target].id)).not.toBeNull();
+    });
+
+    // Story 39.5 : c'est le rôle qui décide, plus `ownerId` — le créateur redevenu simple membre se
+    // retire comme les autres, et le groupe n'a plus de propriétaire.
+    it('le créateur devenu simple membre est retirable : adhésion supprimée, ownerId vide', async () => {
+      const { id } = await h.createPartie(
+        admin,
+        'CAMPAGNE_EPISODIQUE',
+        'retrait-createur',
+        'ralliement',
+      );
+      await h.addMember(id, admin2, 'ADMIN');
+      await admin.agent
+        .patch(`/parties/${id}/members/${admin.id}/role`)
+        .send({ role: 'MEMBER' })
+        .expect(200);
+
+      await admin2.agent.delete(`/parties/${id}/members/${admin.id}`).expect(200);
+
+      const stored = await h.prisma.partie.findUniqueOrThrow({ where: { id } });
+      expect(stored.ownerId).toBeNull();
+      expect(
+        await h.prisma.membership.findUnique({
+          where: { userId_partieId: { userId: admin.id, partieId: id } },
+        }),
+      ).toBeNull();
+      // Sans adhésion ni propriété, l'ancien créateur n'a plus aucun accès.
+      await admin.agent.get(`/parties/${id}`).expect(403);
+    });
+
+    it('membre inconnu du groupe : 404', async () => {
+      await admin.agent.delete(`/parties/${partieId}/members/${stranger.id}`).expect(404);
     });
   });
 
@@ -1080,6 +1117,168 @@ describe("Ralliement — nommer des admins et quitter l'office (Story 39.4)", ()
       setRole(admin, id, admin.id, { role: 'MEMBER' }),
       setRole(admin2, id, admin2.id, { role: 'MEMBER' }),
     ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect(await h.prisma.partie.count({ where: { id } })).toBe(1);
+    expect(await h.prisma.membership.count({ where: { partieId: id, role: 'ADMIN' } })).toBe(1);
+  });
+});
+
+// Story 39.5 — quitter un groupe : `DELETE /parties/:id/members/me`, même procédure `leave()` que le
+// retrait. Départ d'un membre, du créateur, d'un administrateur ; dernier administrateur sous
+// confirmation explicite ; refus (étranger, JDR, rencontre isolée) ; départs simultanés sous verrou.
+describe('Ralliement — quitter un groupe (Story 39.5)', () => {
+  let h: Harness;
+  let admin: TestUser;
+  let admin2: TestUser;
+  let member: TestUser;
+  let stranger: TestUser;
+
+  const LAST_ADMIN = 'dernier administrateur';
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, admin2, member, stranger] = await Promise.all([
+      h.createUser('quit-admin'),
+      h.createUser('quit-admin2'),
+      h.createUser('quit-membre'),
+      h.createUser('quit-etranger'),
+    ]);
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  /** Un groupe neuf : `admin` (créateur, ADMIN) + les membres demandés. */
+  const newGroup = async (label: string, members: [TestUser, 'ADMIN' | 'MEMBER'][] = []) => {
+    const { id } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', label, 'ralliement');
+    for (const [user, role] of members) await h.addMember(id, user, role);
+    return id;
+  };
+  const leave = (who: TestUser, partieId: string, query = '') =>
+    who.agent.delete(`/parties/${partieId}/members/me${query}`);
+  const membershipOf = (partieId: string, userId: string) =>
+    h.prisma.membership.findUnique({ where: { userId_partieId: { userId, partieId } } });
+
+  it('un membre quitte : adhésion supprimée, le groupe sort de sa liste, les autres sont notifiés', async () => {
+    const id = await newGroup('quit-membre', [[member, 'MEMBER']]);
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    try {
+      const res = await leave(member, id).expect(200);
+      expect(body<{ ok: boolean; deleted: boolean }>(res)).toEqual({ ok: true, deleted: false });
+      // Sa propre liste perd le groupe ; les listes de membres ouvertes se rafraîchissent.
+      expect(emit).toHaveBeenCalledWith(userTopic(member.id));
+      expect(emit).toHaveBeenCalledWith(userTopic(admin.id));
+      expect(emit).toHaveBeenCalledWith(partieTopic(id));
+    } finally {
+      emit.mockRestore();
+    }
+    expect(await membershipOf(id, member.id)).toBeNull();
+    const mine = body<PartieDtoLike[]>(await member.agent.get('/parties').expect(200));
+    expect(mine.map((p) => p.id)).not.toContain(id);
+    await member.agent.get(`/parties/${id}`).expect(403);
+    const others = body<MemberLike[]>(await admin.agent.get(`/parties/${id}/members`).expect(200));
+    expect(others.map((m) => m.userId)).toEqual([admin.id]);
+  });
+
+  it('le créateur redevenu simple membre quitte : ownerId vide, le groupe reste', async () => {
+    const id = await newGroup('quit-createur', [[admin2, 'ADMIN']]);
+    await admin.agent
+      .patch(`/parties/${id}/members/${admin.id}/role`)
+      .send({ role: 'MEMBER' })
+      .expect(200);
+    await leave(admin, id).expect(200);
+    const stored = await h.prisma.partie.findUniqueOrThrow({ where: { id } });
+    expect(stored.ownerId).toBeNull();
+    expect(await membershipOf(id, admin.id)).toBeNull();
+    // Plus de propriétaire fantôme : l'ancien créateur n'a plus aucun accès.
+    await admin.agent.get(`/parties/${id}`).expect(403);
+    const got = await admin2.agent.get(`/parties/${id}`).expect(200);
+    expect(body<PartieDtoLike>(got).role).toBe('admin');
+  });
+
+  it("un administrateur part alors qu'un autre reste : il quitte simplement, le groupe reste", async () => {
+    const id = await newGroup('quit-admin', [
+      [admin2, 'ADMIN'],
+      [member, 'MEMBER'],
+    ]);
+    await leave(admin2, id).expect(200);
+    expect(await membershipOf(id, admin2.id)).toBeNull();
+    expect(await h.prisma.partie.count({ where: { id } })).toBe(1);
+    // Le créateur n'est pas celui qui part : la propriété ne bouge pas.
+    const stored = await h.prisma.partie.findUniqueOrThrow({ where: { id } });
+    expect(stored.ownerId).toBe(admin.id);
+  });
+
+  it('dernier administrateur : 409 sans confirmation, rien ne change ; confirmé, le groupe disparaît pour tous', async () => {
+    const id = await newGroup('quit-dernier', [[member, 'MEMBER']]);
+    for (const query of ['', '?deleteIfLastAdmin=false', '?deleteIfLastAdmin=1']) {
+      const res = await leave(admin, id, query).expect(409);
+      expect(body<{ message: string }>(res).message).toContain(LAST_ADMIN);
+    }
+    expect(await membershipOf(id, admin.id)).toMatchObject({ role: 'ADMIN' });
+    expect(await h.prisma.partie.count({ where: { id } })).toBe(1);
+
+    const res = await leave(admin, id, '?deleteIfLastAdmin=true').expect(200);
+    expect(body<{ ok: boolean; deleted: boolean }>(res)).toEqual({ ok: true, deleted: true });
+    expect(await h.prisma.partie.count({ where: { id } })).toBe(0);
+    expect(await h.prisma.membership.count({ where: { partieId: id } })).toBe(0);
+    await member.agent.get(`/parties/${id}`).expect(404);
+  });
+
+  it('refus : un étranger (403 « pas accès »), rien écrit', async () => {
+    const id = await newGroup('quit-etranger', [[member, 'MEMBER']]);
+    const res = await leave(stranger, id).expect(403);
+    expect(body<{ message: string }>(res).message).toBe(NO_ACCESS);
+    expect(await h.prisma.membership.count({ where: { partieId: id } })).toBe(2);
+  });
+
+  it('refus : partie de JDR — ni le joueur ni le MJ ne la quittent par cette route (403)', async () => {
+    const { id } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'quit-jdr');
+    await h.addMember(id, member);
+    await leave(member, id).expect(403);
+    await leave(admin, id).expect(403);
+    expect(await membershipOf(id, member.id)).not.toBeNull();
+    // Le retrait d'un joueur par le MJ, lui, est inchangé.
+    await admin.agent.delete(`/parties/${id}/members/${member.id}`).expect(200);
+    expect(await membershipOf(id, member.id)).toBeNull();
+    const stored = await h.prisma.partie.findUniqueOrThrow({ where: { id } });
+    expect(stored.ownerId).toBe(admin.id);
+  });
+
+  it('refus : rencontre isolée (ONE_SHOT) — 403 « indisponible », à son membre comme à son administrateur', async () => {
+    const { id } = await h.createPartie(admin, 'ONE_SHOT', 'quit-isolee', 'ralliement');
+    await h.addMember(id, member);
+    for (const who of [member, admin]) {
+      const res = await leave(who, id).expect(403);
+      expect(body<{ message: string }>(res).message).toBe(UNAVAILABLE);
+    }
+    expect(await h.prisma.membership.count({ where: { partieId: id } })).toBe(2);
+  });
+
+  it('les deux derniers administrateurs partent en même temps, confirmés : le groupe disparaît une seule fois', async () => {
+    const id = await newGroup('quit-concurrent', [
+      [admin2, 'ADMIN'],
+      [member, 'MEMBER'],
+    ]);
+    const [a, b] = await Promise.all([
+      leave(admin, id, '?deleteIfLastAdmin=true'),
+      leave(admin2, id, '?deleteIfLastAdmin=true'),
+    ]);
+    // Le verrou sérialise : le premier part simplement, le second se recompte dernier
+    // administrateur et supprime le groupe (confirmé). Jamais un groupe sans administrateur.
+    expect([a.status, b.status]).toEqual([200, 200]);
+    const deleted = [a, b].map((r) => body<{ deleted: boolean }>(r).deleted).sort();
+    expect(deleted).toEqual([false, true]);
+    expect(await h.prisma.partie.count({ where: { id } })).toBe(0);
+  });
+
+  it("deux derniers administrateurs partent en même temps, sans confirmation : l'un part, l'autre est refusé", async () => {
+    const id = await newGroup('quit-concurrent-sans', [
+      [admin2, 'ADMIN'],
+      [member, 'MEMBER'],
+    ]);
+    const [a, b] = await Promise.all([leave(admin, id), leave(admin2, id)]);
     expect([a.status, b.status].sort()).toEqual([200, 409]);
     expect(await h.prisma.partie.count({ where: { id } })).toBe(1);
     expect(await h.prisma.membership.count({ where: { partieId: id, role: 'ADMIN' } })).toBe(1);

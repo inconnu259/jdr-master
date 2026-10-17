@@ -32,6 +32,7 @@ function makePartiesService() {
     getAvailableSlots: jest.fn(),
     getHeatmap: jest.fn(),
     removeMember: jest.fn(),
+    leave: jest.fn(),
     update: jest.fn(),
     convertKind: jest.fn(),
     close: jest.fn(),
@@ -105,6 +106,35 @@ describe('PartiesController', () => {
   it('removeMember() route id/user/targetUserId vers PartiesService.removeMember', async () => {
     await controller.removeMember(user, 'p1', 'u2');
     expect(parties.removeMember).toHaveBeenCalledWith('p1', 'mj1', 'u2');
+  });
+
+  it('leave() route id/user vers PartiesService.leave, motif LEFT sans confirmation (Story 39.5)', async () => {
+    await controller.leave(user, 'p1', undefined);
+    expect(parties.leave).toHaveBeenCalledWith('p1', 'mj1', {
+      type: 'LEFT',
+      deleteIfLastAdmin: false,
+    });
+  });
+
+  it('leave() : seule la valeur exacte « true » confirme la suppression du groupe (Story 39.5)', async () => {
+    await controller.leave(user, 'p1', 'true');
+    expect(parties.leave).toHaveBeenLastCalledWith('p1', 'mj1', {
+      type: 'LEFT',
+      deleteIfLastAdmin: true,
+    });
+    for (const valeur of ['1', 'TRUE', 'yes', '']) {
+      await controller.leave(user, 'p1', valeur);
+      expect(parties.leave).toHaveBeenLastCalledWith('p1', 'mj1', {
+        type: 'LEFT',
+        deleteIfLastAdmin: false,
+      });
+    }
+  });
+
+  it('la route members/me est déclarée avant members/:userId (sinon « me » serait un identifiant)', () => {
+    const methods = Object.getOwnPropertyNames(PartiesController.prototype);
+    expect(methods.indexOf('leave')).toBeGreaterThanOrEqual(0);
+    expect(methods.indexOf('leave')).toBeLessThan(methods.indexOf('removeMember'));
   });
 
   it('update() route id/user/dto vers PartiesService.update', async () => {

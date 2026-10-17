@@ -391,6 +391,11 @@ export const atelierCuivre: Record<ToneKey, string> = {
   'partie.ralliement_last_admin_confirm':
     'Vous êtes le dernier administrateur du rassemblement « {partie} ». En quittant l’office, le rassemblement est démantelé avec tout ce qu’il contient — équipage : {members}, réunions : {conjonctions}. Nommez d’abord un autre administrateur pour le maintenir.',
   'partie.ralliement_role_error': 'Ce changement de poste n’a pu être consigné. Réessayez.',
+  /* — quitter un groupe (Story 39.5) : bouton et confirmation du contrat, identiques — */
+  'partie.ralliement_leave_btn': 'Quitter le groupe',
+  'partie.ralliement_leave_confirm':
+    'Quitter « {partie} » ? Vous n’en ferez plus partie ; un administrateur devra vous inviter à nouveau pour revenir.',
+  'partie.ralliement_leave_error': 'Votre départ n’a pu être consigné au registre. Réessayez.',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine séance d’atelier',
   'partie.no_session': 'Aucune séance planifiée. Interrogez l’automate.',

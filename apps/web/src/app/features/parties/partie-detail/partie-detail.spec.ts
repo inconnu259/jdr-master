@@ -183,6 +183,7 @@ function makePartiesService(
     inviteByEmail: vi.fn(),
     removeMember: vi.fn(),
     setMemberRole: vi.fn().mockResolvedValue({ ok: true, deleted: false }),
+    leave: vi.fn().mockResolvedValue({ ok: true, deleted: false }),
     createInviteLink: vi.fn(),
     revokeInviteLink: vi.fn(),
     remove: vi.fn(),
@@ -3792,10 +3793,13 @@ describe('PartieDetail — un groupe s’ouvre sur ses conjonctions (Story 39.1)
     ]);
   });
 
-  it('membre : aucune action au pied de carte', async () => {
+  it('membre : « Quitter le groupe » seul au pied de carte (Story 39.5), sans teinte destructrice', async () => {
     const { el } = await createFixture(groupe({ role: 'member' }), OTHER_ID, { members });
+    const tone = TONE_MAP['grimoire-emeraude'];
     expect(el.querySelector('mat-card-actions a')).toBeNull();
-    expect(el.querySelector('mat-card-actions button')).toBeNull();
+    expect(footerButtons(el)).toEqual([tone['partie.ralliement_leave_btn']]);
+    const bouton = el.querySelector('mat-card-actions button') as HTMLElement;
+    expect(bouton.classList.contains('icon-bar__btn--danger')).toBe(false);
   });
 
   it('clore puis rouvrir passent par PartiesService et mettent la page à jour', async () => {
@@ -4412,7 +4416,10 @@ describe('PartieDetail — admins d’un groupe : nommer et quitter l’office (
 
   it('un membre ordinaire n’a pas « Quitter l’office » au pied de carte', async () => {
     const { el } = await createFixture(groupe({ role: 'member' }), THIRD_ID, { members });
-    expect(el.querySelector('mat-card-actions button')).toBeNull();
+    const actions = el.querySelector('mat-card-actions') as HTMLElement;
+    expect(actions.textContent).not.toContain(
+      TONE_MAP['grimoire-emeraude']['partie.ralliement_step_down_btn'],
+    );
   });
 
   it('une quête : aucun rôle de groupe, pas de badge, « Retirer » inchangé', async () => {
@@ -4432,5 +4439,154 @@ describe('PartieDetail — admins d’un groupe : nommer et quitter l’office (
     confirm(false);
     await fixture.componentInstance.confirmDelete(groupe());
     expect(dialogOpen().mock.calls[0][1].data.destructive).toBe(true);
+  });
+});
+
+// ─── Quitter un groupe ou en retirer un membre (Story 39.5) ─────────────────────────────────
+
+describe('PartieDetail — quitter un groupe, retirer le créateur (Story 39.5)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const ADMIN_ID = 'admin-2';
+  const groupe = (over: Partial<PartieDto> = {}) =>
+    makePartie({
+      gameSystemId: 'ralliement',
+      kind: 'CAMPAGNE_EPISODIQUE',
+      role: 'member',
+      ...over,
+    });
+  const member = (
+    userId: string,
+    displayName: string,
+    role: 'ADMIN' | 'MEMBER',
+  ): PartieMemberDto => ({
+    userId,
+    pseudo: displayName.toLowerCase(),
+    displayName,
+    role,
+    joinedAt: '2026-10-01T00:00:00Z',
+  });
+  /** Le créateur (`ownerId` = MJ_ID) a quitté l'office : simple membre ; un autre admin reste. */
+  const members = [member(MJ_ID, 'Créateur', 'MEMBER'), member(ADMIN_ID, 'Admin', 'ADMIN')];
+
+  const services = () =>
+    TestBed.inject(PartiesService) as unknown as {
+      get: ReturnType<typeof vi.fn>;
+      leave: ReturnType<typeof vi.fn>;
+    };
+  const dialogOpen = () =>
+    (TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> }).open;
+  const myParties = () =>
+    TestBed.inject(MyPartiesService) as unknown as { refreshAll: ReturnType<typeof vi.fn> };
+  const confirm = (answer: boolean) =>
+    dialogOpen().mockReturnValue({ afterClosed: () => of(answer) });
+  const footerButton = (el: HTMLElement, text: string) =>
+    Array.from(el.querySelectorAll('mat-card-actions button')).find((b) =>
+      b.textContent?.includes(text),
+    ) as HTMLButtonElement | undefined;
+  const settle = async (fixture: ComponentFixture<PartieDetail>) => {
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+  };
+
+  it.each(THEMES)(
+    'thème %s : le membre voit « Quitter le groupe » au pied de carte, sans mot de JDR',
+    async (theme) => {
+      const { el } = await createFixture(groupe(), MJ_ID, { members, theme });
+      const tone = TONE_MAP[theme];
+      const bouton = footerButton(el, tone['partie.ralliement_leave_btn']);
+      expect(bouton).toBeTruthy();
+      expect(bouton!.classList.contains('icon-bar__btn--danger')).toBe(false);
+      expect(
+        NON_JDR_BANNED_WORDS.test(el.querySelector('mat-card-actions')?.textContent ?? ''),
+      ).toBe(false);
+    },
+  );
+
+  it('quitter : confirmation du contrat (non rouge), départ, liste d’accueil rafraîchie, retour à l’accueil', async () => {
+    const { fixture, el } = await createFixture(groupe(), MJ_ID, { members });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    confirm(true);
+    const tone = TONE_MAP['grimoire-emeraude'];
+
+    footerButton(el, tone['partie.ralliement_leave_btn'])!.click();
+    await settle(fixture);
+
+    const data = dialogOpen().mock.calls[0][1].data;
+    expect(data.message).toBe(
+      'Quitter « Test Party » ? Vous n’en ferez plus partie ; un administrateur devra vous inviter à nouveau pour revenir.',
+    );
+    expect(data.confirmLabel).toBe('Quitter le groupe');
+    expect(data.destructive).toBeUndefined();
+    expect(services().leave).toHaveBeenCalledWith('party-1');
+    expect(myParties().refreshAll).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith(['/']);
+  });
+
+  it('quitter, « Renoncer » : rien n’est envoyé', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    confirm(false);
+    await fixture.componentInstance.leaveGroup();
+    expect(services().leave).not.toHaveBeenCalled();
+    expect(myParties().refreshAll).not.toHaveBeenCalled();
+  });
+
+  it('quitter : un refus du serveur s’affiche dans l’avis du groupe, la page reste et se relit', async () => {
+    const { fixture, el } = await createFixture(groupe(), MJ_ID, { members });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    confirm(true);
+    services().leave.mockRejectedValueOnce({ error: { message: 'Refus du serveur' } });
+    const avant = services().get.mock.calls.length;
+
+    footerButton(el, TONE_MAP['grimoire-emeraude']['partie.ralliement_leave_btn'])!.click();
+    await settle(fixture);
+
+    expect(el.querySelector('p.notice')?.textContent).toContain('Refus du serveur');
+    expect(navigate).not.toHaveBeenCalled();
+    expect(myParties().refreshAll).not.toHaveBeenCalled();
+    expect(services().get.mock.calls.length).toBeGreaterThan(avant);
+  });
+
+  it('quitter : sans message textuel, repli sur le libellé du thème', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    confirm(true);
+    services().leave.mockRejectedValueOnce({ status: 0 });
+    await fixture.componentInstance.leaveGroup();
+    expect(fixture.componentInstance['notice']()).toBe(
+      TONE_MAP['grimoire-emeraude']['partie.ralliement_leave_error'],
+    );
+  });
+
+  it('un administrateur n’a pas « Quitter le groupe » (il quitte d’abord l’office)', async () => {
+    const { fixture, el } = await createFixture(groupe({ role: 'admin' }), ADMIN_ID, { members });
+    expect(footerButton(el, TONE_MAP['grimoire-emeraude']['partie.ralliement_leave_btn'])).toBe(
+      undefined,
+    );
+    confirm(true);
+    await fixture.componentInstance.leaveGroup();
+    expect(services().leave).not.toHaveBeenCalled();
+  });
+
+  it('une rencontre isolée n’a pas « Quitter le groupe », même pour un membre', async () => {
+    const { el } = await createFixture(groupe({ kind: 'ONE_SHOT' }), MJ_ID, { members });
+    expect(el.querySelector('mat-card-actions button')).toBeNull();
+  });
+
+  it('« Retirer » est offert sur le créateur redevenu simple membre : le rôle décide, pas ownerId', async () => {
+    const { fixture, el } = await createFixture(groupe({ role: 'admin' }), ADMIN_ID, {
+      members,
+      noopAnimations: true,
+    });
+    el.querySelectorAll<HTMLElement>('div[role="tab"]')[2].click();
+    fixture.detectChanges();
+    const tone = TONE_MAP['grimoire-emeraude'];
+    const [createur, moi] = Array.from(
+      el.querySelectorAll('.ralliement-members .result-row'),
+    ) as HTMLElement[];
+    expect(createur.textContent).toContain(tone['partie.remove_member_btn']);
+    // Jamais sur soi-même, ni sur un administrateur.
+    expect(moi.textContent).not.toContain(tone['partie.remove_member_btn']);
   });
 });

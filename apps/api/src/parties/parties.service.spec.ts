@@ -97,6 +97,7 @@ describe('PartiesService', () => {
       findUniqueOrThrow: jest.Mock;
       findMany: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
       delete: jest.Mock;
     };
     membership: {
@@ -175,6 +176,8 @@ describe('PartiesService', () => {
         findUniqueOrThrow: jest.fn(),
         findMany: jest.fn(),
         update: jest.fn(),
+        // Story 39.5 : remise à `null` du propriétaire qui sort d'un groupe (aucune ligne par défaut).
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         delete: jest.fn(),
       },
       membership: {
@@ -1294,7 +1297,7 @@ describe('PartiesService', () => {
     });
 
     it.each([
-      ['le créateur', 'admin2', 'admin1'],
+      ['le créateur resté administrateur', 'admin2', 'admin1'],
       ['un autre administrateur', 'admin1', 'admin2'],
       ['soi-même (administrateur)', 'admin1', 'admin1'],
     ])('refuse de retirer %s : 409, aucune suppression', async (_libelle, appelant, cible) => {
@@ -1302,6 +1305,21 @@ describe('PartiesService', () => {
       await expect(promise).rejects.toBeInstanceOf(ConflictException);
       await expect(promise).rejects.toThrow(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
       expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+    });
+
+    // Story 39.5 : le rôle décide, pas `ownerId` — le créateur redevenu simple membre se retire.
+    it('le créateur redevenu simple membre est retiré : adhésion supprimée, ownerId remis à null', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...groupe, ownerId: 'membre1' });
+      prisma.partie.updateMany.mockResolvedValue({ count: 1 });
+      await expect(service.removeMember('p1', 'admin1', 'membre1')).resolves.toEqual({ ok: true });
+      expect(prisma.membership.deleteMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1', userId: 'membre1' },
+      });
+      expect(prisma.partie.updateMany).toHaveBeenCalledWith({
+        where: { id: 'p1', ownerId: 'membre1' },
+        data: { ownerId: null },
+      });
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('membre1'));
     });
 
     it('un membre ordinaire ne retire personne : 403 « réservée aux administrateurs »', async () => {
@@ -1360,6 +1378,206 @@ describe('PartiesService', () => {
         roles.admin2 = 'ADMIN';
       }
       expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // Story 39.5 : quitter soi-même un groupe — la même procédure `leave()` que le retrait.
+  describe('leave() — départ volontaire (Story 39.5)', () => {
+    const groupe = {
+      ...partie,
+      kind: 'CAMPAGNE_EPISODIQUE',
+      gameSystemId: 'ralliement',
+      ownerId: 'admin1',
+    };
+    const roles: Record<string, 'ADMIN' | 'MEMBER'> = {};
+
+    beforeEach(() => {
+      for (const k of Object.keys(roles)) delete roles[k];
+      Object.assign(roles, { admin1: 'ADMIN', membre1: 'MEMBER' });
+      prisma.partie.findUnique.mockResolvedValue(groupe);
+      prisma.partie.delete.mockResolvedValue(groupe);
+      prisma.$queryRaw.mockResolvedValue([{ id: 'p1' }]);
+      prisma.membership.deleteMany.mockResolvedValue({ count: 1 });
+      prisma.membership.count.mockResolvedValue(1);
+      prisma.membership.findMany.mockResolvedValue([]);
+      prisma.user.findUnique.mockResolvedValue({ id: 'admin1', pseudo: 'a', displayName: 'A' });
+      prisma.membership.findUnique.mockImplementation(
+        ({ where }: { where: { userId_partieId: { userId: string } } }) => {
+          const role = roles[where.userId_partieId.userId];
+          return Promise.resolve(role ? { userId: where.userId_partieId.userId, role } : null);
+        },
+      );
+    });
+
+    it('un membre quitte le groupe : adhésion supprimée sous le verrou, puis émissions après le commit', async () => {
+      const ordre: string[] = [];
+      prisma.$queryRaw.mockImplementation(() => {
+        ordre.push('verrou');
+        return Promise.resolve([{ id: 'p1' }]);
+      });
+      prisma.membership.deleteMany.mockImplementation(() => {
+        ordre.push('delete');
+        return Promise.resolve({ count: 1 });
+      });
+      prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+        const result = await fn(prisma);
+        ordre.push('commit');
+        return result;
+      });
+      realtimeEvents.emit.mockImplementation((topic: string) => ordre.push(topic));
+      // Participants restants (membersOf) : le créateur, administrateur.
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'admin1', pseudo: 'a', displayName: 'A' } },
+      ]);
+
+      await expect(service.leave('p1', 'membre1', { type: 'LEFT' })).resolves.toEqual({
+        ok: true,
+        deleted: false,
+      });
+
+      expect(prisma.membership.deleteMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1', userId: 'membre1' },
+      });
+      expect(prisma.partie.delete).not.toHaveBeenCalled();
+      expect(ordre.slice(0, 3)).toEqual(['verrou', 'delete', 'commit']);
+      // Sa liste perd le groupe ; celle des autres (et leur liste de membres) se rafraîchit.
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('membre1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('admin1'));
+      expect(ordre.indexOf('commit')).toBeLessThan(ordre.indexOf(partieTopic('p1')));
+    });
+
+    it('le créateur redevenu simple membre quitte : ownerId remis à null, le groupe reste', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...groupe, ownerId: 'membre1' });
+      prisma.partie.updateMany.mockResolvedValue({ count: 1 });
+      await expect(service.leave('p1', 'membre1', { type: 'LEFT' })).resolves.toEqual({
+        ok: true,
+        deleted: false,
+      });
+      expect(prisma.partie.updateMany).toHaveBeenCalledWith({
+        where: { id: 'p1', ownerId: 'membre1' },
+        data: { ownerId: null },
+      });
+      expect(prisma.partie.delete).not.toHaveBeenCalled();
+      // Propriétaire remis à null : les participants restants ne sont plus « propriétaire d'abord ».
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it("un administrateur part alors qu'un autre reste : il quitte simplement le groupe", async () => {
+      roles.admin2 = 'ADMIN';
+      prisma.membership.count.mockResolvedValue(2);
+      await expect(service.leave('p1', 'admin1', { type: 'LEFT' })).resolves.toEqual({
+        ok: true,
+        deleted: false,
+      });
+      expect(prisma.membership.count).toHaveBeenCalledWith({
+        where: { partieId: 'p1', role: 'ADMIN' },
+      });
+      expect(prisma.membership.deleteMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1', userId: 'admin1' },
+      });
+      // Créateur sortant : propriétaire remis à null.
+      expect(prisma.partie.updateMany).toHaveBeenCalledWith({
+        where: { id: 'p1', ownerId: 'admin1' },
+        data: { ownerId: null },
+      });
+      expect(prisma.partie.delete).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, false])(
+      'dernier administrateur, deleteIfLastAdmin %s : 409 « dernier administrateur », rien ne change',
+      async (flag) => {
+        const promise = service.leave('p1', 'admin1', { type: 'LEFT', deleteIfLastAdmin: flag });
+        await expect(promise).rejects.toBeInstanceOf(ConflictException);
+        await expect(promise).rejects.toThrow(LAST_ADMIN_MESSAGE);
+        expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+        expect(prisma.partie.updateMany).not.toHaveBeenCalled();
+        expect(prisma.partie.delete).not.toHaveBeenCalled();
+        expect(realtimeEvents.emit).not.toHaveBeenCalled();
+      },
+    );
+
+    it('dernier administrateur avec confirmation : groupe supprimé, chaque participant notifié après le commit', async () => {
+      const ordre: string[] = [];
+      prisma.membership.findMany.mockImplementation(() => {
+        ordre.push('lecture');
+        return Promise.resolve([{ userId: 'admin1' }, { userId: 'membre1' }]);
+      });
+      prisma.partie.delete.mockImplementation(() => {
+        ordre.push('delete');
+        return Promise.resolve(groupe);
+      });
+      prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+        const result = await fn(prisma);
+        ordre.push('commit');
+        return result;
+      });
+      realtimeEvents.emit.mockImplementation((topic: string) => ordre.push(topic));
+
+      await expect(
+        service.leave('p1', 'admin1', { type: 'LEFT', deleteIfLastAdmin: true }),
+      ).resolves.toEqual({ ok: true, deleted: true });
+
+      expect(prisma.partie.delete).toHaveBeenCalledWith({ where: { id: 'p1' } });
+      expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+      for (const id of ['admin1', 'membre1']) {
+        expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic(id));
+      }
+      expect(ordre.indexOf('lecture')).toBeLessThan(ordre.indexOf('delete'));
+      expect(ordre.indexOf('commit')).toBeLessThan(ordre.indexOf(userTopic('membre1')));
+      // La page du groupe déjà ouverte chez les autres membres est prévenue, après le commit.
+      expect(ordre.indexOf('commit')).toBeLessThan(ordre.indexOf(partieTopic('p1')));
+    });
+
+    it("un simple membre n'est jamais « dernier administrateur » : aucun recomptage, le drapeau est ignoré", async () => {
+      await service.leave('p1', 'membre1', { type: 'LEFT', deleteIfLastAdmin: true });
+      expect(prisma.membership.count).not.toHaveBeenCalled();
+      expect(prisma.partie.delete).not.toHaveBeenCalled();
+      expect(prisma.membership.deleteMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1', userId: 'membre1' },
+      });
+    });
+
+    it('refus : étranger au groupe (403), rien écrit', async () => {
+      await expect(service.leave('p1', 'etranger', { type: 'LEFT' })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('refus : une rencontre à usage unique (ONE_SHOT) → 403 « indisponible », aucune transaction', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...groupe, kind: 'ONE_SHOT' });
+      const promise = service.leave('p1', 'membre1', { type: 'LEFT' });
+      await expect(promise).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(promise).rejects.toThrow(RALLIEMENT_UNAVAILABLE_MESSAGE);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('refus : un joueur de JDR ne quitte pas lui-même la partie (403), rien écrit', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.membership.findUnique.mockResolvedValue({ userId: 'u', role: 'MEMBER' });
+      await expect(service.leave('p1', 'u', { type: 'LEFT' })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('membre déjà parti entre la décision et le verrou : 403, rien écrit', async () => {
+      prisma.membership.findUnique
+        .mockResolvedValueOnce({ userId: 'membre1', role: 'MEMBER' })
+        .mockResolvedValueOnce(null);
+      await expect(service.leave('p1', 'membre1', { type: 'LEFT' })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('JDR : le retrait par le MJ ne prend aucun verrou et ne touche jamais au propriétaire', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      await service.removeMember('p1', 'mj1', 'u');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
+      expect(prisma.partie.updateMany).not.toHaveBeenCalled();
     });
   });
 

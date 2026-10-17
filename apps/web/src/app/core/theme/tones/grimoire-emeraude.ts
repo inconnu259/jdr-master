@@ -393,6 +393,11 @@ export const grimoireEmeraude = {
   'partie.ralliement_last_admin_confirm':
     'Vous êtes le dernier administrateur du ralliement « {partie} ». En quittant l’office, le ralliement est dissous avec tout ce qu’il contient — compagnons : {members}, conjonctions : {conjonctions}. Nommez d’abord un autre administrateur pour le conserver.',
   'partie.ralliement_role_error': 'Ce changement d’office n’a pu être inscrit. Réessayez.',
+  /* — quitter un groupe (Story 39.5) : bouton et confirmation du contrat, identiques — */
+  'partie.ralliement_leave_btn': 'Quitter le groupe',
+  'partie.ralliement_leave_confirm':
+    'Quitter « {partie} » ? Vous n’en ferez plus partie ; un administrateur devra vous inviter à nouveau pour revenir.',
+  'partie.ralliement_leave_error': 'Votre départ n’a pu être inscrit au grimoire. Réessayez.',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine séance au grimoire',
   'partie.no_session': "Aucune séance convoquée. Consultez l'oracle des créneaux.",

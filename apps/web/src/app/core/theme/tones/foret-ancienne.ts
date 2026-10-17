@@ -388,6 +388,11 @@ export const foretAncienne: Record<ToneKey, string> = {
     'Tu es le dernier administrateur de la veillée « {partie} ». En quittant l’office, la veillée s’éteint pour de bon avec tout ce qu’elle contient — habitants : {members}, haltes : {conjonctions}. Nomme d’abord un autre administrateur pour la garder vivante.',
   'partie.ralliement_role_error':
     'Ce changement de rôle n’a pu être gravé dans l’écorce. Réessaie.',
+  /* — quitter un groupe (Story 39.5) : bouton identique, confirmation du contrat tutoyée — */
+  'partie.ralliement_leave_btn': 'Quitter le groupe',
+  'partie.ralliement_leave_confirm':
+    'Quitter « {partie} » ? Tu n’en feras plus partie ; un administrateur devra t’inviter à nouveau pour revenir.',
+  'partie.ralliement_leave_error': 'Ton départ n’a pu être gravé dans l’écorce. Réessaie.',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine clairière',
   'partie.no_session': "Aucune clairière réservée. L'écureuil cherche encore.",

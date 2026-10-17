@@ -349,3 +349,13 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-39-4-nommer-des-admins-et-quitter-loffice.md`
   summary: By hand in the browser (two accounts in a group): appoint an admin, step down from the Missives row and from the footer, last-admin red dialog, « Brûler » red, in the three themes; check the footer placement of « Quitter l'office » (between Clore and Brûler, to confirm).
   evidence: No live check was run; only unit/DOM/e2e tests. UX note 7 leaves the footer placement open.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-5-quitter-un-groupe-ou-en-retirer-un-membre.md`
+  summary: Revoke or re-check multi-use invite links on removal: a removed member who still holds an active `maxUses: null` link can rejoin alone, which contradicts « un administrateur devra vous inviter à nouveau ».
+  evidence: `leave()` only deletes the membership; `InviteLinksService` accepts any valid link (pre-existing since 39.3 removal). Worth a `/security-review` look.
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-5-quitter-un-groupe-ou-en-retirer-un-membre.md`
+  summary: Give `PartieDetail` a « no longer has access » path: after leaving or being removed, the page's `partie:` SSE reload gets 403 (unhandled rejections), and a member removed while viewing the group stays on a dead page.
+  evidence: The `parties.changed()` effect calls `void this.refreshPartie(); void this.loadMembers();` with no 403 handling; the removed-member case predates 39.5.
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-5-quitter-un-groupe-ou-en-retirer-un-membre.md`
+  summary: By hand in the browser (two accounts in a group): a member leaves from the footer (non-red confirmation, back home, group gone from their list, others' member list updated); an admin removes the creator after the creator stepped down.
+  evidence: No live check was run; only unit/DOM/e2e tests.

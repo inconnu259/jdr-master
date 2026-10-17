@@ -108,10 +108,23 @@ export const KIND_NOT_ALLOWED_FOR_SYSTEM_MESSAGE =
 /** Story 38.2 : le type (`kind`) et le système d'un ralliement sont définitifs. */
 export const RALLIEMENT_TYPE_LOCKED_MESSAGE = "Le type d'un ralliement ne peut pas être modifié";
 
-/** Story 39.3 : un administrateur ne retire qu'un simple membre ; le créateur, un autre
- *  administrateur et soi-même relèvent de la procédure de départ (Stories 39.4/39.5). */
+/** Story 39.3 : un administrateur ne retire qu'un simple membre. Story 39.5 : le créateur n'est plus
+ *  protégé une fois redevenu simple membre (c'est le rôle qui décide, pas `ownerId`) ; un autre
+ *  administrateur reste protégé, et soi-même relève de « Quitter le groupe ». */
 export const RALLIEMENT_REMOVE_PROTECTED_MESSAGE =
-  'Seul un membre ordinaire peut être retiré ici : ni le créateur du groupe, ni un administrateur, ni vous-même';
+  'Seul un membre ordinaire peut être retiré : ni un administrateur, ni vous-même';
+
+/**
+ * Story 39.5 — motif d'une sortie de partie, union FERMÉE. `LEFT` : départ volontaire
+ * (`DELETE /parties/:id/members/me`) ; `deleteIfLastAdmin` confirme explicitement que le départ du
+ * DERNIER administrateur supprime le groupe. `REMOVED` : retrait par un administrateur (ou, en JDR,
+ * par le MJ) désigné par `byUserId`.
+ *
+ * Point d'extension : l'epic 43 (suppression de compte) ajoutera ici son propre motif, traité par
+ * la même procédure `PartiesService.leave()`, sans nouvelle route.
+ */
+export type LeaveCause =
+  { type: 'LEFT'; deleteIfLastAdmin?: boolean } | { type: 'REMOVED'; byUserId: string };
 
 /** Story 39.4 : refus d'un mouvement de rôle qui n'existe pas (nommer un administrateur, ou
  *  quitter soi-même l'office — rien d'autre). */
@@ -447,51 +460,138 @@ export class PartiesService implements PartieSignalsPort {
     }));
   }
 
-  /** Le MJ retire un joueur de SA partie ; l'administrateur d'un ralliement retire un simple membre. */
+  /** Le MJ retire un joueur de SA partie ; l'administrateur d'un ralliement retire un simple membre.
+   *  Story 39.5 : simple délégation à `leave()`, seule procédure de sortie. */
   async removeMember(partieId: string, userId: string, targetUserId: string) {
-    const { partie } = await this.permissions.assert(userId, 'PARTIE_MEMBER_REMOVE', { partieId });
-    if (familyOf(partie.gameSystemId) === 'ralliement') {
-      // Story 39.3 : seul un membre ordinaire se retire ici. Le créateur, un autre administrateur
-      // et soi-même sont refusés tant que `leave()` (39.5) ne porte pas les règles de propriétaire
-      // et de dernier administrateur — elles ne sont pas réinventées dans ce chemin.
-      if (targetUserId === userId || targetUserId === partie.ownerId) {
-        throw new ConflictException(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
-      }
-      // Story 39.4 : les rôles sont relus SOUS le verrou de la partie — un administrateur nommé (ou
-      // un appelant qui vient de quitter l'office) entre la décision de droit et l'écriture ne
-      // doit jamais être retiré par erreur.
-      await this.prisma.$transaction(async (tx) => {
-        await this.lockPartie(tx, partieId);
-        const caller = await tx.membership.findUnique({
-          where: { userId_partieId: { userId, partieId } },
+    await this.leave(partieId, targetUserId, { type: 'REMOVED', byUserId: userId });
+    return { ok: true };
+  }
+
+  /**
+   * Story 39.5 — SEULE procédure de sortie d'une partie : départ volontaire (`LEFT`) comme retrait
+   * par un administrateur (`REMOVED`). `userId` est la personne qui sort.
+   *
+   * Famille `jdr` : seul le retrait par le MJ existe (`PARTIE_LEAVE` n'y est ouvert à personne), et
+   * il garde son comportement historique exact — ni verrou, ni changement de propriétaire.
+   *
+   * Groupe (`ralliement`) : tout se passe sous `SELECT … FOR UPDATE` de la partie, les rôles étant
+   * relus après le verrou (la décision de droit date d'avant). Puis :
+   * - l'adhésion est supprimée, et `ownerId` remis à `null` si la personne était le créateur ;
+   * - retrait : l'appelant doit encore être `ADMIN`, la cible un simple `MEMBER` (créateur compris) —
+   *   un autre administrateur ou soi-même → 409 ;
+   * - départ du DERNIER administrateur : le groupe est supprimé (adhésions et événements par
+   *   cascade), seulement si `deleteIfLastAdmin` le confirme — sinon 409 et rien ne change.
+   * Les émissions temps réel ont lieu après le commit, jamais dans la transaction.
+   */
+  async leave(
+    partieId: string,
+    userId: string,
+    cause: LeaveCause,
+  ): Promise<{ ok: true; deleted: boolean }> {
+    const { partie } =
+      cause.type === 'REMOVED'
+        ? await this.permissions.assert(cause.byUserId, 'PARTIE_MEMBER_REMOVE', { partieId })
+        : await this.permissions.assert(userId, 'PARTIE_LEAVE', { partieId });
+
+    if (familyOf(partie.gameSystemId) !== 'ralliement') {
+      // JDR : comportement historique inchangé (le MJ retire un joueur, sans verrou).
+      await this.prisma.membership.deleteMany({ where: { partieId, userId } });
+      await this.emitDeparture(partieId, userId, partie.ownerId);
+      return { ok: true, deleted: false };
+    }
+
+    if (cause.type === 'LEFT' && partie.kind === 'ONE_SHOT') {
+      // La cellule de la politique vaut pour la famille entière : la rencontre à usage unique (un
+      // seul administrateur, epic 41) est écartée ici.
+      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
+    }
+    if (cause.type === 'REMOVED' && userId === cause.byUserId) {
+      throw new ConflictException(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
+    }
+
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      await this.lockPartie(tx, partieId);
+      if (cause.type === 'REMOVED') {
+        // Rôles relus SOUS le verrou : un appelant qui vient de quitter l'office ne retire plus
+        // personne, une cible nommée administrateur entre-temps n'est jamais retirée.
+        const remover = await tx.membership.findUnique({
+          where: { userId_partieId: { userId: cause.byUserId, partieId } },
           select: { role: true },
         });
-        if (caller?.role !== 'ADMIN') throw new ForbiddenException(ADMIN_ONLY_MESSAGE);
+        if (remover?.role !== 'ADMIN') throw new ForbiddenException(ADMIN_ONLY_MESSAGE);
         const target = await tx.membership.findUnique({
-          where: { userId_partieId: { userId: targetUserId, partieId } },
+          where: { userId_partieId: { userId, partieId } },
           select: { role: true },
         });
         if (!target) throw new NotFoundException('Ce membre est introuvable');
         if (target.role !== 'MEMBER') {
           throw new ConflictException(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
         }
-        await tx.membership.deleteMany({ where: { partieId, userId: targetUserId } });
+      } else {
+        const leaver = await tx.membership.findUnique({
+          where: { userId_partieId: { userId, partieId } },
+          select: { role: true },
+        });
+        if (!leaver) throw new ForbiddenException(NO_ACCESS_MESSAGE);
+        if (leaver.role === 'ADMIN') {
+          // Le recomptage des administrateurs fait foi (le verrou le fige) : deux derniers
+          // administrateurs qui partent en même temps ne laissent jamais un groupe sans administrateur.
+          const adminCount = await tx.membership.count({ where: { partieId, role: 'ADMIN' } });
+          if (adminCount <= 1) {
+            return {
+              deleted: true,
+              ownerCleared: false,
+              participantIds: await this.deleteGroupOfLastAdmin(
+                tx,
+                partieId,
+                cause.deleteIfLastAdmin,
+              ),
+            };
+          }
+        }
+      }
+
+      // Points d'extension, dans CETTE transaction et sous ce verrou (aucune nouvelle route) :
+      // - epic 40 : retirer les inscriptions à venir et les votes ouverts de la personne ;
+      // - epic 42 : annuler les événements à venir qu'elle organise ;
+      // - epic 43 : suppression de compte, nouveau motif de `LeaveCause`.
+      // Les données passées sont conservées.
+      await tx.membership.deleteMany({ where: { partieId, userId } });
+      // Le créateur qui sort ne laisse pas de propriétaire derrière lui : sans ligne d'adhésion,
+      // `ownerId` le ferait encore compter comme administrateur (`ralliementRole`).
+      const cleared = await tx.partie.updateMany({
+        where: { id: partieId, ownerId: userId },
+        data: { ownerId: null },
       });
-    } else {
-      await this.prisma.membership.deleteMany({
-        where: { partieId, userId: targetUserId },
-      });
+      return { deleted: false, ownerCleared: cleared.count > 0, participantIds: [] as string[] };
+    });
+
+    // Après le commit uniquement.
+    if (outcome.deleted) {
+      this.realtimeEvents.emit(partieTopic(partieId));
+      this.emitPartieDeleted(partie.ownerId, outcome.participantIds);
+      return { ok: true, deleted: true };
     }
+    await this.emitDeparture(partieId, userId, outcome.ownerCleared ? null : partie.ownerId);
+    return { ok: true, deleted: false };
+  }
+
+  /** Émissions d'une sortie de partie (après le commit) : `partie:{id}` pour la liste des membres
+   *  déjà ouverte, `user:{id}` de la personne sortie (sa liste perd la partie) et de chaque
+   *  participant restant (signaux, `AUCUN_MEMBRE_INVITE` du MJ quand le dernier joueur part). */
+  private async emitDeparture(
+    partieId: string,
+    leaverId: string,
+    ownerId: string | null,
+  ): Promise<void> {
     // Bug fix : le MJ/les autres membres ne voyaient jamais le roster rétrécir sans recharger, et
     // le joueur retiré ne voyait jamais sa propre liste de Parties se mettre à jour.
     this.realtimeEvents.emit(partieTopic(partieId));
-    this.realtimeEvents.emit(userTopic(targetUserId));
+    this.realtimeEvents.emit(userTopic(leaverId));
     // AUCUN_MEMBRE_INVITE (Story 29.7, AD-14) : retirer le dernier membre fait réapparaître ce
-    // signal pour le MJ. `partieTopic` déjà émis ci-dessus : `emitMembersOnlySafe` (pas
-    // `emitPartieAndMembersSafe`) pour ne pas le réémettre (revue de code, Story 29.7 — double
-    // émission SSE trouvée sur tous les points d'appel).
-    await this.emitMembersOnlySafe(partieId, partie.ownerId);
-    return { ok: true };
+    // signal pour le MJ. `partieTopic` déjà émis ci-dessus : `notifyPartieSignalsChanged` (membres
+    // seulement) pour ne pas le réémettre (revue de code, Story 29.7 — double émission SSE).
+    await this.notifyPartieSignalsChanged(partieId, ownerId);
   }
 
   /**
@@ -558,14 +658,10 @@ export class PartiesService implements PartieSignalsPort {
         });
         return { deleted: false, participantIds: [] as string[] };
       }
-      if (dto.deleteIfLastAdmin !== true) throw new ConflictException(LAST_ADMIN_MESSAGE);
-      // Participants lus AVANT la suppression (la cascade emporte leurs adhésions), sous le verrou.
-      const memberships = await tx.membership.findMany({
-        where: { partieId },
-        select: { userId: true },
-      });
-      await tx.partie.delete({ where: { id: partieId } });
-      return { deleted: true, participantIds: memberships.map((m) => m.userId) };
+      return {
+        deleted: true,
+        participantIds: await this.deleteGroupOfLastAdmin(tx, partieId, dto.deleteIfLastAdmin),
+      };
     });
 
     // Après le commit uniquement.
@@ -585,6 +681,24 @@ export class PartiesService implements PartieSignalsPort {
     const rows = await tx.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "Partie" WHERE "id" = ${partieId} FOR UPDATE`;
     if (rows.length === 0) throw new NotFoundException('Partie introuvable');
+  }
+
+  /** Règle UNIQUE du dernier administrateur qui part (quitter l'office, Story 39.4, ou quitter le
+   *  groupe, Story 39.5) : sans confirmation explicite, 409 et rien ne change ; avec elle, le groupe
+   *  est supprimé (adhésions et événements par cascade). À appeler SOUS le verrou de la partie, après
+   *  le recomptage. Renvoie les participants, lus AVANT la suppression, pour l'émission après commit. */
+  private async deleteGroupOfLastAdmin(
+    tx: Prisma.TransactionClient,
+    partieId: string,
+    confirmed: boolean | undefined,
+  ): Promise<string[]> {
+    if (confirmed !== true) throw new ConflictException(LAST_ADMIN_MESSAGE);
+    const memberships = await tx.membership.findMany({
+      where: { partieId },
+      select: { userId: true },
+    });
+    await tx.partie.delete({ where: { id: partieId } });
+    return memberships.map((m) => m.userId);
   }
 
   /** Émission après suppression d'une partie : chaque participant (propriétaire compris) voit sa

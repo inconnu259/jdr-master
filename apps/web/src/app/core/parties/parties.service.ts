@@ -156,6 +156,19 @@ export class PartiesService {
     );
   }
 
+  /** Story 39.5 : quitter soi-même un groupe (`DELETE /parties/:id/members/me`). `deleteIfLastAdmin`
+   *  n'est transmis que s'il est vrai : il confirme que le départ du DERNIER administrateur supprime
+   *  le groupe — sans lui, le serveur refuse (409). L'interface ne l'envoie jamais aujourd'hui (seul
+   *  un simple membre se voit offrir « Quitter le groupe »). */
+  leave(id: string, deleteIfLastAdmin = false): Promise<{ ok: true; deleted: boolean }> {
+    return firstValueFrom(
+      this.http.delete<{ ok: true; deleted: boolean }>(`${API}/parties/${id}/members/me`, {
+        withCredentials: true,
+        ...(deleteIfLastAdmin ? { params: { deleteIfLastAdmin: 'true' } } : {}),
+      }),
+    );
+  }
+
   /** Story 39.4 : nommer un administrateur (`ADMIN`, sur un autre membre) ou quitter l'office
    *  (`MEMBER`, sur soi-même). `deleteIfLastAdmin` n'est envoyé que par la confirmation du DERNIER
    *  administrateur : sans lui, le serveur refuse (409) plutôt que de supprimer le groupe. */

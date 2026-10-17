@@ -66,6 +66,21 @@ export class PartiesController {
     return this.parties.getHeatmap(id, user.id, q.from, q.to);
   }
 
+  /** Quitter soi-même un groupe (Story 39.5). Déclarée AVANT `:id/members/:userId`, qui sinon
+   *  capterait `me` comme identifiant de membre. `?deleteIfLastAdmin=true` — et seulement cette
+   *  valeur exacte — confirme que le départ du dernier administrateur supprime le groupe. */
+  @Delete(':id/members/me')
+  leave(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Query('deleteIfLastAdmin') deleteIfLastAdmin?: string,
+  ) {
+    return this.parties.leave(id, user.id, {
+      type: 'LEFT',
+      deleteIfLastAdmin: deleteIfLastAdmin === 'true',
+    });
+  }
+
   @Delete(':id/members/:userId')
   removeMember(
     @CurrentUser() user: AuthUser,

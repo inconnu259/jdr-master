@@ -264,6 +264,8 @@ export type PermissionAction =
   | 'PARTIE_MEMBERS_READ'
   | 'PARTIE_MEMBER_REMOVE'
   | 'PARTIE_MEMBER_ROLE_SET'
+  // Story 39.5 : quitter soi-même une partie (groupe de ralliement seulement)
+  | 'PARTIE_LEAVE'
   | 'PARTIE_AVAILABILITY_READ'
   | 'PARTIE_VISIBILITY_LOCKS_READ'
   | 'PARTIE_VISIBILITY_LOCKS_UPDATE'

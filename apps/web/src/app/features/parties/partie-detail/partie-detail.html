@@ -435,9 +435,9 @@
                e-mail, lien), « Retirer » (membre ordinaire seulement), « Nommer admin » et, sur sa propre
                ligne, « Quitter l'office » (Story 39.4) ; un membre, comme une rencontre isolée (epic 41),
                garde la seule liste. Chaque administrateur d'un groupe porte le badge « Admin ». Le
-               créateur (admin) figure dans members() : on n'utilise donc pas
-               otherMembers(), qui l'écarterait — « Retirer » lui est simplement refusé
-               (canRemoveGroupMember). -->
+               créateur figure dans members() : on n'utilise donc pas otherMembers(), qui
+               l'écarterait. Story 39.5 : « Retirer » dépend du rôle seul (canRemoveGroupMember) — le
+               créateur redevenu simple membre se retire comme les autres. -->
           <mat-tab [label]="theme.tone()['partie.invitations_tab_label']">
             <section class="invite ralliement-members">
               <h3>{{ theme.tone()['partie.members_title'] }}</h3>
@@ -542,8 +542,9 @@
          -- la teinte destructrice passe donc par la classe icon-bar__btn--danger, qui référence
          --mat-sys-error directement (cf. partie-detail.scss). -->
     @if (isGroup() && notice()) {
-      <!-- Story 39.4 : l'avis d'un groupe (invitation envoyée, refus de « Quitter l'office » lancé
-           depuis le pied de page…) reste visible quel que soit l'onglet ouvert. -->
+      <!-- Story 39.4 : l'avis d'un groupe (invitation envoyée, refus de « Quitter l'office » ou, Story
+           39.5, de « Quitter le groupe » lancé depuis le pied de page…) reste visible quel que soit
+           l'onglet ouvert. -->
       <p class="notice" role="status">{{ notice() }}</p>
     }
 
@@ -593,6 +594,14 @@
             <mat-icon aria-hidden="true">delete</mat-icon> {{ theme.tone()['partie.delete_btn'] }}
           </button>
         }
+      } @else if (canLeaveGroup()) {
+        <!-- Story 39.5 : le simple membre d'un groupe peut le quitter (même place au pied de carte que
+             « Quitter l'office » pour l'administrateur). PAS de teinte destructrice : une nouvelle
+             invitation le ramène, le rouge reste réservé à l'irréversible. -->
+        <button mat-button class="icon-bar__btn" (click)="leaveGroup()">
+          <mat-icon aria-hidden="true">exit_to_app</mat-icon>
+          {{ theme.tone()['partie.ralliement_leave_btn'] }}
+        </button>
       }
     </mat-card-actions>
   </mat-card>

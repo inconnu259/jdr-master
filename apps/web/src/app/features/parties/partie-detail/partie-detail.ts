@@ -242,18 +242,24 @@ export class PartieDetail implements OnInit {
    *  les conjonctions du groupe à ce moment-là, sans toucher au dialogue. */
   protected readonly conjonctionCount = computed(() => 0);
 
-  /** « Retirer » n'est offert que sur un membre ordinaire que le serveur acceptera de retirer : ni le
-   *  créateur (propriétaire), ni soi-même, ni un administrateur (Story 39.4 : son rôle vient de
-   *  `members()`). Sur écran périmé, le serveur refuse quand même (409), message affiché
-   *  (`removeMember`). */
+  /** « Retirer » n'est offert que sur un membre ordinaire que le serveur acceptera de retirer : ni
+   *  soi-même, ni un administrateur (Story 39.4 : son rôle vient de `members()`). Story 39.5 : c'est
+   *  le rôle qui décide, plus `ownerId` — le créateur redevenu simple membre se retire comme les
+   *  autres. Sur écran périmé, le serveur refuse quand même (409), message affiché (`removeMember`). */
   protected canRemoveGroupMember(member: PartieMemberDto): boolean {
     return (
       this.canInviteMembers() &&
       member.role !== 'ADMIN' &&
-      member.userId !== this.partie()?.ownerId &&
       member.userId !== this.auth.currentUser()?.id
     );
   }
+
+  /** Story 39.5 : « Quitter le groupe » n'est offert qu'au simple membre d'un GROUPE. Un
+   *  administrateur quitte d'abord l'office (UX : les membres partent, les admins se démettent) ; la
+   *  rencontre isolée n'a pas cette action (epic 41). */
+  protected readonly canLeaveGroup = computed(
+    () => this.isGroup() && this.partie()?.role === 'member',
+  );
 
   /** Story 39.4 : « Nommer admin » sur chaque membre ordinaire, pour l'administrateur d'un groupe. */
   protected canAppointAdmin(member: PartieMemberDto): boolean {
@@ -972,6 +978,42 @@ export class PartieDetail implements OnInit {
     }
     // Succès ou refus sur écran périmé : rôle et liste sont relus depuis le serveur.
     await Promise.all([this.refreshPartie(), this.loadMembers()]);
+  }
+
+  /** Story 39.5 : un simple membre quitte le groupe. Confirmation (bouton NON rouge : une nouvelle
+   *  invitation le ramène, ce n'est pas irréversible), puis liste d'accueil rafraîchie et retour à
+   *  l'accueil. Un refus du serveur est affiché dans l'avis du groupe, et la page relue (rôle changé
+   *  entre-temps). */
+  async leaveGroup(): Promise<void> {
+    const p = this.partie();
+    if (!p || !this.canLeaveGroup()) return;
+    const tone = this.theme.tone();
+    const ref = this.dialog.open(ConfirmDialog, {
+      data: {
+        message: fillTone(tone['partie.ralliement_leave_confirm'], { partie: p.name }),
+        confirmLabel: tone['partie.ralliement_leave_btn'],
+      },
+    });
+    if (!(await firstValueFrom(ref.afterClosed()))) return;
+    this.notice.set(null);
+    try {
+      await this.parties.leave(p.id);
+    } catch (error) {
+      this.notice.set(this.refusalMessage(error, tone['partie.ralliement_leave_error']));
+      try {
+        await Promise.all([this.refreshPartie(), this.loadMembers()]);
+      } catch {
+        // non bloquant : l'avis reste affiché, l'état sera relu au prochain changement
+      }
+      return;
+    }
+    // Le départ est enregistré : un échec du rafraîchissement de la liste ne change rien à la suite.
+    try {
+      await this.myPartiesSvc.refreshAll();
+    } catch {
+      // non bloquant : la liste d'accueil se rechargera à l'arrivée
+    }
+    void this.router.navigate(['/']);
   }
 
   async createLink(): Promise<void> {

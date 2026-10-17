@@ -929,6 +929,9 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_appoint_confirm',
     'partie.ralliement_step_down_btn',
     'partie.ralliement_last_admin_btn',
+    // Story 39.5 : bouton « Quitter le groupe », verbatim du contrat d’UI ; sa confirmation prend le
+    // tutoiement de la forêt, donc sa clé a une voix et n’est pas listée ici
+    'partie.ralliement_leave_btn',
     // Gabarits structurels et libellés techniques
     'partie.signal_more_count',
     'parties.detail_link_expires_short',
@@ -1376,6 +1379,33 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
         expect(tone['partie.ralliement_last_admin_confirm'], theme).toContain(trou);
       }
     }
+  });
+
+  // Story 39.5 : quitter un groupe. Bouton identique dans les trois thèmes, confirmation verbatim du
+  // contrat (tutoyée dans la forêt), repli d'erreur avec une voix par thème. Aucun mot de JDR.
+  it('Story 39.5 : « Quitter le groupe » garde les mots du contrat, sans mot de JDR', () => {
+    const contrat =
+      'Quitter « {partie} » ? Vous n’en ferez plus partie ; un administrateur devra vous inviter à nouveau pour revenir.';
+    for (const theme of THEMES) {
+      const tone = TONE_MAP[theme];
+      expect(tone['partie.ralliement_leave_btn'], theme).toBe('Quitter le groupe');
+      for (const key of [
+        'partie.ralliement_leave_btn',
+        'partie.ralliement_leave_confirm',
+        'partie.ralliement_leave_error',
+      ]) {
+        expect(tone[key], `${theme} / ${key}`).toBeTruthy();
+        expect(NON_JDR_BANNED_WORDS.test(tone[key]), `${theme} / ${key}`).toBe(false);
+      }
+      expect(tone['partie.ralliement_leave_confirm'], theme).toContain('{partie}');
+    }
+    expect(TONE_MAP['grimoire-emeraude']['partie.ralliement_leave_confirm']).toBe(contrat);
+    expect(TONE_MAP['atelier-cuivre']['partie.ralliement_leave_confirm']).toBe(contrat);
+    expect(TONE_MAP['foret-ancienne']['partie.ralliement_leave_confirm']).toBe(
+      'Quitter « {partie} » ? Tu n’en feras plus partie ; un administrateur devra t’inviter à nouveau pour revenir.',
+    );
+    const erreurs = THEMES.map((theme) => TONE_MAP[theme]['partie.ralliement_leave_error']);
+    expect(new Set(erreurs).size).toBe(THEMES.length);
   });
 
   it('Story 39.3 : les gabarits de l’écran de lien et de retrait gardent leurs trous', () => {

@@ -73,6 +73,24 @@ describe('PartiesService (front)', () => {
     await p;
   });
 
+  it('leave → DELETE /parties/:id/members/me avec withCredentials, sans confirmation de suppression (Story 39.5)', async () => {
+    const p = service.leave('p1');
+    const req = http.expectOne((r) => r.url === `${API}/parties/p1/members/me`);
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.params.has('deleteIfLastAdmin')).toBe(false);
+    req.flush({ ok: true, deleted: false });
+    expect(await p).toEqual({ ok: true, deleted: false });
+  });
+
+  it('leave(id, true) → envoie deleteIfLastAdmin=true (Story 39.5)', async () => {
+    const p = service.leave('p1', true);
+    const req = http.expectOne((r) => r.url === `${API}/parties/p1/members/me`);
+    expect(req.request.params.get('deleteIfLastAdmin')).toBe('true');
+    req.flush({ ok: true, deleted: true });
+    expect(await p).toEqual({ ok: true, deleted: true });
+  });
+
   it('close → PATCH /parties/:id/close avec withCredentials (Story 29.6)', async () => {
     const p = service.close('p1');
     const req = http.expectOne(`${API}/parties/p1/close`);
