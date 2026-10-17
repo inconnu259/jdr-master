@@ -1,10 +1,19 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import {
   EventsService,
   FULL_EVENT_MESSAGE,
+  POLL_MODE_MESSAGE,
+  VOTE_DATE_SET_MESSAGE,
+  VOTE_ENDED_MESSAGE,
+  VOTE_NOT_ELIGIBLE_MESSAGE,
   PAST_EVENT_MESSAGE,
   PAST_ROSTER_MESSAGE,
   RESERVE_ALREADY_MESSAGE,
@@ -82,8 +91,12 @@ function makePrisma() {
       findMany: jest.fn().mockResolvedValue([]),
       delete: jest.fn(),
       update: jest.fn(),
+      // Story 40.5 : séance d'un sondage (vote d'un groupe).
+      findUnique: jest.fn(),
     },
-    sessionPoll: { delete: jest.fn() },
+    // Story 40.5 : sondages des cartes (créneaux + réponses) et disponibilités déclarées des inscrits.
+    sessionPoll: { delete: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+    availabilityDeclaration: { findMany: jest.fn().mockResolvedValue([]) },
     inscription: { deleteMany: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     // Story 40.2 : rôle de groupe des participants d'une carte.
     membership: { findMany: jest.fn().mockResolvedValue([]) },
@@ -380,6 +393,7 @@ describe('EventsService (Story 37.3)', () => {
             },
           ],
           myInscription: null,
+          poll: null,
         },
       ]);
       // Une seule lecture, scopée à la partie de l'autorisation.
@@ -2231,6 +2245,427 @@ describe('EventsService (Story 37.3)', () => {
       const own = await service.ownEventsOf('me', rolesOf('mj'), RANGE);
 
       expect(own.inscriptionsOuvertes).toEqual([]);
+    });
+  });
+
+  // ─── Sondage de dates d'une conjonction (Story 40.5) ─────────────────────────────────────────
+  describe('conjonction à sondage de dates (Story 40.5)', () => {
+    const SEANCE_POLL = {
+      date: null,
+      slot: null,
+      lieu: 'Lyon 3e',
+      heureRdv: null,
+      notePratique: null,
+      capacity: null,
+    };
+
+    describe('createHosted()', () => {
+      it('écrit le sondage (callback) DANS la transaction, puis la séance SANS date qui porte pollId', async () => {
+        prisma.tx.$queryRaw.mockResolvedValue([{ kind: 'CAMPAGNE_EPISODIQUE' }]);
+        const order: string[] = [];
+        prisma.tx.event.create.mockImplementation(() => {
+          order.push('event');
+          return Promise.resolve(EVENT);
+        });
+        prisma.tx.seance.create.mockImplementation(() => {
+          order.push('seance');
+          return Promise.resolve({ id: 'se1' });
+        });
+        const createPoll = jest.fn((tx: unknown) => {
+          order.push('poll');
+          expect(tx).toBe(prisma.tx);
+          return Promise.resolve({ id: 'poll-1' });
+        });
+
+        await service.createHosted(GRANT_P1, 'hote', {
+          title: 'Catane',
+          seance: { ...SEANCE_POLL, createPoll },
+        });
+
+        expect(order).toEqual(['event', 'poll', 'seance']);
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(prisma.tx.seance.create).toHaveBeenCalledWith({
+          data: {
+            eventId: 'e1',
+            pollId: 'poll-1',
+            startDate: null,
+            startSlot: null,
+            endDate: null,
+            endSlot: null,
+            lieu: 'Lyon 3e',
+            heureRdv: null,
+            notePratique: null,
+            inscriptionMax: null,
+          },
+        });
+        expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      });
+
+      it('tout ou rien : si le sondage échoue, aucune séance n’est écrite et rien n’est émis', async () => {
+        prisma.tx.$queryRaw.mockResolvedValue([{ kind: 'CAMPAGNE_EPISODIQUE' }]);
+        const createPoll = jest
+          .fn()
+          .mockRejectedValue(new BadRequestException('Options dupliquées'));
+
+        await expect(
+          service.createHosted(GRANT_P1, 'hote', {
+            title: 'X',
+            seance: { ...SEANCE_POLL, createPoll },
+          }),
+        ).rejects.toThrow('Options dupliquées');
+        expect(prisma.tx.seance.create).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      });
+
+      it('séance sans date ET sans sondage (ou datée ET avec sondage) → 400, rien n’est écrit', async () => {
+        prisma.tx.$queryRaw.mockResolvedValue([{ kind: 'CAMPAGNE_EPISODIQUE' }]);
+        const day = new Date('2026-11-14T00:00:00.000Z');
+
+        await expect(
+          service.createHosted(GRANT_P1, 'hote', { title: 'X', seance: SEANCE_POLL }),
+        ).rejects.toThrow(POLL_MODE_MESSAGE);
+        await expect(
+          service.createHosted(GRANT_P1, 'hote', {
+            title: 'X',
+            seance: {
+              ...SEANCE_POLL,
+              date: day,
+              slot: 'EVENING',
+              createPoll: jest.fn().mockResolvedValue({ id: 'p' }),
+            },
+          }),
+        ).rejects.toThrow(POLL_MODE_MESSAGE);
+        expect(prisma.tx.seance.create).not.toHaveBeenCalled();
+      });
+
+      it('une séance sans date ne fait jamais entrer de date dans la prochaine séance de la partie (le recalcul n’ajoute aucune date)', async () => {
+        prisma.tx.$queryRaw.mockResolvedValue([{ kind: 'CAMPAGNE_EPISODIQUE' }]);
+        prisma.tx.seance.findMany.mockResolvedValue([{ startDate: null, startSlot: null }]);
+
+        await service.createHosted(GRANT_P1, 'hote', {
+          title: 'X',
+          seance: { ...SEANCE_POLL, createPoll: jest.fn().mockResolvedValue({ id: 'p' }) },
+        });
+
+        expect(prisma.tx.partie.update).toHaveBeenCalledWith({
+          where: { id: 'p1' },
+          data: { nextSessionDate: null, nextSessionSlot: null },
+        });
+      });
+    });
+
+    describe('updateHosted()', () => {
+      const GRANT_E1 = testGrant({ id: 'p1', ownerId: 'mj1' }, 'member', { eventId: 'e1' });
+      const pollSeance = (over: Record<string, unknown> = {}) =>
+        prisma.tx.event.findUnique.mockResolvedValue({
+          ownerId: 'hote',
+          seances: [{ id: 'se1', startDate: null, startSlot: null, pollId: 'poll-1', ...over }],
+        });
+
+      it('délègue créneaux et échéance au callback (dans la transaction), n’écrit JAMAIS de date de séance', async () => {
+        pollSeance();
+        prisma.tx.inscription.count.mockResolvedValue(1);
+        const updatePoll = jest.fn().mockResolvedValue(undefined);
+
+        await service.updateHosted(GRANT_E1, 'e1', {
+          title: 'Catane v2',
+          seance: { ...SEANCE_POLL, capacity: 6, updatePoll },
+        });
+
+        expect(updatePoll).toHaveBeenCalledWith(prisma.tx, 'poll-1');
+        expect(prisma.tx.seance.update).toHaveBeenCalledWith({
+          where: { id: 'se1' },
+          data: { lieu: 'Lyon 3e', heureRdv: null, notePratique: null, inscriptionMax: 6 },
+        });
+        expect(prisma.tx.partie.update).toHaveBeenCalledTimes(1);
+        expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      });
+
+      it('le mode ne change pas : date fournie pour une conjonction à sondage, ou sondage pour une conjonction datée → 400', async () => {
+        pollSeance();
+        await expect(
+          service.updateHosted(GRANT_E1, 'e1', {
+            title: 'X',
+            seance: {
+              ...SEANCE_POLL,
+              date: new Date('2026-12-01T00:00:00.000Z'),
+              slot: 'EVENING',
+            },
+          }),
+        ).rejects.toThrow(POLL_MODE_MESSAGE);
+
+        pollSeance({ pollId: null, startDate: new Date(Date.now() + 5 * 86_400_000) });
+        await expect(
+          service.updateHosted(GRANT_E1, 'e1', {
+            title: 'X',
+            seance: { ...SEANCE_POLL, updatePoll: jest.fn() },
+          }),
+        ).rejects.toThrow(POLL_MODE_MESSAGE);
+        expect(prisma.tx.seance.update).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      });
+
+      it('échec du callback (échéance passée…) : rien n’est écrit ni émis', async () => {
+        pollSeance();
+        prisma.tx.inscription.count.mockResolvedValue(0);
+        const updatePoll = jest.fn().mockRejectedValue(new BadRequestException('échéance passée'));
+
+        await expect(
+          service.updateHosted(GRANT_E1, 'e1', {
+            title: 'X',
+            seance: { ...SEANCE_POLL, updatePoll },
+          }),
+        ).rejects.toThrow('échéance passée');
+        expect(prisma.tx.seance.update).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('listCards() — bloc poll', () => {
+      const day = (key: string) => new Date(`${key}T00:00:00.000Z`);
+      const row = (over: Record<string, unknown> = {}) => ({
+        id: 'e1',
+        title: 'Catane',
+        ownerId: 'hote',
+        owner: { displayName: 'Léa' },
+        seances: [
+          {
+            id: 'se1',
+            startDate: null,
+            startSlot: null,
+            lieu: null,
+            heureRdv: null,
+            notePratique: null,
+            inscriptionMax: null,
+            pollId: 'poll-1',
+          },
+        ],
+        ...over,
+      });
+      const pollRow = {
+        id: 'poll-1',
+        expiresAt: new Date('2026-11-10T23:59:59.999Z'),
+        status: 'OPEN',
+        options: [
+          { id: 'o2', date: day('2026-11-15'), slot: 'MORNING' },
+          { id: 'o1', date: day('2026-11-14'), slot: 'EVENING' },
+        ],
+        votes: [
+          { optionId: 'o1', userId: 'hote', answer: 'YES' },
+          { optionId: 'o1', userId: 'parti', answer: 'NO' },
+        ],
+      };
+      const decl = (userId: string, slot: string, from: string, to: string) => ({
+        userId,
+        kind: 'AVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot,
+        startDate: day(from),
+        endDate: day(to),
+        expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+      });
+
+      it('conjonction datée : poll null, aucune lecture de sondage', async () => {
+        prisma.event.findMany.mockResolvedValue([
+          row({
+            seances: [
+              {
+                ...row().seances[0],
+                pollId: null,
+                startDate: day('2026-11-14'),
+                startSlot: 'EVENING',
+              },
+            ],
+          }),
+        ]);
+
+        const [card] = await service.listCards(GRANT_P1, 'viewer');
+
+        expect(card.poll).toBeNull();
+        expect(prisma.sessionPoll.findMany).not.toHaveBeenCalled();
+        expect(prisma.availabilityDeclaration.findMany).not.toHaveBeenCalled();
+      });
+
+      it('« Tous les membres » : votants éligibles = membres du groupe (hôte compris), créneaux triés, réponses des éligibles', async () => {
+        prisma.event.findMany.mockResolvedValue([row()]);
+        prisma.sessionPoll.findMany.mockResolvedValue([pollRow]);
+        // rosterOf lit les appartenances (rôles) ; le sondage relit les membres du groupe.
+        prisma.membership.findMany.mockResolvedValue([
+          { userId: 'hote', role: 'MEMBER' },
+          { userId: 'ami', role: 'ADMIN' },
+        ]);
+
+        const [card] = await service.listCards(GRANT_P1, 'viewer');
+
+        expect(card.seance).toEqual(objectLike({ date: null, slot: null }));
+        expect(card.poll).toEqual({
+          id: 'poll-1',
+          expiresAt: '2026-11-10T23:59:59.999Z',
+          status: 'OPEN',
+          eligibleVoterIds: ['hote', 'ami'],
+          options: [
+            { id: 'o1', date: '2026-11-14', slot: 'EVENING', availableCount: 0 },
+            { id: 'o2', date: '2026-11-15', slot: 'MORNING', availableCount: 0 },
+          ],
+          // La réponse de « parti » (non éligible) n'est pas servie.
+          votes: [{ optionId: 'o1', userId: 'hote', answer: 'YES' }],
+        });
+        expect(callArg(prisma.sessionPoll.findMany)).toEqual(
+          objectLike({ where: { id: { in: ['poll-1'] }, partieId: 'p1' } }),
+        );
+      });
+
+      it('places limitées : hôte + inscrits CONFIRMÉS, jamais une place seulement réservée ; availableCount = inscrits libres (UNE lecture des disponibilités)', async () => {
+        prisma.event.findMany.mockResolvedValue([
+          row({ seances: [{ ...row().seances[0], inscriptionMax: 4 }] }),
+        ]);
+        prisma.sessionPoll.findMany.mockResolvedValue([pollRow]);
+        prisma.inscription.findMany.mockResolvedValue([
+          { seanceId: 'se1', userId: 'ami', status: 'CONFIRMED', user: { displayName: 'Zoé' } },
+          { seanceId: 'se1', userId: 'invite', status: 'RESERVED', user: { displayName: 'Sam' } },
+        ]);
+        prisma.availabilityDeclaration.findMany.mockResolvedValue([
+          decl('hote', 'EVENING', '2026-11-14', '2026-11-14'),
+          decl('ami', 'FULL_DAY', '2026-11-14', '2026-11-16'),
+          // « invite » n'est pas inscrit : sa disponibilité ne compte pas (et n'est pas même demandée).
+          decl('invite', 'EVENING', '2026-11-14', '2026-11-14'),
+        ]);
+
+        const [card] = await service.listCards(GRANT_P1, 'viewer');
+
+        expect(card.poll?.eligibleVoterIds).toEqual(['hote', 'ami']);
+        expect(card.poll?.options).toEqual([
+          { id: 'o1', date: '2026-11-14', slot: 'EVENING', availableCount: 2 },
+          { id: 'o2', date: '2026-11-15', slot: 'MORNING', availableCount: 1 },
+        ]);
+        expect(prisma.availabilityDeclaration.findMany).toHaveBeenCalledTimes(1);
+        const where = callArg<{ where: { userId: { in: string[] } } }>(
+          prisma.availabilityDeclaration.findMany,
+        ).where;
+        expect([...where.userId.in].sort()).toEqual(['ami', 'hote']);
+      });
+
+      it('plusieurs conjonctions à sondage : une lecture de sondages, une de disponibilités (pas de requête par carte)', async () => {
+        prisma.event.findMany.mockResolvedValue([
+          row(),
+          row({
+            id: 'e2',
+            seances: [{ ...row().seances[0], id: 'se2', pollId: 'poll-2' }],
+          }),
+        ]);
+        prisma.sessionPoll.findMany.mockResolvedValue([
+          pollRow,
+          { ...pollRow, id: 'poll-2', votes: [] },
+        ]);
+
+        const cards = await service.listCards(GRANT_P1, 'viewer');
+
+        expect(cards.map((c) => c.poll?.id)).toEqual(['poll-1', 'poll-2']);
+        expect(prisma.sessionPoll.findMany).toHaveBeenCalledTimes(1);
+        expect(prisma.availabilityDeclaration.findMany).toHaveBeenCalledTimes(1);
+      });
+
+      it('tri : les conjonctions à sondage (sans date) viennent après les datées', async () => {
+        prisma.event.findMany.mockResolvedValue([
+          row({ id: 'sondage' }),
+          row({
+            id: 'datee',
+            seances: [
+              {
+                ...row().seances[0],
+                pollId: null,
+                startDate: day('2026-12-01'),
+                startSlot: 'EVENING',
+              },
+            ],
+          }),
+        ]);
+        prisma.sessionPoll.findMany.mockResolvedValue([pollRow]);
+
+        const cards = await service.listCards(GRANT_P1, 'viewer');
+
+        expect(cards.map((c) => c.id)).toEqual(['datee', 'sondage']);
+      });
+    });
+
+    describe('assertCanVote() — GroupPollVotePort', () => {
+      const POLL = { id: 'poll-1', partieId: 'p1', expiresAt: new Date(Date.now() + 86_400_000) };
+      const GROUPE = { kind: 'CAMPAGNE_EPISODIQUE' as const };
+      const seanceRow = (over: Record<string, unknown> = {}) =>
+        prisma.seance.findUnique.mockResolvedValue({
+          startDate: null,
+          inscriptionMax: null,
+          inscriptions: [],
+          event: { partieId: 'p1', ownerId: 'hote' },
+          ...over,
+        });
+
+      it('« Tous les membres » : un membre du groupe vote, un étranger est refusé (403)', async () => {
+        seanceRow();
+        prisma.membership.findMany.mockResolvedValue([{ userId: 'hote' }, { userId: 'ami' }]);
+
+        await expect(service.assertCanVote(POLL, GROUPE, 'ami')).resolves.toBeUndefined();
+        await expect(service.assertCanVote(POLL, GROUPE, 'hote')).resolves.toBeUndefined();
+        const refusal = service.assertCanVote(POLL, GROUPE, 'etranger');
+        await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(refusal).rejects.toThrow(VOTE_NOT_ELIGIBLE_MESSAGE);
+      });
+
+      it('places limitées : l’hôte et les confirmés votent ; un membre non inscrit ou seulement réservé est refusé', async () => {
+        seanceRow({
+          inscriptionMax: 4,
+          inscriptions: [
+            { userId: 'ami', status: 'CONFIRMED' },
+            { userId: 'invite', status: 'RESERVED' },
+          ],
+        });
+
+        await expect(service.assertCanVote(POLL, GROUPE, 'ami')).resolves.toBeUndefined();
+        await expect(service.assertCanVote(POLL, GROUPE, 'hote')).resolves.toBeUndefined();
+        await expect(service.assertCanVote(POLL, GROUPE, 'invite')).rejects.toBeInstanceOf(
+          ForbiddenException,
+        );
+        await expect(service.assertCanVote(POLL, GROUPE, 'membre')).rejects.toBeInstanceOf(
+          ForbiddenException,
+        );
+        // Places limitées : les membres du groupe ne sont pas même lus.
+        expect(prisma.membership.findMany).not.toHaveBeenCalled();
+      });
+
+      it('après l’échéance → 400 ; date déjà fixée → 400 ; rien n’est lu au-delà', async () => {
+        seanceRow();
+        const ended = service.assertCanVote(
+          { ...POLL, expiresAt: new Date(Date.now() - 1000) },
+          GROUPE,
+          'hote',
+        );
+        await expect(ended).rejects.toBeInstanceOf(BadRequestException);
+        await expect(ended).rejects.toThrow(VOTE_ENDED_MESSAGE);
+
+        seanceRow({ startDate: new Date('2026-11-14T00:00:00.000Z') });
+        const dated = service.assertCanVote(POLL, GROUPE, 'hote');
+        await expect(dated).rejects.toBeInstanceOf(BadRequestException);
+        await expect(dated).rejects.toThrow(VOTE_DATE_SET_MESSAGE);
+        expect(prisma.membership.findMany).not.toHaveBeenCalled();
+      });
+
+      it('sondage rattaché à aucune conjonction de cette partie → 400 ; rencontre isolée → 403', async () => {
+        prisma.seance.findUnique.mockResolvedValue(null);
+        await expect(service.assertCanVote(POLL, GROUPE, 'hote')).rejects.toThrow(
+          'Poll introuvable ou fermé',
+        );
+
+        seanceRow({ event: { partieId: 'autre', ownerId: 'hote' } });
+        await expect(service.assertCanVote(POLL, GROUPE, 'hote')).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+
+        seanceRow();
+        await expect(
+          service.assertCanVote(POLL, { kind: 'ONE_SHOT' }, 'hote'),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+      });
     });
   });
 });

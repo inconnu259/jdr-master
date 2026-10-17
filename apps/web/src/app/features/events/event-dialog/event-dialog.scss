@@ -88,7 +88,8 @@
 }
 
 .ed__sheet,
-.ed__participants {
+.ed__participants,
+.ed__slots {
   margin-bottom: 16px;
 }
 
@@ -204,4 +205,59 @@
   button {
     min-height: 44px;
   }
+}
+
+/* Story 40.5 — panneau du sondage de dates. Membre qui n'a pas voté : cadre « à faire » ; hôte : cadre
+   accent. Le texte dit l'état, le cadre le double (jamais la couleur seule). */
+.ed__poll {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--mat-sys-outline-variant);
+}
+
+.ed__poll--todo {
+  border-color: var(--jdr-status-todo, #f0a030);
+  background: color-mix(in srgb, var(--jdr-status-todo, #f0a030) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--jdr-status-todo, #f0a030);
+}
+
+.ed__poll--host {
+  border-color: var(--jdr-accent-1, var(--mat-sys-primary));
+  background: color-mix(in srgb, var(--jdr-accent-1, var(--mat-sys-primary)) 8%, transparent);
+}
+
+.ed__poll-text {
+  margin: 0 0 6px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.ed__poll-line {
+  margin: 0 0 4px;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+/* Fiche : chaque créneau candidat et le nombre d'inscrits libres. */
+.ed__slot-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ed__slot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  font-size: 0.875rem;
+}
+
+.ed__slot-available {
+  color: var(--jdr-text-muted, var(--mat-sys-on-surface-variant));
 }

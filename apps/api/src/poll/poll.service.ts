@@ -1,7 +1,20 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { DaySlot, PartieRole, SessionPollDto } from '@master-jdr/shared';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import type { DaySlot, PartieKind, PartieRole, SessionPollDto } from '@master-jdr/shared';
+// Import RUNTIME du registre des systèmes (Story 40.5) : la famille de la partie décide si le vote
+// passe par les règles d'un groupe. Jamais `import type` sur une valeur.
+import { familyOf } from '@master-jdr/shared';
 import { countParticipants } from '../common/participant-count.util';
-import { PermissionService, type PartieGrant } from '../permissions/permission.service';
+import {
+  PermissionService,
+  RALLIEMENT_UNAVAILABLE_MESSAGE,
+  type PartieGrant,
+} from '../permissions/permission.service';
 import {
   HIDDEN_DRAFT_POLL_WHERE,
   VISIBLE_POLL_WHERE,
@@ -14,10 +27,33 @@ import { ChooseDateDto } from './dto/choose-date.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
 import { Prisma } from '@prisma/client';
 import { SetPollOptionsDto } from './dto/set-poll-options.dto';
+import { GROUP_POLL_VOTE_PORT, type GroupPollVotePort } from './ports/group-poll-vote.port';
 import { PARTIE_SIGNALS_PORT, type PartieSignalsPort } from './ports/partie-signals.port';
 import { SEANCE_DATE_PORT, type SeanceDatePort } from './ports/seance-date.port';
 
 const DEFAULT_POLL_TTL_MS = 14 * 24 * 60 * 60 * 1000; // défaut 14 jours
+
+/** Bornes d'un sondage du JDR (Story 36.10) : de 2 à 40 créneaux. */
+export const JDR_POLL_OPTION_BOUNDS = { min: 2, max: 40 } as const;
+
+/** Garde technique d'un sondage de groupe (Story 40.5) : aucun plafond métier — seulement de quoi
+ *  borner la charge d'une requête. */
+export const GROUP_POLL_OPTION_BOUNDS = { min: 2, max: 200 } as const;
+
+/** Refus de fixer une échéance de vote déjà passée (Story 40.5). */
+export const POLL_DEADLINE_PAST_MESSAGE = "L'échéance du vote ne peut pas être passée";
+
+/** Bornes du nombre de créneaux d'un sondage. */
+export interface PollOptionBounds {
+  min: number;
+  max: number;
+}
+
+/** Un créneau candidat tel qu'écrit : un jour (instant UTC) et un créneau. */
+export interface PollOptionInput {
+  date: Date;
+  slot: DaySlot;
+}
 
 const POLL_INCLUDE = {
   options: {
@@ -44,6 +80,9 @@ export class PollService {
     // `events/`) et les signaux de partie (émis par `parties/`).
     @Inject(SEANCE_DATE_PORT) private readonly seanceDate: SeanceDatePort,
     @Inject(PARTIE_SIGNALS_PORT) private readonly partieSignals: PartieSignalsPort,
+    // Story 40.5 : les règles d'un vote de GROUPE (votants éligibles, échéance, date déjà fixée) sont
+    // celles de `events/`, jointes par un port — `poll/` ne connaît pas la conjonction.
+    @Inject(GROUP_POLL_VOTE_PORT) private readonly groupVotes: GroupPollVotePort,
   ) {}
 
   /** Crée un vote de date sur la partie de l'autorisation. Seul appelant :
@@ -52,43 +91,107 @@ export class PollService {
   async create(grant: PartieGrant, userId: string, dto: CreatePollDto): Promise<SessionPollDto> {
     const partieId = grant.partieId;
 
-    // Revue de code (Story 36.10) — clé normalisée par `optionKey()`, la MÊME que celle de
-    // `setOptions()` : comparer la chaîne brute reçue laissait deux dates représentant le même
-    // instant (composante horaire ou décalage différents) passer pour distinctes, ce que
-    // `@IsDateString()` autorise en entrée.
-    const seen = new Set<string>();
-    for (const o of dto.options) {
-      const key = optionKey(new Date(o.date), o.slot);
-      if (seen.has(key)) throw new BadRequestException('Options dupliquées (même date et créneau)');
-      seen.add(key);
-    }
-
-    const poll = await this.prisma.$transaction(async (tx) => {
-      // Story 8.8 (Décision 2) : un seul vote actif par Séance, pas par Partie — plusieurs
-      // SessionPoll OPEN peuvent désormais coexister sur la même Partie (un par Séance). La garde
-      // « déjà liée à un vote de date » de ScenariosService.createSeancePoll() (Story 8.7) suffit à
-      // garantir l'unicité au niveau Séance ; retiré : la fermeture auto de tout poll OPEN existant.
-      return tx.sessionPoll.create({
-        data: {
-          partieId,
-          createdById: userId,
-          scenarioRef: dto.scenarioRef ?? null,
-          expiresAt: new Date(Date.now() + DEFAULT_POLL_TTL_MS),
-          options: {
-            create: dto.options.map((o) => ({
-              date: new Date(o.date),
-              slot: o.slot,
-            })),
-          },
-        },
-        include: POLL_INCLUDE,
-      });
-    });
+    // Story 8.8 (Décision 2) : un seul vote actif par Séance, pas par Partie — plusieurs
+    // SessionPoll OPEN peuvent désormais coexister sur la même Partie (un par Séance). La garde
+    // « déjà liée à un vote de date » de ScenariosService.createSeancePoll() (Story 8.7) suffit à
+    // garantir l'unicité au niveau Séance ; retiré : la fermeture auto de tout poll OPEN existant.
+    const options = dto.options.map((o) => ({ date: new Date(o.date), slot: o.slot }));
+    // Les doublons sont refusés AVANT d'ouvrir la transaction (comme avant la Story 40.5).
+    assertNoDuplicateOptions(options);
+    const poll = await this.prisma.$transaction((tx) =>
+      this.createInTx(tx, partieId, userId, { options, scenarioRef: dto.scenarioRef ?? null }),
+    );
     this.realtimeEvents.emit(partieTopic(partieId));
     // AUCUNE_DATE_NI_VOTE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement.
     await this.partieSignals.notifyChanged(partieId);
     return toDto(poll, await countParticipants(this.prisma, partieId));
+  }
+
+  /**
+   * Écrit un vote de date DANS la transaction de l'appelant (Story 40.5) — l'unique écrivain de
+   * `SessionPoll`/`PollOption`, que `create()` (JDR : échéance par défaut de 14 jours, bornes portées
+   * par le DTO) et la création d'une conjonction à sondage (groupe : échéance choisie, créneaux sans
+   * plafond métier, événement + séance + sondage écrits ensemble ou pas du tout) partagent. N'émet
+   * rien : l'appelant émet après son commit.
+   *
+   * `expiresAt` absent → l'échéance par défaut du JDR. `bounds` absentes → aucune borne vérifiée ici
+   * (le DTO du JDR les porte déjà) ; présentes, le nombre de créneaux y est contrôlé. Les doublons
+   * (clé `date|slot` normalisée par `optionKey()`, la MÊME que celle de `setOptions()`) sont toujours
+   * refusés.
+   */
+  async createInTx(
+    tx: Prisma.TransactionClient,
+    partieId: string,
+    userId: string,
+    input: {
+      options: PollOptionInput[];
+      scenarioRef?: string | null;
+      expiresAt?: Date;
+      bounds?: PollOptionBounds;
+    },
+  ): Promise<Prisma.SessionPollGetPayload<{ include: typeof POLL_INCLUDE }>> {
+    // Revue de code (Story 36.10) — clé normalisée par `optionKey()` : comparer la chaîne brute reçue
+    // laissait deux dates représentant le même instant (composante horaire ou décalage différents)
+    // passer pour distinctes, ce que `@IsDateString()` autorise en entrée.
+    assertOptionBounds(input.options.length, input.bounds);
+    assertNoDuplicateOptions(input.options);
+    return tx.sessionPoll.create({
+      data: {
+        partieId,
+        createdById: userId,
+        scenarioRef: input.scenarioRef ?? null,
+        expiresAt: input.expiresAt ?? new Date(Date.now() + DEFAULT_POLL_TTL_MS),
+        options: { create: input.options.map((o) => ({ date: o.date, slot: o.slot })) },
+      },
+      include: POLL_INCLUDE,
+    });
+  }
+
+  /**
+   * Story 40.5 — met à jour, dans la transaction de l'appelant, le sondage d'une conjonction : les
+   * créneaux (RÉCONCILIATION sur la clé `date|slot`, comme `setOptions()` : un créneau conservé garde
+   * son identifiant et ses réponses, seuls les retirés perdent les leurs) et l'échéance. Refuse un
+   * sondage introuvable (404) ou déjà fermé (400), un nombre de créneaux hors `bounds`, des doublons,
+   * et une NOUVELLE échéance déjà passée (400) — une échéance inchangée est toujours acceptée, pour
+   * qu'on puisse corriger le lieu d'une conjonction dont le vote est terminé. Aucun droit décidé ici :
+   * l'appelant a obtenu `EVENT_UPDATE` (hôte). N'émet rien.
+   */
+  async updateInTx(
+    tx: Prisma.TransactionClient,
+    pollId: string,
+    input: { options: PollOptionInput[]; expiresAt: Date; bounds: PollOptionBounds },
+  ): Promise<void> {
+    const poll = await tx.sessionPoll.findUnique({
+      where: { id: pollId },
+      select: {
+        status: true,
+        expiresAt: true,
+        options: { select: { id: true, date: true, slot: true } },
+      },
+    });
+    if (!poll) throw new NotFoundException('Poll introuvable');
+    if (poll.status !== 'OPEN') throw new BadRequestException('Le poll est déjà fermé');
+    assertOptionBounds(input.options.length, input.bounds);
+
+    const plan = planOptions(poll.options, input.options);
+    const deadlineChanged = poll.expiresAt?.getTime() !== input.expiresAt.getTime();
+    if (deadlineChanged && input.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException(POLL_DEADLINE_PAST_MESSAGE);
+    }
+    if (plan.toDeleteIds.length > 0) {
+      // La cascade `onDelete: Cascade` de PollVote → PollOption emporte les réponses de ces
+      // options, et d'elles seules.
+      await tx.pollOption.deleteMany({ where: { id: { in: plan.toDeleteIds } } });
+    }
+    if (plan.toCreate.length > 0) {
+      await tx.pollOption.createMany({
+        data: plan.toCreate.map((o) => ({ pollId, date: o.date, slot: o.slot })),
+      });
+    }
+    if (deadlineChanged) {
+      await tx.sessionPoll.update({ where: { id: pollId }, data: { expiresAt: input.expiresAt } });
+    }
   }
 
   async findOpen(partieId: string, userId: string): Promise<SessionPollDto | null> {
@@ -110,7 +213,8 @@ export class PollService {
     userId: string,
     dto: CastVoteDto,
   ): Promise<void> {
-    const { role } = await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
+    const { role, partie } = await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
+    this.assertGroupVoteKind(partie);
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -122,6 +226,7 @@ export class PollService {
     ) {
       throw new BadRequestException('Poll introuvable ou fermé');
     }
+    await this.assertGroupVoteAllowed(poll, partie, userId);
     const option = await this.prisma.pollOption.findUnique({
       where: { id: dto.optionId },
     });
@@ -142,6 +247,27 @@ export class PollService {
     // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement.
     await this.partieSignals.notifyChanged(partieId);
+  }
+
+  /** Story 40.5 : seul un GROUPE de ralliement (CAMPAGNE_EPISODIQUE) vote — la rencontre isolée n'a
+   *  pas de sondage (403, avant toute lecture du sondage). Une partie de JDR n'est pas concernée. */
+  private assertGroupVoteKind(partie: { kind: PartieKind; gameSystemId: string }): void {
+    if (familyOf(partie.gameSystemId) === 'ralliement' && partie.kind !== 'CAMPAGNE_EPISODIQUE') {
+      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
+    }
+  }
+
+  /** Story 40.5 : un vote (ou son retrait) sur le sondage d'un GROUPE de ralliement passe en plus par
+   *  les règles de la conjonction — votant éligible, échéance, date non fixée — décidées par `events/`
+   *  derrière le port. Une partie de JDR n'y passe pas : ses règles de vote restent celles de la
+   *  Story 37.1, sans lecture supplémentaire. */
+  private async assertGroupVoteAllowed(
+    poll: { id: string; partieId: string; expiresAt: Date | null },
+    partie: { kind: PartieKind; gameSystemId: string },
+    userId: string,
+  ): Promise<void> {
+    if (familyOf(partie.gameSystemId) !== 'ralliement') return;
+    await this.groupVotes.assertCanVote(poll, partie, userId);
   }
 
   /** Anti-spoil serveur : vrai si `pollId` est le vote de la séance d'un brouillon caché ET que
@@ -167,7 +293,8 @@ export class PollService {
     optionId: string,
     userId: string,
   ): Promise<void> {
-    const { role } = await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
+    const { role, partie } = await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
+    this.assertGroupVoteKind(partie);
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -179,6 +306,7 @@ export class PollService {
     ) {
       throw new BadRequestException('Poll introuvable ou fermé');
     }
+    await this.assertGroupVoteAllowed(poll, partie, userId);
     const option = await this.prisma.pollOption.findUnique({
       where: { id: optionId },
     });
@@ -265,29 +393,14 @@ export class PollService {
 
     // Bornes redites ici, en plus du DTO : le service est appelable sans passer par le pipe de
     // validation (tests, orchestration cross-module), et c'est lui qui porte l'invariant.
-    if (dto.options.length < 2 || dto.options.length > 40)
-      throw new BadRequestException('Un vote porte de 2 à 40 créneaux');
+    assertOptionBounds(dto.options.length, JDR_POLL_OPTION_BOUNDS);
 
-    const wanted = new Map<string, { date: Date; slot: DaySlot }>();
-    for (const o of dto.options) {
-      const date = new Date(o.date);
-      const key = optionKey(date, o.slot);
-      if (wanted.has(key))
-        throw new BadRequestException('Options dupliquées (même date et créneau)');
-      wanted.set(key, { date, slot: o.slot });
-    }
-
-    const existing = new Map<string, string>(); // clé métier → id d'option
-    for (const opt of poll.options) {
-      existing.set(optionKey(opt.date, opt.slot), opt.id);
-    }
-
-    const toDeleteIds = [...existing.entries()]
-      .filter(([key]) => !wanted.has(key))
-      .map(([, id]) => id);
-    const toCreate = [...wanted.entries()]
-      .filter(([key]) => !existing.has(key))
-      .map(([, o]) => ({ pollId, date: o.date, slot: o.slot }));
+    const plan = planOptions(
+      poll.options,
+      dto.options.map((o) => ({ date: new Date(o.date), slot: o.slot })),
+    );
+    const toDeleteIds = plan.toDeleteIds;
+    const toCreate = plan.toCreate.map((o) => ({ pollId, date: o.date, slot: o.slot }));
 
     // Une seule transaction : un retrait appliqué sans son ajout laisserait le vote dans un état
     // que le MJ n'a jamais demandé.
@@ -344,6 +457,50 @@ export class PollService {
  *  `create()` laisserait passer un doublon que `setOptions()` traiterait différemment. */
 function optionKey(date: Date, slot: string): string {
   return `${date.toISOString()}|${slot}`;
+}
+
+/** Deux créneaux de même clé `date|slot` (normalisée par `optionKey()`) → 400. */
+function assertNoDuplicateOptions(options: PollOptionInput[]): void {
+  const seen = new Set<string>();
+  for (const o of options) {
+    const key = optionKey(o.date, o.slot);
+    if (seen.has(key)) throw new BadRequestException('Options dupliquées (même date et créneau)');
+    seen.add(key);
+  }
+}
+
+/** Le nombre de créneaux d'un sondage respecte-t-il ses bornes ? Sans bornes, rien à vérifier. */
+function assertOptionBounds(count: number, bounds: PollOptionBounds | undefined): void {
+  if (!bounds) return;
+  if (count < bounds.min || count > bounds.max) {
+    throw new BadRequestException(
+      bounds === JDR_POLL_OPTION_BOUNDS
+        ? 'Un vote porte de 2 à 40 créneaux'
+        : `Un vote porte au moins ${bounds.min} créneaux (et au plus ${bounds.max})`,
+    );
+  }
+}
+
+/** RÉCONCILIATION d'un jeu de créneaux (Story 36.10, partagée avec la Story 40.5) : compare le jeu
+ *  EXISTANT au jeu VOULU sur la clé `date|slot` et ne produit que le delta — les identifiants des
+ *  options retirées, les options à créer. Une option conservée ne figure nulle part : elle garde son
+ *  `id` et ne subit aucune écriture. Refuse les doublons du jeu voulu. */
+function planOptions(
+  existingOptions: { id: string; date: Date; slot: string }[],
+  wantedOptions: PollOptionInput[],
+): { toDeleteIds: string[]; toCreate: PollOptionInput[] } {
+  const wanted = new Map<string, PollOptionInput>();
+  for (const o of wantedOptions) {
+    const key = optionKey(o.date, o.slot);
+    if (wanted.has(key)) throw new BadRequestException('Options dupliquées (même date et créneau)');
+    wanted.set(key, o);
+  }
+  const existing = new Map<string, string>(); // clé métier → id d'option
+  for (const opt of existingOptions) existing.set(optionKey(opt.date, opt.slot), opt.id);
+  return {
+    toDeleteIds: [...existing.entries()].filter(([key]) => !wanted.has(key)).map(([, id]) => id),
+    toCreate: [...wanted.entries()].filter(([key]) => !existing.has(key)).map(([, o]) => o),
+  };
 }
 
 /** Story 36.6 — `membersCount` est passé en paramètre (jamais dérivé de `poll`) : c'est une

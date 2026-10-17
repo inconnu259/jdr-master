@@ -42,6 +42,7 @@ const CARD: EventCardDto = {
   seance: null,
   participants: [],
   myInscription: null,
+  poll: null,
 };
 
 const member = (userId: string, displayName: string): PartieMemberDto => ({
@@ -115,7 +116,7 @@ describe('EventCreate — fenêtre de création d’une conjonction (Story 40.1)
     return { fixture, q, type, click, toggle, settle };
   }
 
-  it('ordre du contrat : nom → date (fixée | sondage désactivé) → jour + créneau → lieu → heure → infos → participation ; fenêtre LARGE', async () => {
+  it('ordre du contrat : nom → date (fixée | sondage) → jour + créneau → lieu → heure → infos → participation ; fenêtre LARGE', async () => {
     const { q } = await mount();
     const panel = q('.detail-surface-panel')!;
     expect(panel.classList).toContain('detail-surface-panel--wide');
@@ -134,7 +135,8 @@ describe('EventCreate — fenêtre de création d’une conjonction (Story 40.1)
     const poll = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.ec__date-mode button')).find(
       (b) => (b.textContent ?? '').trim() === TONE['partie.ralliement_event_date_poll'],
     )!;
-    expect(poll.disabled).toBe(true);
+    // Story 40.5 : le sondage de dates est offert à la création.
+    expect(poll.disabled).toBe(false);
     // Le créneau ne propose jamais « Journée ».
     const slots = Array.from(document.body.querySelectorAll('.ec__slot button')).map((b) =>
       (b.textContent ?? '').trim(),
@@ -360,5 +362,136 @@ describe('EventCreate — fenêtre de création d’une conjonction (Story 40.1)
     await click('.ec__cancel');
     expect(fixture.componentInstance.closedCount).toBe(1);
     expect(api.create).not.toHaveBeenCalled();
+  });
+
+  // ─── Sondage de dates (Story 40.5) ───────────────────────────────────────────────────────────
+  describe('mode « Sondage de dates » (Story 40.5)', () => {
+    const POLL_LABEL = TONE['partie.ralliement_event_date_poll'];
+
+    /** Passe en mode sondage et place les créneaux (jour + créneau + « Ajouter »). */
+    async function addSlots(
+      h: Awaited<ReturnType<typeof mount>>,
+      entries: [number, string][],
+    ) {
+      for (const [days, slot] of entries) {
+        await h.type('.ec__poll-day', dayKey(days));
+        await h.toggle('.ec__poll-slot', slot);
+        await h.click('.ec__poll-add-btn');
+      }
+    }
+
+    it('la bascule offre les deux modes ; le mode sondage montre la liste des créneaux et l’échéance, plus le jour fixe', async () => {
+      const h = await mount();
+      expect(h.q('.ec__day')).not.toBeNull();
+      expect(h.q('.ec__poll')).toBeNull();
+
+      await h.toggle('.ec__date-mode', POLL_LABEL);
+
+      expect(h.q('.ec__day')).toBeNull();
+      expect(h.q('.ec__poll-day')).not.toBeNull();
+      expect(h.q('.ec__poll-deadline')).not.toBeNull();
+      expect(h.q('.ec__poll-add-btn')!.textContent?.trim()).toBe(
+        TONE['partie.ralliement_event_poll_add_btn'],
+      );
+      // Aucun créneau : l’aide « au moins deux » est écrite, pas de résumé.
+      expect(h.q('.ec__poll-min')!.textContent?.trim()).toBe(
+        TONE['partie.ralliement_event_poll_min_hint'],
+      );
+      expect(h.q('.ec__poll-summary')).toBeNull();
+    });
+
+    it('« Ajouter » refuse un jour vide ou un doublon ; le résumé écrit le nombre et la plage ; une pastille se retire', async () => {
+      const h = await mount();
+      await h.toggle('.ec__date-mode', POLL_LABEL);
+      expect(h.q<HTMLButtonElement>('.ec__poll-add-btn')!.disabled).toBe(true);
+
+      await addSlots(h, [
+        [9, 'Soir'],
+        [3, 'Matin'],
+      ]);
+      // Même jour et même créneau que le dernier ajout : refusé (le bouton se désactive).
+      await h.type('.ec__poll-day', dayKey(3));
+      await h.toggle('.ec__poll-slot', 'Matin');
+      expect(h.q<HTMLButtonElement>('.ec__poll-add-btn')!.disabled).toBe(true);
+
+      // Triés par jour, résumé « 2 créneaux · … → … ».
+      const chips = Array.from(document.body.querySelectorAll('.ec__chip-label')).map((c) =>
+        c.textContent?.trim(),
+      );
+      expect(chips).toHaveLength(2);
+      expect(chips[0]).toContain('matin');
+      expect(chips[1]).toContain('soir');
+      expect(h.q('.ec__poll-summary')!.textContent).toContain('2 créneaux');
+      expect(h.q('.ec__poll-summary')!.textContent).toContain('→');
+      expect(h.q('.ec__poll-min')).toBeNull();
+
+      await h.click('.ec__chip-remove');
+      expect(document.body.querySelectorAll('.ec__chip-label')).toHaveLength(1);
+      expect(h.q('.ec__poll-summary')!.textContent).toContain('1 créneau');
+      expect(h.q('.ec__poll-min')).not.toBeNull();
+    });
+
+    it('« Créer » reste désactivé sans nom, sans deux créneaux ou sans échéance', async () => {
+      const h = await mount();
+      const submit = () => h.q<HTMLButtonElement>('.ec__submit')!;
+      await h.type('.ec__name', 'Catane');
+      await h.toggle('.ec__date-mode', POLL_LABEL);
+      await addSlots(h, [[4, 'Soir']]);
+      await h.type('.ec__poll-deadline', dayKey(2));
+      expect(submit().disabled).toBe(true); // un seul créneau
+      await addSlots(h, [[5, 'Soir']]);
+      expect(submit().disabled).toBe(false);
+      await h.type('.ec__poll-deadline', '');
+      expect(submit().disabled).toBe(true); // plus d’échéance
+    });
+
+    it('envoie les créneaux et l’échéance, sans jour ni créneau fixe ; émet la carte créée', async () => {
+      const h = await mount();
+      await h.type('.ec__name', ' Sondage plateaux ');
+      await h.toggle('.ec__date-mode', POLL_LABEL);
+      await addSlots(h, [
+        [8, 'Soir'],
+        [6, 'Matin'],
+        [9, 'Après-midi'],
+      ]);
+      await h.type('.ec__poll-deadline', dayKey(4));
+      await h.click('.ec__submit');
+
+      expect(api.create).toHaveBeenCalledWith('g1', {
+        title: 'Sondage plateaux',
+        pollOptions: [
+          { date: dayKey(6), slot: 'MORNING' },
+          { date: dayKey(8), slot: 'EVENING' },
+          { date: dayKey(9), slot: 'AFTERNOON' },
+        ],
+        pollDeadline: dayKey(4),
+        lieu: null,
+        heureRdv: null,
+        notePratique: null,
+        capacity: null,
+      });
+      const sent = api.create.mock.calls[0][1] as Record<string, unknown>;
+      expect('date' in sent).toBe(false);
+      expect('slot' in sent).toBe(false);
+      expect(h.fixture.componentInstance.created()).toEqual(CARD);
+    });
+
+    it('repasser en date fixée n’envoie plus de sondage', async () => {
+      const h = await mount();
+      await h.type('.ec__name', 'Catane');
+      await h.toggle('.ec__date-mode', POLL_LABEL);
+      await addSlots(h, [
+        [4, 'Soir'],
+        [5, 'Soir'],
+      ]);
+      await h.toggle('.ec__date-mode', TONE['partie.ralliement_event_date_fixed']);
+      await h.type('.ec__day', dayKey(3));
+      await h.click('.ec__submit');
+
+      const sent = api.create.mock.calls[0][1] as Record<string, unknown>;
+      expect(sent['date']).toBe(dayKey(3));
+      expect('pollOptions' in sent).toBe(false);
+      expect('pollDeadline' in sent).toBe(false);
+    });
   });
 });

@@ -497,6 +497,8 @@ describe('PermissionService', () => {
       // Story 40.3 : s'inscrire à une conjonction et s'en désinscrire (routes partagées avec le JDR).
       'SEANCE_INSCRIBE',
       'SEANCE_UNSUBSCRIBE',
+      // Story 40.5 : voter sur le sondage de dates d'une conjonction (éligibilité décidée par le port).
+      'POLL_VOTE',
     ];
     /** Story 40.2 : la cellule de rôle est ouverte à l'admin ET au membre, mais l'action vise un
      *  événement (`{ eventId }`) et n'est accordée qu'à son hôte — testée à part, sur cette cible. */

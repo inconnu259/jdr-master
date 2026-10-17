@@ -776,8 +776,15 @@ export class AvailabilityService {
     // Anti-spoil serveur : hors des parties dont je suis MJ, les votes de la séance d'un brouillon
     // caché sont ignorés. Tout rôle autre que `mj` (ou inconnu) est restreint.
     const roles = await resolveRoles(partieIds);
-    const mjPartieIds = partieIds.filter((id) => isGameMaster(roles.get(id)));
-    const otherPartieIds = partieIds.filter((id) => !isGameMaster(roles.get(id)));
+    // Story 40.5 : le sondage d'une conjonction de groupe (rôle `admin`/`member`, propre à la famille
+    // ralliement) se vote dans le calendrier du groupe (Story 40.5b) : jamais dans cette couche. Un
+    // rôle inconnu reste traité comme celui d'un joueur (échec fermé), pas comme un groupe.
+    const pollPartieIds = partieIds.filter((id) => {
+      const role = roles.get(id);
+      return role !== 'admin' && role !== 'member';
+    });
+    const mjPartieIds = pollPartieIds.filter((id) => isGameMaster(roles.get(id)));
+    const otherPartieIds = pollPartieIds.filter((id) => !isGameMaster(roles.get(id)));
 
     const [polls, membershipCounts] = await Promise.all([
       partieIds.length === 0

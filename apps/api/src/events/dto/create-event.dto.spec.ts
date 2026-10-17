@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { CreateEventDto } from './create-event.dto';
@@ -81,5 +82,55 @@ describe('CreateEventDto (Story 40.1)', () => {
 
   it('places limitées à 2 → valide', async () => {
     expect(await check({ ...valid, capacity: 2 })).toHaveLength(0);
+  });
+});
+
+describe('CreateEventDto — sondage de dates (Story 40.5)', () => {
+  const poll = {
+    title: 'Catane et galettes',
+    pollOptions: [
+      { date: '2031-10-10', slot: 'EVENING' },
+      { date: '2031-10-11', slot: 'MORNING' },
+    ],
+    pollDeadline: '2031-10-05',
+  };
+
+  it('mode sondage (créneaux + échéance, sans date ni créneau) → valide', async () => {
+    expect(await check(poll)).toHaveLength(0);
+  });
+
+  it('beaucoup de créneaux → valide (aucun plafond métier), seule la garde technique borne', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      date: `2031-11-${String((i % 28) + 1).padStart(2, '0')}`,
+      slot: 'EVENING',
+    }));
+    expect(await check({ ...poll, pollOptions: many })).toHaveLength(0);
+    const tooMany = Array.from({ length: 201 }, () => ({ date: '2031-11-01', slot: 'EVENING' }));
+    const { properties } = await errorsOf({ ...poll, pollOptions: tooMany });
+    expect(properties).toEqual(['pollOptions']);
+  });
+
+  it('un créneau FULL_DAY ou une date mal formée dans le sondage → refusé, message en français', async () => {
+    const full = await errorsOf({
+      ...poll,
+      pollOptions: [{ date: '2031-10-10', slot: 'FULL_DAY' }],
+    });
+    expect(full.properties).toEqual(['pollOptions']);
+    const malformed = await errorsOf({
+      ...poll,
+      pollOptions: [{ date: '10/10/2031', slot: 'EVENING' }],
+    });
+    expect(malformed.properties).toEqual(['pollOptions']);
+  });
+
+  it('échéance mal formée → refusée', async () => {
+    const { properties, messages } = await errorsOf({ ...poll, pollDeadline: 'vendredi' });
+    expect(properties).toEqual(['pollDeadline']);
+    expect(messages).toContain('L’échéance du vote doit être au format AAAA-MM-JJ');
+  });
+
+  it('le mode date fixée reste exigeant : sans sondage, date et créneau obligatoires', async () => {
+    const { properties } = await errorsOf({ title: 'Catane' });
+    expect(properties).toEqual(['date', 'slot']);
   });
 });

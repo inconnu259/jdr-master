@@ -2199,6 +2199,29 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     });
   });
 
+  it('Story 40.5 — la couche des votes en cours ignore les parties d’un groupe de ralliement (rôle admin / member)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      myPartie,
+      { ...myPartie, id: 'G', kind: 'CAMPAGNE_EPISODIQUE' },
+      { ...myPartie, id: 'G2', kind: 'CAMPAGNE_EPISODIQUE' },
+    ]);
+    permissions.rolesOf.mockResolvedValue(
+      new Map<string, PartieRole>([
+        ['A', 'mj'],
+        ['G', 'admin'],
+        ['G2', 'member'],
+      ]),
+    );
+
+    await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+
+    const calls = mockSessionPollFindMany.mock.calls as unknown as Array<[{ where: unknown }]>;
+    expect(calls[0][0].where).toEqual({
+      status: 'OPEN',
+      OR: [{ partieId: { in: ['A'] } }, { AND: [{ partieId: { in: [] } }, VISIBLE_POLL_WHERE] }],
+    });
+  });
+
   it("AC9 — une partie absente de l'agrégat de Membership a un effectif de 1 : le MJ, qui vote", async () => {
     mockMembershipGroupBy.mockResolvedValue([]);
     mockSessionPollFindMany.mockResolvedValue([

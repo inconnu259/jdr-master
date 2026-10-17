@@ -377,3 +377,12 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-40-4-reserver-une-place-a-des-membres.md`
   summary: `events/session-date.ts` duplicates the date formatter and slot labels of `NotificationsService`; make the reminder use the shared helper.
   evidence: Two copies of « date (créneau) » can diverge between mail #3 and the day-before reminder; the reminder was left untouched to keep the JDR e-mail unchanged.
+- source_spec: `_bmad-output/implementation-artifacts/spec-40-5-proposer-une-conjonction-par-sondage-de-dates.md`
+  summary: Story 40.5b — make the group calendar usable for a ralliement: composer that returns the chosen slots without saving (for an event not yet created), voting on a group poll in `/parties/:id/guild-calendar`, access from the group page, aggregated availabilities for groups, and the « Voter dans le calendrier » button of the dialog.
+  evidence: The 40.5 investigation found the composer is MJ-only (`mode` from the route, no composer on `/guild-calendar`), no link leads to a calendar from a group page, and `PARTIE_AVAILABILITY_READ`/`SCENARIO_READ`/`POLL_*` are `NOBODY` for ralliement; 40.5 ships the server side and an in-window slot list instead.
+- source_spec: `_bmad-output/implementation-artifacts/spec-40-5-proposer-une-conjonction-par-sondage-de-dates.md`
+  summary: `events/slot-availability.ts` (`isFreeOn`) re-implements the availability rules of `AvailabilityService`; extract one shared pure function and add a parity test.
+  evidence: The `availableCount` of a poll slot and the calendar can drift if a recurrence rule changes; nothing ties the two copies.
+- source_spec: `_bmad-output/implementation-artifacts/spec-40-5-proposer-une-conjonction-par-sondage-de-dates.md`
+  summary: A group poll whose deadline has passed still shows « Date à voter · jusqu'au … » on the card and has no end state or action.
+  evidence: Stories 40.6 (set the date) and 40.7 (extend the vote) must give an ended poll its label and exits.

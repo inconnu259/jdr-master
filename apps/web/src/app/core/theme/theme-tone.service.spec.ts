@@ -994,6 +994,29 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_event_unreserve_btn',
     'partie.ralliement_event_unreserve_aria',
     'partie.ralliement_event_pending_text',
+    // Story 40.5 : sondage de dates d’une conjonction — libellés de champ, badge, puce, ligne de date et
+    // lignes de résumé verbatim du contrat d’UI (sans adresse à la personne) ; les phrases des panneaux
+    // membre et hôte (« Vote à faire… », « Vous êtes l’hôte… ») ont une voix
+    'partie.ralliement_event_poll_slots_label',
+    'partie.ralliement_event_poll_add_btn',
+    'partie.ralliement_event_poll_slot_remove_aria',
+    'partie.ralliement_event_poll_summary',
+    'partie.ralliement_event_poll_min_hint',
+    'partie.ralliement_event_poll_remove_hint',
+    'partie.ralliement_event_poll_deadline_label',
+    'partie.ralliement_event_unit_slot',
+    'partie.ralliement_event_unit_available',
+    'partie.ralliement_event_poll_date_line',
+    'partie.ralliement_event_badge_poll',
+    'partie.ralliement_event_chip_vote_todo',
+    'partie.ralliement_event_poll_best',
+    'partie.ralliement_event_poll_host_answers',
+    'partie.ralliement_event_poll_host_waiting',
+    'partie.ralliement_event_poll_slots_heading',
+    'partie.ralliement_event_poll_ended',
+    'partie.ralliement_event_poll_ends_today',
+    'partie.ralliement_event_poll_ends_tomorrow',
+    'partie.ralliement_event_poll_ends_in_days',
     // Gabarits structurels et libellés techniques
     'partie.signal_more_count',
     'parties.detail_link_expires_short',
@@ -1536,6 +1559,64 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_situation_reserved']).toBe(
       'Une place t’est gardée à cette halte : accepte-la ou décline-la.',
     );
+  });
+
+  // Story 40.5 : proposer une conjonction par sondage de dates. Les libellés du contrat d'UI (« Vote en
+  // cours », « Vote à faire », « Date à voter · jusqu'au », « Le vote se termine le », « Meilleur
+  // créneau… », « Réponses : x sur N », « N'ont pas encore répondu ») sont identiques dans les trois
+  // thèmes ; les phrases adressées à la personne (panneaux membre et hôte) ont une voix. Aucun mot de JDR.
+  it('Story 40.5 : le sondage de dates garde les mots du contrat et prend la voix du thème, sans mot de JDR', () => {
+    const neutres: Record<string, string> = {
+      'partie.ralliement_event_badge_poll': 'Vote en cours',
+      'partie.ralliement_event_chip_vote_todo': 'Vote à faire',
+      'partie.ralliement_event_poll_date_line': 'Date à voter · jusqu’au {date}',
+      'partie.ralliement_event_poll_deadline_label': 'Le vote se termine le',
+      'partie.ralliement_event_poll_add_btn': 'Ajouter',
+      'partie.ralliement_event_poll_best': 'Meilleur créneau pour l’instant : {date} — {n} oui',
+      'partie.ralliement_event_poll_host_answers': 'Réponses : {x} sur {n}',
+      'partie.ralliement_event_poll_host_waiting': 'N’ont pas encore répondu : {names}',
+    };
+    for (const [key, attendu] of Object.entries(neutres)) {
+      for (const theme of THEMES) expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(attendu);
+    }
+    const voix = [
+      'partie.ralliement_event_poll_member_todo',
+      'partie.ralliement_event_poll_my_answers',
+      'partie.ralliement_event_poll_member_voted',
+      'partie.ralliement_event_poll_host_summary',
+      'partie.ralliement_event_poll_not_eligible',
+    ];
+    for (const key of voix) {
+      const valeurs = THEMES.map((theme) => TONE_MAP[theme][key]);
+      // Au moins deux voix distinctes (le Grimoire et l'Atelier vouvoient, la forêt tutoie).
+      expect(new Set(valeurs).size, key).toBeGreaterThan(1);
+    }
+    // Le contrat d'UI, mot pour mot, dans le Grimoire (vouvoiement) ; tutoiement dans la forêt.
+    expect(TONE_MAP['grimoire-emeraude']['partie.ralliement_event_poll_member_todo']).toBe(
+      'Vote à faire. Vous êtes inscrit·e : donnez vos disponibilités avant le {date}.',
+    );
+    expect(TONE_MAP['grimoire-emeraude']['partie.ralliement_event_poll_host_summary']).toBe(
+      'Vous êtes l’hôte. Le vote se termine {when} — {n} créneaux proposés.',
+    );
+    expect(TONE_MAP['foret-ancienne']['partie.ralliement_event_poll_member_todo']).toBe(
+      'Vote à faire. Tu es inscrit·e : donne tes disponibilités avant le {date}.',
+    );
+    for (const theme of THEMES) {
+      const tone = TONE_MAP[theme];
+      expect(tone['partie.ralliement_event_poll_member_todo'], theme).toContain('{date}');
+      expect(tone['partie.ralliement_event_poll_host_summary'], theme).toContain('{when}');
+      expect(tone['partie.ralliement_event_poll_my_answers'], theme).toMatch(/\{x\}.*\{n\}/);
+      for (const unit of ['slot', 'available']) {
+        expect(tone[`partie.ralliement_event_unit_${unit}`], theme).toMatch(/^[^|]+\|[^|]+$/);
+      }
+    }
+    for (const key of Object.keys(TONE_MAP['grimoire-emeraude']).filter((k) =>
+      k.startsWith('partie.ralliement_event_poll_'),
+    )) {
+      for (const theme of THEMES) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).not.toMatch(NON_JDR_BANNED_WORDS);
+      }
+    }
   });
 
   // Story 39.3 : variantes « groupe » des outils d'invitation et de l'écran d'un lien d'invitation.

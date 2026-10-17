@@ -4,9 +4,13 @@ import { callArg } from '../common/test-utils/jest-typed';
 import type { PermissionService } from '../permissions/permission.service';
 import { RALLIEMENT_UNAVAILABLE_MESSAGE } from '../permissions/permission.service';
 import type { EmailService } from '../email/email.service';
-import type { PartieSignalsPort } from '../poll/ports/partie-signals.port';
+import {
+  GROUP_POLL_OPTION_BOUNDS,
+  POLL_DEADLINE_PAST_MESSAGE,
+  type PollService,
+} from '../poll/poll.service';
 import type { CreateEventDto } from './dto/create-event.dto';
-import type { EventsService } from './events.service';
+import { POLL_MODE_MESSAGE, type EventSeanceInput, type EventsService } from './events.service';
 import { GroupEventsService, INVALID_DAY_MESSAGE, PAST_DAY_MESSAGE } from './group-events.service';
 
 /** Clé `YYYY-MM-DD` (UTC) décalée de `days` jours par rapport à aujourd'hui. */
@@ -26,6 +30,7 @@ const CARD = {
   seance: null,
   participants: [],
   myInscription: null,
+  poll: null,
 };
 
 describe('GroupEventsService (Story 40.1)', () => {
@@ -43,11 +48,16 @@ describe('GroupEventsService (Story 40.1)', () => {
   };
   let signals: { notifyChanged: jest.Mock };
   let email: { sendMail: jest.Mock };
+  let polls: { createInTx: jest.Mock; updateInTx: jest.Mock };
   let service: GroupEventsService;
   const order: string[] = [];
 
-  const dto = (over: Partial<CreateEventDto> = {}): CreateEventDto =>
-    ({ title: '  Catane  ', date: isoDay(3), slot: 'EVENING', ...over }) as CreateEventDto;
+  const dto = (over: Partial<CreateEventDto> = {}): CreateEventDto => ({
+    title: '  Catane  ',
+    date: isoDay(3),
+    slot: 'EVENING',
+    ...over,
+  });
 
   beforeEach(() => {
     order.length = 0;
@@ -103,11 +113,16 @@ describe('GroupEventsService (Story 40.1)', () => {
         return Promise.resolve();
       }),
     };
+    polls = {
+      createInTx: jest.fn().mockResolvedValue({ id: 'poll-1' }),
+      updateInTx: jest.fn().mockResolvedValue(undefined),
+    };
     service = new GroupEventsService(
       permissions as unknown as PermissionService,
       events as unknown as EventsService,
-      signals as unknown as PartieSignalsPort,
+      signals,
       email as unknown as EmailService,
+      polls as unknown as PollService,
     );
   });
 
@@ -238,6 +253,166 @@ describe('GroupEventsService (Story 40.1)', () => {
       await expect(service.create('g1', 'u1', dto())).rejects.toThrow('refus');
       expect(events.createHosted).not.toHaveBeenCalled();
       expect(signals.notifyChanged).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('create() — sondage de dates (Story 40.5)', () => {
+    const pollDto = (over: Partial<CreateEventDto> = {}): CreateEventDto => ({
+      title: 'Catane',
+      pollOptions: [
+        { date: isoDay(3), slot: 'EVENING' },
+        { date: isoDay(4), slot: 'MORNING' },
+      ],
+      pollDeadline: isoDay(2),
+      ...over,
+    });
+    const seanceOf = (): EventSeanceInput =>
+      (events.createHosted.mock.calls[0] as [unknown, unknown, { seance: EventSeanceInput }])[2]
+        .seance;
+
+    it('séance sans date, sondage écrit par PollService (échéance = fin du jour, bornes de groupe), puis signaux', async () => {
+      const card = await service.create('g1', 'u1', pollDto({ capacity: 4 }));
+
+      const seance = seanceOf();
+      expect(seance.date).toBeNull();
+      expect(seance.slot).toBeNull();
+      expect(seance.capacity).toBe(4);
+      const tx = { tx: true } as never;
+      await expect(seance.createPoll?.(tx)).resolves.toEqual({ id: 'poll-1' });
+      expect(polls.createInTx).toHaveBeenCalledWith(tx, 'g1', 'u1', {
+        options: [
+          { date: new Date(`${isoDay(3)}T00:00:00.000Z`), slot: 'EVENING' },
+          { date: new Date(`${isoDay(4)}T00:00:00.000Z`), slot: 'MORNING' },
+        ],
+        expiresAt: new Date(`${isoDay(2)}T23:59:59.999Z`),
+        bounds: GROUP_POLL_OPTION_BOUNDS,
+      });
+      expect(order).toEqual(['create', 'signals']);
+      expect(card).toEqual(CARD);
+    });
+
+    it('l’échéance d’aujourd’hui est acceptée', async () => {
+      await service.create('g1', 'u1', pollDto({ pollDeadline: isoDay(0) }));
+      expect(events.createHosted).toHaveBeenCalledTimes(1);
+    });
+
+    it('échéance passée → 400, rien n’est écrit', async () => {
+      const refusal = service.create('g1', 'u1', pollDto({ pollDeadline: isoDay(-1) }));
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(POLL_DEADLINE_PAST_MESSAGE);
+      expect(events.createHosted).not.toHaveBeenCalled();
+    });
+
+    it('échéance ou créneau inexistant → 400', async () => {
+      await expect(
+        service.create('g1', 'u1', pollDto({ pollDeadline: '2031-02-31' })),
+      ).rejects.toThrow(INVALID_DAY_MESSAGE);
+      await expect(
+        service.create(
+          'g1',
+          'u1',
+          pollDto({ pollOptions: [{ date: '2031-02-31', slot: 'EVENING' }] }),
+        ),
+      ).rejects.toThrow(INVALID_DAY_MESSAGE);
+      expect(events.createHosted).not.toHaveBeenCalled();
+    });
+
+    it('un jour de créneau passé est refusé à la création (400, message du jour passé), aujourd’hui est accepté', async () => {
+      const refusal = service.create(
+        'g1',
+        'u1',
+        pollDto({
+          pollOptions: [
+            { date: isoDay(-1), slot: 'EVENING' },
+            { date: isoDay(3), slot: 'MORNING' },
+          ],
+        }),
+      );
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(PAST_DAY_MESSAGE);
+      expect(events.createHosted).not.toHaveBeenCalled();
+
+      await service.create(
+        'g1',
+        'u1',
+        pollDto({
+          pollOptions: [
+            { date: isoDay(0), slot: 'EVENING' },
+            { date: isoDay(3), slot: 'MORNING' },
+          ],
+        }),
+      );
+      expect(events.createHosted).toHaveBeenCalledTimes(1);
+    });
+
+    it('un champ de sondage à null vaut absent : jamais une erreur 500, un 400 français', async () => {
+      const nul = (over: Record<string, unknown>) => ({ ...pollDto(), ...over }) as CreateEventDto;
+      // Une seule moitié du sondage (l'autre null) : 400 « créneaux et une échéance ».
+      for (const sent of [nul({ pollOptions: null }), nul({ pollDeadline: null })]) {
+        const refusal = service.create('g1', 'u1', sent);
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow('créneaux et une échéance');
+      }
+      // Les deux à null, sans date : aucun mode.
+      await expect(
+        service.create('g1', 'u1', nul({ pollOptions: null, pollDeadline: null })),
+      ).rejects.toThrow(POLL_MODE_MESSAGE);
+      // Une date fixée avec un sondage à null reste une date fixée.
+      await service.create(
+        'g1',
+        'u1',
+        nul({ pollOptions: null, pollDeadline: null, date: isoDay(3), slot: 'EVENING' }),
+      );
+      expect(events.createHosted).toHaveBeenCalledTimes(1);
+    });
+
+    it('les deux modes à la fois, ou aucun → 400 français, rien n’est écrit', async () => {
+      const both = service.create('g1', 'u1', pollDto({ date: isoDay(3), slot: 'EVENING' }));
+      await expect(both).rejects.toBeInstanceOf(BadRequestException);
+      await expect(both).rejects.toThrow(POLL_MODE_MESSAGE);
+      await expect(service.create('g1', 'u1', { title: 'Catane' })).rejects.toThrow(
+        POLL_MODE_MESSAGE,
+      );
+      expect(events.createHosted).not.toHaveBeenCalled();
+    });
+
+    it('sondage sans échéance ou sans créneaux → 400', async () => {
+      await expect(
+        service.create('g1', 'u1', pollDto({ pollDeadline: undefined })),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.create('g1', 'u1', pollDto({ pollOptions: undefined })),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(events.createHosted).not.toHaveBeenCalled();
+    });
+
+    it('rencontre isolée (ONE_SHOT) : 403, rien n’est écrit', async () => {
+      permissions.assert.mockResolvedValue(testGrant({ ...GROUPE, kind: 'ONE_SHOT' }, 'admin'));
+      await expect(service.create('g1', 'u1', pollDto())).rejects.toThrow(
+        RALLIEMENT_UNAVAILABLE_MESSAGE,
+      );
+      expect(events.createHosted).not.toHaveBeenCalled();
+    });
+
+    it('modification : la séance reste sans date, créneaux et échéance vont à PollService (échéance passée laissée à son contrôle)', async () => {
+      await service.update('g1', 'e1', 'u1', pollDto({ pollDeadline: isoDay(-1) }));
+
+      const [, , input] = events.updateHosted.mock.calls[0] as [
+        unknown,
+        unknown,
+        { seance: EventSeanceInput },
+      ];
+      expect(input.seance.date).toBeNull();
+      const tx = { tx: true } as never;
+      await input.seance.updatePoll?.(tx, 'poll-1');
+      expect(polls.updateInTx).toHaveBeenCalledWith(
+        tx,
+        'poll-1',
+        expect.objectContaining({
+          expiresAt: new Date(`${isoDay(-1)}T23:59:59.999Z`),
+          bounds: GROUP_POLL_OPTION_BOUNDS,
+        }),
+      );
     });
   });
 

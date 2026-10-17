@@ -4661,6 +4661,7 @@ describe('PartieDetail — les conjonctions d’un groupe (Story 40.1)', () => {
     },
     participants: [],
     myInscription: null,
+    poll: null,
     ...over,
   });
   const api = () =>
@@ -4931,6 +4932,7 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
       },
     ],
     myInscription: null,
+    poll: null,
     ...over,
   });
   const api = () =>

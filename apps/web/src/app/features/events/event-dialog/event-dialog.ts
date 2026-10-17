@@ -24,12 +24,15 @@ import {
   eventBadge,
   eventDateLabel,
   eventSituationTextKey,
+  hasPendingPoll,
   isFull,
   isFullForViewer,
   isHostOf,
   isPastEvent,
   isPendingParticipant,
   participationLine,
+  pollPanel,
+  pollSlotRows,
 } from '../event-card.util';
 import { EventForm } from '../event-form/event-form';
 import { EventsApiService } from '../events-api.service';
@@ -100,12 +103,18 @@ export class EventDialog {
 
   constructor() {
     effect(() => {
-      if (this.canReserve() && !this.membersRequested) {
+      if ((this.canReserve() || this.hostNeedsNames()) && !this.membersRequested) {
         this.membersRequested = true;
         untracked(() => void this.loadMembers());
       }
     });
   }
+
+  /** Story 40.5 : l'hôte d'un sondage nomme ceux qui n'ont pas encore répondu — il lui faut les membres
+   *  du groupe (tous les membres votent quand la conjonction n'a pas de limite de places). */
+  private readonly hostNeedsNames = computed(
+    () => isHostOf(this.card(), this.currentUserId()) && hasPendingPoll(this.card()),
+  );
 
   protected readonly past = computed(() => isPastEvent(this.card(), this.todayKey()));
   protected readonly canEdit = computed(
@@ -140,6 +149,16 @@ export class EventDialog {
   });
   /** Plus aucune place à réserver : les pastilles sont désactivées. */
   protected readonly noPlaceLeft = computed(() => isFull(this.card()));
+  /** Story 40.5 : panneau du sondage (membre « Vote à faire » / hôte), recalculé depuis la carte vivante
+   *  — il suit donc les réponses qui arrivent en direct. Aucun vote dans la fenêtre : il se fait dans le
+   *  calendrier du groupe (Story 40.5b). */
+  protected readonly poll = computed(() =>
+    pollPanel(this.card(), this.currentUserId(), this.todayKey(), this.theme.tone(), (id) =>
+      this.nameOf(id),
+    ),
+  );
+  /** Créneaux candidats de la fiche, avec le nombre d'inscrits libres sur chacun. */
+  protected readonly slotRows = computed(() => pollSlotRows(this.card(), this.theme.tone()));
   protected readonly dateLabel = computed(() => eventDateLabel(this.card(), this.theme.tone()));
   protected readonly situationText = computed(
     () =>
@@ -231,6 +250,15 @@ export class EventDialog {
     return fillTone(this.theme.tone()['partie.ralliement_event_unreserve_aria'], {
       name: participant.displayName,
     });
+  }
+
+  /** Nom affiché d'une personne : les membres du groupe, puis les participants de la carte. */
+  private nameOf(id: string): string {
+    return (
+      this.members().find((m) => m.userId === id)?.displayName ??
+      this.card().participants.find((p) => p.userId === id)?.displayName ??
+      '—'
+    );
   }
 
   private async loadMembers(): Promise<void> {

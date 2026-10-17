@@ -13,10 +13,16 @@ import {
   type PartieGrant,
 } from '../permissions/permission.service';
 import { EmailService } from '../email/email.service';
+import {
+  GROUP_POLL_OPTION_BOUNDS,
+  POLL_DEADLINE_PAST_MESSAGE,
+  PollService,
+  type PollOptionInput,
+} from '../poll/poll.service';
 import { PARTIE_SIGNALS_PORT, type PartieSignalsPort } from '../poll/ports/partie-signals.port';
 import { parseDayKey, todayKeyUtc } from './day-key';
 import { CreateEventDto } from './dto/create-event.dto';
-import { EventsService, type EventSeanceInput } from './events.service';
+import { EventsService, POLL_MODE_MESSAGE, type EventSeanceInput } from './events.service';
 import { formatSessionDate } from './session-date';
 
 /** Refus d'une clé de jour bien formée mais inexistante au calendrier (ex. `2026-02-31`). */
@@ -52,6 +58,9 @@ export class GroupEventsService {
     private readonly events: EventsService,
     @Inject(PARTIE_SIGNALS_PORT) private readonly partieSignals: PartieSignalsPort,
     private readonly email: EmailService,
+    // Story 40.5 : `PollService` reste le seul écrivain de `SessionPoll` — ce service lui fait écrire le
+    // sondage d'une conjonction dans la transaction de `EventsService` (couche 2 → couche 1, pas de port).
+    private readonly polls: PollService,
   ) {}
 
   /**
@@ -72,7 +81,7 @@ export class GroupEventsService {
     // réservation tardive, vérifiées par `EventsService` sous le verrou de la partie).
     const reservedUserIds = dto.reservedUserIds ?? [];
     const seance: EventSeanceInput = {
-      ...this.seanceInput(dto),
+      ...this.seanceInput(dto, grant.partieId, userId, 'create'),
       ...(reservedUserIds.length > 0 ? { reservedUserIds } : {}),
     };
 
@@ -110,7 +119,7 @@ export class GroupEventsService {
 
     await this.events.updateHosted(grant, eventId, {
       title: dto.title.trim(),
-      seance: this.seanceInput(dto),
+      seance: this.seanceInput(dto, grant.partieId, userId, 'update'),
     });
     // Après validation et après `partie:{id}` (émis par `EventsService.updateHosted`) ; ne lève jamais.
     await this.partieSignals.notifyChanged(grant.partieId);
@@ -236,20 +245,72 @@ export class GroupEventsService {
     return card;
   }
 
-  /** Règles de saisie d'une conjonction (création et modification) : jour réel, jamais passé
-   *  (aujourd'hui accepté, clés de jour UTC), textes nettoyés, capacité `null` = tous les membres. */
-  private seanceInput(dto: CreateEventDto): EventSeanceInput {
-    const date = parseDayKey(dto.date);
-    if (!date) throw new BadRequestException(INVALID_DAY_MESSAGE);
-    // Comparaison de clés de jour (UTC) : aujourd'hui est accepté, quel que soit le créneau.
-    if (dto.date < todayKeyUtc()) throw new BadRequestException(PAST_DAY_MESSAGE);
-    return {
-      date,
-      slot: dto.slot,
+  /**
+   * Règles de saisie d'une conjonction (création et modification) : textes nettoyés, capacité `null` =
+   * tous les membres, et l'un des DEUX modes, exclusifs (400 français sinon) :
+   * - date fixée : jour réel, jamais passé (aujourd'hui accepté, clés de jour UTC) et créneau ;
+   * - sondage de dates (Story 40.5) : au moins 2 créneaux distincts (jours réels) et une échéance
+   *   `YYYY-MM-DD` réelle, pas avant aujourd'hui (à la modification, c'est `PollService` qui refuse une
+   *   NOUVELLE échéance passée, une échéance inchangée restant acceptée). La séance n'a alors pas de
+   *   date ; l'écriture du sondage est confiée à `PollService`, dans la transaction de l'événement.
+   */
+  private seanceInput(
+    dto: CreateEventDto,
+    partieId: string,
+    hostId: string,
+    action: 'create' | 'update',
+  ): EventSeanceInput {
+    const common = {
       lieu: cleaned(dto.lieu),
       heureRdv: cleaned(dto.heureRdv),
       notePratique: cleaned(dto.notePratique),
       capacity: dto.capacity ?? null,
+    };
+    // `null` vaut absent (un corps JSON peut envoyer `null`) : seul un champ renseigné désigne un mode.
+    const pollMode = dto.pollOptions != null || dto.pollDeadline != null;
+    const fixedMode = dto.date != null || dto.slot != null;
+    // Les deux à la fois, ou aucun : refusé.
+    if (pollMode === fixedMode) throw new BadRequestException(POLL_MODE_MESSAGE);
+
+    if (!pollMode) {
+      if (dto.date == null || dto.slot == null) {
+        throw new BadRequestException(POLL_MODE_MESSAGE);
+      }
+      const date = parseDayKey(dto.date);
+      if (!date) throw new BadRequestException(INVALID_DAY_MESSAGE);
+      // Comparaison de clés de jour (UTC) : aujourd'hui est accepté, quel que soit le créneau.
+      if (dto.date < todayKeyUtc()) throw new BadRequestException(PAST_DAY_MESSAGE);
+      return { date, slot: dto.slot, ...common };
+    }
+
+    if (dto.pollOptions == null || dto.pollDeadline == null) {
+      throw new BadRequestException('Un sondage de dates demande des créneaux et une échéance');
+    }
+    const options: PollOptionInput[] = dto.pollOptions.map((o) => {
+      const date = parseDayKey(o.date);
+      if (!date) throw new BadRequestException(INVALID_DAY_MESSAGE);
+      // À la création, un créneau candidat ne peut pas être passé (comme le jour d'une date fixée). À la
+      // modification, les créneaux conservés peuvent l'être devenus : le sondage les réconcilie.
+      if (action === 'create' && o.date < todayKeyUtc()) {
+        throw new BadRequestException(PAST_DAY_MESSAGE);
+      }
+      return { date, slot: o.slot };
+    });
+    const deadlineDay = parseDayKey(dto.pollDeadline);
+    if (!deadlineDay) throw new BadRequestException(INVALID_DAY_MESSAGE);
+    if (action === 'create' && dto.pollDeadline < todayKeyUtc()) {
+      throw new BadRequestException(POLL_DEADLINE_PAST_MESSAGE);
+    }
+    // Le vote se termine à la fin du jour d'échéance (UTC).
+    const expiresAt = new Date(deadlineDay.getTime() + 86_400_000 - 1);
+    const bounds = GROUP_POLL_OPTION_BOUNDS;
+    return {
+      date: null,
+      slot: null,
+      ...common,
+      createPoll: (tx) =>
+        this.polls.createInTx(tx, partieId, hostId, { options, expiresAt, bounds }),
+      updatePoll: (tx, pollId) => this.polls.updateInTx(tx, pollId, { options, expiresAt, bounds }),
     };
   }
 

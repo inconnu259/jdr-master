@@ -1415,6 +1415,8 @@ describe('Ralliement — proposer une conjonction à date fixée (Story 40.1)', 
         },
       ],
       myInscription: null,
+      // Story 40.5 : une conjonction à date fixée n'a pas de sondage.
+      poll: null,
     });
 
     const events = await h.prisma.event.findMany({
@@ -1754,6 +1756,7 @@ describe('Ralliement — consulter et modifier une conjonction (Story 40.2)', ()
         },
       ],
       myInscription: null,
+      poll: null,
     });
     const event = await stored(card.id);
     expect(event.title).toBe('Corrigée');
@@ -2788,5 +2791,529 @@ describe('Ralliement — réserver une place à des membres (Story 40.4)', () =>
     const final = await rows(seanceId);
     expect(final.length).toBeLessThanOrEqual(1);
     for (const [, status] of final) expect(['CONFIRMED', 'RESERVED']).toContain(status);
+  });
+});
+
+// Story 40.5 — proposer une conjonction par sondage de dates : le membre place des créneaux et une
+// échéance ; le serveur ouvre un sondage sur la séance (sans date), ne laisse voter que les votants
+// éligibles, avant l'échéance, tant que la date n'est pas fixée. Le vote dans le calendrier du groupe
+// est l'objet de la Story 40.5b : ici le vote passe par l'API.
+describe('Ralliement — proposer une conjonction par sondage de dates (Story 40.5)', () => {
+  let h: Harness;
+  let admin: TestUser;
+  let host: TestUser;
+  let guest: TestUser;
+  let third: TestUser;
+  let stranger: TestUser;
+  let otherAdmin: TestUser;
+  let groupId: string;
+  let otherGroupId: string;
+
+  type PollLike = {
+    id: string;
+    expiresAt: string | null;
+    status: string;
+    eligibleVoterIds: string[];
+    options: { id: string; date: string; slot: string; availableCount: number }[];
+    votes: { optionId: string; userId: string; answer: string }[];
+  };
+  type CardLike = {
+    id: string;
+    title: string;
+    hostId: string | null;
+    seance: {
+      id: string;
+      date: string | null;
+      slot: string | null;
+      capacity: number | null;
+    } | null;
+    participants: { userId: string; status: string }[];
+    poll: PollLike | null;
+  };
+  type ErrorLike = { statusCode: number; message: string | string[] };
+  type DatedPartieLike = PartieDtoLike & { nextSessionDate: string | null };
+
+  const NOT_ELIGIBLE = 'Vous ne pouvez pas voter sur cette conjonction';
+  const ENDED = 'Le vote est terminé : l’échéance est dépassée';
+  const DATE_SET = 'La date de cette conjonction est déjà fixée : le vote est terminé';
+  const MODE =
+    'Une conjonction se propose à date fixée OU par sondage de dates, et son mode ne change pas';
+  const PAST_DEADLINE = "L'échéance du vote ne peut pas être passée";
+  const HOST_ONLY = "Action réservée à l'hôte de la conjonction";
+
+  const slots = (...entries: [number, string][]) =>
+    entries.map(([days, slot]) => ({ date: isoDay(days), slot }));
+  const pollPayload = (over: Record<string, unknown> = {}) => ({
+    title: 'Sondage plateaux',
+    pollOptions: slots([8, 'EVENING'], [9, 'MORNING'], [12, 'EVENING']),
+    pollDeadline: isoDay(5),
+    ...over,
+  });
+  const propose = (who: TestUser, sent: Record<string, unknown>, partieId = groupId) =>
+    who.agent.post(`/parties/${partieId}/events`).send(sent);
+  const create = async (who: TestUser, over: Record<string, unknown> = {}) => {
+    const res = await propose(who, pollPayload(over));
+    expect(res.status).toBe(201);
+    return body<CardLike>(res);
+  };
+  const edit = (who: TestUser, eventId: string, sent: Record<string, unknown>) =>
+    who.agent.patch(`/parties/${groupId}/events/${eventId}`).send(sent);
+  const vote = (
+    who: TestUser,
+    pollId: string,
+    optionId: string,
+    answer = 'YES',
+    partieId = groupId,
+  ) => who.agent.post(`/parties/${partieId}/poll/${pollId}/vote`).send({ optionId, answer });
+  const withdraw = (who: TestUser, pollId: string, optionId: string, partieId = groupId) =>
+    who.agent.delete(`/parties/${partieId}/poll/${pollId}/vote/${optionId}`);
+  const listFor = async (who: TestUser) =>
+    body<CardLike[]>(await who.agent.get(`/parties/${groupId}/events/list`).expect(200));
+  const cardFor = async (who: TestUser, eventId: string) =>
+    (await listFor(who)).find((c) => c.id === eventId)!;
+  const votesIn = (pollId: string) => h.prisma.pollVote.count({ where: { pollId } });
+  const message = (res: { body: unknown }) => (res.body as ErrorLike).message;
+  const eventCount = (partieId: string) => h.prisma.event.count({ where: { partieId } });
+  const signUp = (who: TestUser, seanceId: string) =>
+    who.agent.post(`/scenarios/seances/${seanceId}/inscription`);
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, host, guest, third, stranger, otherAdmin] = await Promise.all([
+      h.createUser('sond-admin'),
+      h.createUser('sond-hote'),
+      h.createUser('sond-invite'),
+      h.createUser('sond-tiers'),
+      h.createUser('sond-etranger'),
+      h.createUser('sond-autre-admin'),
+    ]);
+    ({ id: groupId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'sond', 'ralliement'));
+    for (const who of [host, guest, third]) await h.addMember(groupId, who);
+    ({ id: otherGroupId } = await h.createPartie(
+      otherAdmin,
+      'CAMPAGNE_EPISODIQUE',
+      'sond-autre',
+      'ralliement',
+    ));
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it('un membre propose par sondage : 201, séance SANS date liée au sondage, échéance en fin de journée, carte vivante pour tous', async () => {
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    let card: CardLike;
+    try {
+      card = body<CardLike>(await propose(host, pollPayload({ lieu: 'Lyon 3e' })).expect(201));
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(emit).toHaveBeenCalledWith(userTopic(admin.id));
+      expect(emit).toHaveBeenCalledWith(userTopic(guest.id));
+    } finally {
+      emit.mockRestore();
+    }
+
+    expect(card.hostId).toBe(host.id);
+    expect(card.seance).toMatchObject({ date: null, slot: null, capacity: null });
+    expect(card.poll).toMatchObject({ status: 'OPEN', votes: [] });
+    expect(card.poll?.expiresAt).toBe(`${isoDay(5)}T23:59:59.999Z`);
+    // « Tous les membres » : tous les membres du groupe (hôte compris) peuvent voter.
+    expect([...card.poll!.eligibleVoterIds].sort()).toEqual(
+      [admin, host, guest, third].map((u) => u.id).sort(),
+    );
+    expect(card.poll?.options.map((o) => [o.date, o.slot])).toEqual([
+      [isoDay(8), 'EVENING'],
+      [isoDay(9), 'MORNING'],
+      [isoDay(12), 'EVENING'],
+    ]);
+
+    // Écriture : événement + séance + sondage ensemble, séance sans date, sondage de l'hôte.
+    const seance = await h.prisma.seance.findUniqueOrThrow({
+      where: { id: card.seance!.id },
+      include: { poll: { include: { options: true } } },
+    });
+    expect([seance.startDate, seance.startSlot, seance.endDate, seance.endSlot]).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ]);
+    expect(seance.pollId).toBe(card.poll!.id);
+    expect(seance.poll?.createdById).toBe(host.id);
+    expect(seance.poll?.partieId).toBe(groupId);
+    expect(seance.poll?.options).toHaveLength(3);
+    expect(seance.lieu).toBe('Lyon 3e');
+
+    // Sans date, la conjonction ne fait pas la prochaine date du groupe ; le groupe est EN_COURS.
+    const partie = body<DatedPartieLike>(await guest.agent.get(`/parties/${groupId}`).expect(200));
+    expect(partie.status).toBe('EN_COURS');
+    expect(partie.nextSessionDate).toBeNull();
+
+    // Les autres membres la lisent, aucun étranger.
+    expect((await cardFor(guest, card.id)).poll?.id).toBe(card.poll!.id);
+    await stranger.agent.get(`/parties/${groupId}/events/list`).expect(403);
+  });
+
+  describe('création refusée (400, rien n’est écrit)', () => {
+    it.each([
+      ['les deux modes à la fois', { date: isoDay(5), slot: 'EVENING' }, MODE],
+      [
+        'aucun mode',
+        { pollOptions: undefined, pollDeadline: undefined },
+        'La date doit être au format AAAA-MM-JJ',
+      ],
+      ['un seul créneau', { pollOptions: slots([8, 'EVENING']) }, 'au moins 2 créneaux'],
+      [
+        'des créneaux en double',
+        { pollOptions: slots([8, 'EVENING'], [8, 'EVENING']) },
+        'Options dupliquées',
+      ],
+      ['une échéance passée', { pollDeadline: isoDay(-1) }, PAST_DEADLINE],
+      ['une échéance inexistante', { pollDeadline: '2031-02-31' }, "Cette date n'existe pas"],
+      [
+        'un créneau sur toute la journée',
+        { pollOptions: slots([8, 'FULL_DAY'], [9, 'EVENING']) },
+        'Le créneau doit être le matin, l’après-midi ou le soir',
+      ],
+      ['des créneaux sans échéance', { pollDeadline: undefined }, 'créneaux et une échéance'],
+      ['une échéance sans créneaux', { pollOptions: undefined }, 'créneaux et une échéance'],
+    ])('%s', async (_label, over, expected) => {
+      const before = await eventCount(groupId);
+      const pollsBefore = await h.prisma.sessionPoll.count({ where: { partieId: groupId } });
+
+      const res = await propose(host, pollPayload(over));
+
+      expect(res.status).toBe(400);
+      expect([message(res)].flat().join(' | ')).toContain(expected);
+      expect(await eventCount(groupId)).toBe(before);
+      expect(await h.prisma.sessionPoll.count({ where: { partieId: groupId } })).toBe(pollsBefore);
+    });
+
+    it('aujourd’hui est accepté comme échéance ; beaucoup de créneaux sont acceptés (aucun plafond métier)', async () => {
+      await create(host, { pollDeadline: isoDay(0) });
+      const many = Array.from({ length: 45 }, (_, i) => ({
+        date: isoDay(20 + i),
+        slot: 'EVENING',
+      }));
+      const card = await create(host, { pollOptions: many });
+      expect(card.poll?.options).toHaveLength(45);
+    });
+  });
+
+  it('refus de droit : un étranger 403 « pas accès », une rencontre isolée 403 — rien n’est écrit', async () => {
+    const before = await eventCount(groupId);
+    const res = await propose(stranger, pollPayload());
+    expect(res.status).toBe(403);
+    expect(message(res)).toBe(NO_ACCESS);
+    // Le groupe d'un autre n'est pas atteignable.
+    expect((await propose(host, pollPayload(), otherGroupId)).status).toBe(403);
+    expect(await eventCount(groupId)).toBe(before);
+
+    const { id: oneShot } = await h.createPartie(admin, 'ONE_SHOT', 'sond-solo', 'ralliement');
+    const solo = await propose(admin, pollPayload(), oneShot);
+    expect(solo.status).toBe(403);
+    expect(message(solo)).toBe(UNAVAILABLE);
+    // La rencontre isolée garde l'unique événement créé avec elle : aucun de plus.
+    expect(await eventCount(oneShot)).toBe(1);
+  });
+
+  it('vote d’un votant éligible (« Tous les membres ») : accepté, la carte de chacun le montre en direct, le retrait est idempotent', async () => {
+    const card = await create(host);
+    const [o1, o2] = card.poll!.options;
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    try {
+      await vote(guest, card.poll!.id, o1.id, 'YES').expect(201);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+    } finally {
+      emit.mockRestore();
+    }
+    await vote(guest, card.poll!.id, o2.id, 'MAYBE').expect(201);
+    await vote(guest, card.poll!.id, o1.id, 'NO').expect(201); // remplace sa réponse
+    await vote(host, card.poll!.id, o1.id, 'YES').expect(201);
+
+    for (const who of [admin, guest, third]) {
+      const seen = (await cardFor(who, card.id)).poll!;
+      expect(seen.votes.map((v) => [v.userId, v.optionId, v.answer]).sort()).toEqual(
+        [
+          [guest.id, o1.id, 'NO'],
+          [guest.id, o2.id, 'MAYBE'],
+          [host.id, o1.id, 'YES'],
+        ].sort(),
+      );
+    }
+    expect(await votesIn(card.poll!.id)).toBe(3);
+
+    await withdraw(guest, card.poll!.id, o2.id).expect(200);
+    await withdraw(guest, card.poll!.id, o2.id).expect(200);
+    expect(await votesIn(card.poll!.id)).toBe(2);
+  });
+
+  describe('votant non éligible : 403, rien n’est écrit', () => {
+    it('étranger au groupe et membre d’un autre groupe', async () => {
+      const card = await create(host);
+      const optionId = card.poll!.options[0].id;
+
+      for (const who of [stranger, otherAdmin]) {
+        const res = await vote(who, card.poll!.id, optionId);
+        expect(res.status).toBe(403);
+        expect(message(res)).toBe(NO_ACCESS);
+        expect((await withdraw(who, card.poll!.id, optionId)).status).toBe(403);
+      }
+      // Par la route de SON groupe, le sondage d'une autre partie est inconnu (400).
+      const via = await vote(otherAdmin, card.poll!.id, optionId, 'YES', otherGroupId);
+      expect(via.status).toBe(400);
+      expect(await votesIn(card.poll!.id)).toBe(0);
+    });
+
+    it('places limitées : seul l’hôte et les inscrits confirmés votent ; l’inscription ouvre le droit, la désinscription le ferme', async () => {
+      const card = await create(host, { capacity: 4 });
+      const { id: pollId, options } = card.poll!;
+      expect(card.poll?.eligibleVoterIds).toEqual([host.id]);
+
+      // Un membre du groupe non inscrit est refusé.
+      const refused = await vote(guest, pollId, options[0].id);
+      expect(refused.status).toBe(403);
+      expect(message(refused)).toBe(NOT_ELIGIBLE);
+      expect((await withdraw(guest, pollId, options[0].id)).status).toBe(403);
+      await vote(host, pollId, options[0].id).expect(201);
+
+      // Coexistence : s'inscrire à la conjonction encore sans date est accepté, l'éligibilité suit.
+      await signUp(guest, card.seance!.id).expect(201);
+      await vote(guest, pollId, options[0].id, 'YES').expect(201);
+      expect((await cardFor(third, card.id)).poll?.eligibleVoterIds).toEqual([host.id, guest.id]);
+
+      // Une place seulement réservée n'est pas une participation.
+      await host.agent
+        .post(`/scenarios/seances/${card.seance!.id}/reservations`)
+        .send({ userId: third.id })
+        .expect(201);
+      const reserved = await vote(third, pollId, options[0].id);
+      expect(reserved.status).toBe(403);
+      expect(message(reserved)).toBe(NOT_ELIGIBLE);
+
+      // Désinscrit, la réponse de l'invité n'est plus servie (elle ne compte plus).
+      await guest.agent.delete(`/scenarios/seances/${card.seance!.id}/inscription`).expect(200);
+      expect((await vote(guest, pollId, options[0].id)).status).toBe(403);
+      const seen = (await cardFor(host, card.id)).poll!;
+      expect(seen.votes.map((v) => v.userId)).toEqual([host.id]);
+      expect(await h.prisma.pollVote.count({ where: { pollId, userId: third.id } })).toBe(0);
+    });
+  });
+
+  it('après l’échéance : vote et retrait refusés (400 français), rien n’est écrit ni retiré', async () => {
+    const card = await create(host);
+    const { id: pollId, options } = card.poll!;
+    await vote(guest, pollId, options[0].id).expect(201);
+    await h.prisma.sessionPoll.update({
+      where: { id: pollId },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    const late = await vote(third, pollId, options[0].id);
+    expect(late.status).toBe(400);
+    expect(message(late)).toBe(ENDED);
+    const lateWithdraw = await withdraw(guest, pollId, options[0].id);
+    expect(lateWithdraw.status).toBe(400);
+    expect(message(lateWithdraw)).toBe(ENDED);
+    expect(await votesIn(pollId)).toBe(1);
+  });
+
+  it('date déjà fixée ou sondage fermé : vote refusé (400), rien n’est écrit', async () => {
+    const dated = await create(host);
+    await h.prisma.seance.update({
+      where: { id: dated.seance!.id },
+      data: { startDate: new Date(`${isoDay(9)}T00:00:00.000Z`), startSlot: 'EVENING' },
+    });
+    const res = await vote(guest, dated.poll!.id, dated.poll!.options[0].id);
+    expect(res.status).toBe(400);
+    expect(message(res)).toBe(DATE_SET);
+    expect(await votesIn(dated.poll!.id)).toBe(0);
+
+    const closed = await create(host);
+    await h.prisma.sessionPoll.update({
+      where: { id: closed.poll!.id },
+      data: { status: 'CLOSED' },
+    });
+    const shut = await vote(guest, closed.poll!.id, closed.poll!.options[0].id);
+    expect(shut.status).toBe(400);
+    expect(message(shut)).toBe('Poll introuvable ou fermé');
+    expect(await votesIn(closed.poll!.id)).toBe(0);
+  });
+
+  it('un vote sur une option d’un AUTRE sondage ou inconnue est refusé (400)', async () => {
+    const a = await create(host);
+    const b = await create(host);
+    const res = await vote(guest, a.poll!.id, b.poll!.options[0].id);
+    expect(res.status).toBe(400);
+    expect(await votesIn(a.poll!.id)).toBe(0);
+    expect((await vote(guest, a.poll!.id, randomUUID())).status).toBe(400);
+  });
+
+  describe('modification par l’hôte', () => {
+    it('réconcilie les créneaux : le conservé garde son identifiant et ses réponses, le retiré perd les siennes, l’échéance est mise à jour', async () => {
+      const card = await create(host);
+      const [keep, drop] = card.poll!.options;
+      await vote(guest, card.poll!.id, keep.id, 'YES').expect(201);
+      await vote(guest, card.poll!.id, drop.id, 'NO').expect(201);
+      await vote(host, card.poll!.id, drop.id, 'YES').expect(201);
+
+      const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+      let res: Response;
+      try {
+        res = await edit(host, card.id, {
+          title: 'Sondage renommé',
+          pollOptions: [
+            { date: keep.date, slot: keep.slot },
+            ...slots([14, 'AFTERNOON'], [15, 'EVENING']),
+          ],
+          pollDeadline: isoDay(6),
+          lieu: 'Paris',
+        }).expect(200);
+        expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      } finally {
+        emit.mockRestore();
+      }
+
+      const updated = body<CardLike>(res);
+      expect(updated.title).toBe('Sondage renommé');
+      expect(updated.poll?.id).toBe(card.poll!.id);
+      expect(updated.poll?.expiresAt).toBe(`${isoDay(6)}T23:59:59.999Z`);
+      expect(updated.poll?.options.map((o) => o.id)).toContain(keep.id);
+      expect(updated.poll?.options.map((o) => o.id)).not.toContain(drop.id);
+      expect(updated.poll?.options).toHaveLength(3);
+      expect(updated.poll?.votes).toEqual([{ optionId: keep.id, userId: guest.id, answer: 'YES' }]);
+      expect(await votesIn(card.poll!.id)).toBe(1);
+
+      // La séance n'a toujours pas de date, le lieu est remplacé.
+      const seance = await h.prisma.seance.findUniqueOrThrow({ where: { id: card.seance!.id } });
+      expect([seance.startDate, seance.startSlot]).toEqual([null, null]);
+      expect(seance.lieu).toBe('Paris');
+      expect(seance.pollId).toBe(card.poll!.id);
+    });
+
+    it('refus (rien n’est modifié) : non-hôte 403, échéance passée 400, mode changé 400, créneaux insuffisants ou en double 400', async () => {
+      const card = await create(host);
+      const sent = pollPayload({ title: 'Détourné' });
+
+      const asGuest = await edit(guest, card.id, sent);
+      expect(asGuest.status).toBe(403);
+      expect(message(asGuest)).toBe(HOST_ONLY);
+      expect((await edit(admin, card.id, sent)).status).toBe(403);
+      expect((await edit(stranger, card.id, sent)).status).toBe(403);
+
+      const past = await edit(host, card.id, { ...sent, pollDeadline: isoDay(-1) });
+      expect(past.status).toBe(400);
+      expect(message(past)).toBe(PAST_DEADLINE);
+
+      const toDated = await edit(host, card.id, {
+        title: 'X',
+        date: isoDay(7),
+        slot: 'EVENING',
+      });
+      expect(toDated.status).toBe(400);
+      expect(message(toDated)).toBe(MODE);
+
+      const one = await edit(host, card.id, { ...sent, pollOptions: slots([8, 'EVENING']) });
+      expect(one.status).toBe(400);
+      const dup = await edit(host, card.id, {
+        ...sent,
+        pollOptions: slots([8, 'EVENING'], [8, 'EVENING']),
+      });
+      expect(dup.status).toBe(400);
+
+      const unchanged = await cardFor(host, card.id);
+      expect(unchanged.title).toBe('Sondage plateaux');
+      expect(unchanged.poll?.options.map((o) => o.id)).toEqual(card.poll!.options.map((o) => o.id));
+      expect(unchanged.poll?.expiresAt).toBe(card.poll!.expiresAt);
+    });
+
+    it('une conjonction à date fixée ne devient pas un sondage (400, la date reste)', async () => {
+      const dated = body<CardLike>(
+        await propose(host, { title: 'Datée', date: isoDay(7), slot: 'EVENING' }).expect(201),
+      );
+      expect(dated.poll).toBeNull();
+      const res = await edit(host, dated.id, pollPayload());
+      expect(res.status).toBe(400);
+      expect(message(res)).toBe(MODE);
+      expect((await cardFor(host, dated.id)).seance?.date).toBe(isoDay(7));
+    });
+
+    it('échéance passée INCHANGÉE : le lieu se corrige encore après la fin du vote', async () => {
+      const card = await create(host);
+      // Le vote s'est terminé hier soir : l'échéance stockée est la fin de journée d'hier.
+      const endOfYesterday = `${isoDay(-1)}T23:59:59.999Z`;
+      await h.prisma.sessionPoll.update({
+        where: { id: card.poll!.id },
+        data: { expiresAt: new Date(endOfYesterday) },
+      });
+
+      const res = await edit(host, card.id, {
+        title: 'Sondage plateaux',
+        pollOptions: card.poll!.options.map((o) => ({ date: o.date, slot: o.slot })),
+        pollDeadline: isoDay(-1),
+        lieu: 'Corrigé',
+      }).expect(200);
+
+      expect(body<CardLike>(res).poll?.expiresAt).toBe(endOfYesterday);
+      const seance = await h.prisma.seance.findUniqueOrThrow({ where: { id: card.seance!.id } });
+      expect(seance.lieu).toBe('Corrigé');
+    });
+  });
+
+  it('disponibilités : availableCount compte les INSCRITS libres sur le créneau (hôte + confirmés), en un nombre, sans noms', async () => {
+    const card = await create(host, { capacity: 4 });
+    await signUp(guest, card.seance!.id).expect(201);
+    const [o1, o2] = card.poll!.options;
+    const declare = (
+      user: TestUser,
+      slot: 'EVENING' | 'MORNING' | 'FULL_DAY',
+      from: string,
+      to: string,
+    ) =>
+      h.prisma.availabilityDeclaration.create({
+        data: {
+          userId: user.id,
+          kind: 'AVAILABLE',
+          recurKind: 'PUNCTUAL',
+          slot,
+          startDate: new Date(`${from}T00:00:00.000Z`),
+          endDate: new Date(`${to}T00:00:00.000Z`),
+          expiresAt: new Date(`${isoDay(60)}T00:00:00.000Z`),
+        },
+      });
+    await declare(host, 'EVENING', o1.date, o1.date);
+    await declare(guest, 'FULL_DAY', o1.date, o2.date);
+    // Un membre non inscrit qui se déclare libre ne compte pas.
+    await declare(third, 'FULL_DAY', o1.date, o2.date);
+
+    const seen = (await cardFor(third, card.id)).poll!;
+    expect(seen.options.find((o) => o.id === o1.id)?.availableCount).toBe(2);
+    expect(seen.options.find((o) => o.id === o2.id)?.availableCount).toBe(1);
+    expect(seen.options.find((o) => o.id === card.poll!.options[2].id)?.availableCount).toBe(0);
+    expect(JSON.stringify(seen)).not.toContain(guest.displayName);
+  });
+
+  it('calendrier : une conjonction sans date n’entre ni dans l’agenda, ni dans les indisponibilités, ni dans les inscriptions ouvertes, ni dans les votes en cours', async () => {
+    const card = await create(host, { capacity: 4 });
+    await signUp(guest, card.seance!.id).expect(201);
+
+    for (const who of [host, guest, third]) {
+      const cal = body<{
+        'mes-seances': { seanceId: string }[];
+        'inscriptions-ouvertes': { seanceId: string }[];
+        'votes-en-cours': { pollId: string }[];
+      }>(
+        await who.agent
+          .get('/me/calendar')
+          .query({ from: isoDay(0), to: isoDay(40) })
+          .expect(200),
+      );
+      expect(cal['mes-seances'].map((s) => s.seanceId)).not.toContain(card.seance!.id);
+      expect(cal['inscriptions-ouvertes'].map((s) => s.seanceId)).not.toContain(card.seance!.id);
+      // Le sondage d'un groupe se vote dans le calendrier du groupe (40.5b) : jamais dans cette couche,
+      // pour aucun membre — éligible ou non.
+      expect(cal['votes-en-cours'].map((p) => p.pollId)).not.toContain(card.poll!.id);
+    }
   });
 });

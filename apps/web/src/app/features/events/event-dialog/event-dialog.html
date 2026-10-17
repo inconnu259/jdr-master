@@ -76,6 +76,28 @@
       }
     </section>
 
+    <!-- Story 40.5 : sondage de dates. Membre éligible qui n'a pas voté : cadre « à faire » ; hôte : cadre
+         accent. Résumé calculé à l'écran depuis la carte vivante. Pas de vote dans la fenêtre. -->
+    @if (poll(); as p) {
+      <section
+        class="ed__poll"
+        [class.ed__poll--todo]="p.kind === 'member-todo'"
+        [class.ed__poll--host]="p.kind === 'host'"
+        [attr.aria-labelledby]="uid + '-poll'"
+      >
+        <h3 class="ed__poll-text" [id]="uid + '-poll'">{{ p.text }}</h3>
+        @if (p.answersLine; as line) {
+          <p class="ed__poll-line ed__poll-answers">{{ line }}</p>
+        }
+        @if (p.bestLine; as line) {
+          <p class="ed__poll-line ed__poll-best">{{ line }}</p>
+        }
+        @if (p.waitingLine; as line) {
+          <p class="ed__poll-line ed__poll-waiting">{{ line }}</p>
+        }
+      </section>
+    }
+
     <!-- Fiche : les lignes facultatives vides sont omises. -->
     <section class="ed__sheet" [attr.aria-labelledby]="uid + '-sheet'">
       <h3 class="ed__section-title" [id]="uid + '-sheet'">
@@ -114,6 +136,23 @@
         }
       </dl>
     </section>
+
+    @if (slotRows().length > 0) {
+      <!-- Story 40.5 : chaque créneau candidat et le nombre d'inscrits libres (un nombre, jamais des noms). -->
+      <section class="ed__slots" [attr.aria-labelledby]="uid + '-slots'">
+        <h3 class="ed__section-title" [id]="uid + '-slots'">
+          {{ theme.tone()['partie.ralliement_event_poll_slots_heading'] }}
+        </h3>
+        <ul class="ed__slot-list">
+          @for (row of slotRows(); track row.id) {
+            <li class="ed__slot">
+              <span class="ed__slot-label">{{ row.label }}</span>
+              <span class="ed__slot-available">{{ row.available }}</span>
+            </li>
+          }
+        </ul>
+      </section>
+    }
 
     <section class="ed__participants" [attr.aria-labelledby]="uid + '-participants'">
       <h3 class="ed__section-title" [id]="uid + '-participants'">

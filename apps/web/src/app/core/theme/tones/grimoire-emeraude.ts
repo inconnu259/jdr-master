@@ -464,6 +464,37 @@ export const grimoireEmeraude = {
     'Cette place de la conjonction n’a pu être réservée. Réessayez.',
   'partie.ralliement_event_unreserve_error':
     'Cette réservation de la conjonction n’a pu être retirée. Réessayez.',
+  /* — proposer une conjonction par sondage de dates (Story 40.5) : mots du contrat identiques, phrases adressées à la personne selon le thème — */
+  'partie.ralliement_event_poll_slots_label': 'Créneaux proposés',
+  'partie.ralliement_event_poll_add_btn': 'Ajouter',
+  'partie.ralliement_event_poll_slot_remove_aria': 'Retirer le créneau {slot}',
+  'partie.ralliement_event_poll_summary': '{count} · {range}',
+  'partie.ralliement_event_poll_min_hint': 'Au moins deux créneaux sont nécessaires.',
+  'partie.ralliement_event_poll_remove_hint':
+    'Retirer un créneau efface les réponses qui le concernent.',
+  'partie.ralliement_event_poll_deadline_label': 'Le vote se termine le',
+  'partie.ralliement_event_unit_slot': 'créneau|créneaux',
+  'partie.ralliement_event_unit_available': 'inscrit disponible|inscrits disponibles',
+  'partie.ralliement_event_poll_date_line': 'Date à voter · jusqu’au {date}',
+  'partie.ralliement_event_badge_poll': 'Vote en cours',
+  'partie.ralliement_event_chip_vote_todo': 'Vote à faire',
+  'partie.ralliement_event_poll_best': 'Meilleur créneau pour l’instant : {date} — {n} oui',
+  'partie.ralliement_event_poll_host_answers': 'Réponses : {x} sur {n}',
+  'partie.ralliement_event_poll_host_waiting': 'N’ont pas encore répondu : {names}',
+  'partie.ralliement_event_poll_slots_heading': 'Créneaux candidats',
+  'partie.ralliement_event_poll_ended': 'Le vote est terminé.',
+  'partie.ralliement_event_poll_ends_today': 'aujourd’hui',
+  'partie.ralliement_event_poll_ends_tomorrow': 'demain',
+  'partie.ralliement_event_poll_ends_in_days': 'dans {n} jours',
+  'partie.ralliement_event_poll_member_todo':
+    'Vote à faire. Vous êtes inscrit·e : donnez vos disponibilités avant le {date}.',
+  'partie.ralliement_event_poll_my_answers': 'Vos réponses : {x} sur {n}',
+  'partie.ralliement_event_poll_member_voted':
+    'Vos réponses sont enregistrées. Le vote se termine le {date}.',
+  'partie.ralliement_event_poll_host_summary':
+    'Vous êtes l’hôte. Le vote se termine {when} — {n} créneaux proposés.',
+  'partie.ralliement_event_poll_not_eligible':
+    'Seuls les inscrits à cette conjonction votent pour la date.',
   /* — « Missives » d’un groupe, côté administrateur (Story 39.3) : variantes sans mot de JDR — */
   'partie.ralliement_invite_title': 'Convier au ralliement',
   'partie.ralliement_search_label': 'Pseudo ou signe distinctif',

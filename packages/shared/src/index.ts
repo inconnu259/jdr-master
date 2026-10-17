@@ -706,14 +706,29 @@ export type EventSlot = Exclude<DaySlot, 'FULL_DAY'>;
  *  `CONFIRMED` : inscription confirmée (défaut — toutes les lignes du JDR). */
 export type InscriptionStatus = 'RESERVED' | 'CONFIRMED';
 
+/** Un créneau candidat d'un sondage de dates de conjonction (Story 40.5) : un jour (`YYYY-MM-DD`) et
+ *  un créneau précis. */
+export interface EventPollOptionInput {
+  date: string;
+  slot: EventSlot;
+}
+
 /** Payload de création d'une conjonction à date fixée (POST /parties/:id/events, Story 40.1).
  *  `date` est une clé `YYYY-MM-DD` (aujourd'hui accepté, jamais avant) ; `heureRdv` est une
  *  ÉTIQUETTE `"HH:MM"`, jamais un instant. `capacity` : `null` (ou absent) = « Tous les membres »,
  *  sinon N places, hôte compris (N ≥ 2, sans plafond). */
 export interface CreateEventDto {
   title: string;
-  date: string;
-  slot: EventSlot;
+  /** Mode « date fixée » : jour et créneau. Absents (avec `pollOptions`) en mode « sondage de dates »
+   *  (Story 40.5) — les deux modes sont exclusifs. */
+  date?: string;
+  slot?: EventSlot;
+  /** Story 40.5, mode « sondage de dates » : créneaux candidats (au moins 2, distincts, jamais
+   *  `FULL_DAY`, sans plafond métier). Exclusif avec `date`/`slot`. */
+  pollOptions?: EventPollOptionInput[];
+  /** Story 40.5 : fin du vote, clé `YYYY-MM-DD` (aujourd'hui accepté, jamais avant) ; obligatoire avec
+   *  `pollOptions`. Le vote se termine à la fin de ce jour (UTC). */
+  pollDeadline?: string;
   lieu?: string | null;
   heureRdv?: string | null;
   notePratique?: string | null;
@@ -760,6 +775,37 @@ export interface EventParticipantDto {
   status: InscriptionStatus;
 }
 
+/** Un créneau candidat du sondage d'une conjonction, tel que servi aux membres (Story 40.5).
+ *  `availableCount` : parmi les inscrits (hôte + inscriptions confirmées), combien sont libres sur ce
+ *  créneau d'après leurs disponibilités déclarées — un nombre, jamais des noms. */
+export interface EventPollOptionDto {
+  id: string;
+  date: string;
+  slot: DaySlot;
+  availableCount: number;
+}
+
+/** La réponse d'un votant éligible à un créneau (Story 40.5). */
+export interface EventPollVoteDto {
+  optionId: string;
+  userId: string;
+  answer: VoteAnswer;
+}
+
+/** Sondage de dates d'une conjonction (Story 40.5) — projection explicite, servie aux membres du
+ *  groupe seuls. `eligibleVoterIds` : qui peut voter (tous les membres, ou l'hôte + les inscrits
+ *  confirmés si les places sont limitées) ; le résumé du vote (réponses, meilleur créneau, « n'ont pas
+ *  encore répondu ») est calculé à l'écran depuis cette liste et `votes`. `expiresAt` : fin du vote
+ *  (instant ISO, fin du jour d'échéance en UTC). */
+export interface EventPollDto {
+  id: string;
+  expiresAt: string | null;
+  status: PollStatus;
+  eligibleVoterIds: string[];
+  options: EventPollOptionDto[];
+  votes: EventPollVoteDto[];
+}
+
 /** Carte d'une conjonction (GET /parties/:id/events/list, Story 40.1) — projection explicite :
  *  l'hôte (immuable, `null` si son compte a disparu), la séance unique et, depuis la Story 40.2, ses
  *  participants (hôte en premier, puis les inscrits). */
@@ -772,6 +818,8 @@ export interface EventCardDto {
   participants: EventParticipantDto[];
   /** Story 40.4 : la ligne d'inscription de la personne qui lit (`null` : aucune — l'hôte non plus). */
   myInscription: InscriptionStatus | null;
+  /** Story 40.5 : le sondage de dates de la conjonction (`null` pour une conjonction à date fixée). */
+  poll: EventPollDto | null;
 }
 
 // ─── Epic 9 : Annonces MJ ──────────────────────────────────────────────────

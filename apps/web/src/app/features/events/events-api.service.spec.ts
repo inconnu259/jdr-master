@@ -17,6 +17,7 @@ describe('EventsApiService (Story 40.1)', () => {
     seance: null,
     participants: [],
     myInscription: null,
+    poll: null,
   };
 
   beforeEach(() => {

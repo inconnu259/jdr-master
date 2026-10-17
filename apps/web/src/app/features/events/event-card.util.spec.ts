@@ -1,6 +1,7 @@
 import type { EventCardDto } from '@master-jdr/shared';
 import { TONE_MAP } from '../../core/theme/tones';
 import {
+  answeredSlotCount,
   canManageReservations,
   canRespondToReservation,
   canSignUp,
@@ -19,6 +20,18 @@ import {
   participationLine,
   isImminentEvent,
   isPastEvent,
+  hasPendingPoll,
+  isPollEnded,
+  isPollOpen,
+  needsVote,
+  pollBestSlot,
+  pollPanel,
+  pollRangeLabel,
+  pollSlotLabel,
+  pollSlotRows,
+  pollSummaryLabel,
+  respondentIds,
+  shortDayLabel,
   splitEvents,
 } from './event-card.util';
 
@@ -42,6 +55,7 @@ const card = (id: string, date: string | null, over: Partial<EventCardDto> = {})
   },
   participants: [],
   myInscription: null,
+  poll: null,
   ...over,
 });
 
@@ -395,6 +409,195 @@ describe('event-card.util (Story 40.1)', () => {
       const [, , pending] = heldForHost().participants;
       expect(isPendingParticipant(pending)).toBe(true);
       expect(isPendingParticipant(heldForHost().participants[1])).toBe(false);
+    });
+  });
+
+  // ─── Sondage de dates (Story 40.5) ─────────────────────────────────────────────────────────────
+  describe('sondage de dates (Story 40.5)', () => {
+    const HOST = 'hote';
+    const pollCard = (
+      pollOver: Partial<NonNullable<EventCardDto['poll']>> = {},
+      over: Partial<EventCardDto> = {},
+    ): EventCardDto =>
+      card('p', null, {
+        poll: {
+          id: 'poll-1',
+          expiresAt: '2026-10-20T23:59:59.999Z',
+          status: 'OPEN',
+          eligibleVoterIds: [HOST, 'a', 'b'],
+          options: [
+            { id: 'o1', date: '2026-10-24', slot: 'EVENING', availableCount: 2 },
+            { id: 'o2', date: '2026-10-25', slot: 'MORNING', availableCount: 1 },
+          ],
+          votes: [],
+          ...pollOver,
+        },
+        ...over,
+      });
+    const name = (id: string) => ({ hote: 'Léa', a: 'Zoé', b: 'Sam' })[id] ?? id;
+
+    it('libellés : jour court, plage (mois écrit une fois), créneau', () => {
+      expect(shortDayLabel('2026-10-25')).toBe('dim. 25 oct.');
+      expect(shortDayLabel('2026-10-25', false)).toBe('dim. 25');
+      expect(pollRangeLabel(['2026-10-25', '2026-10-17'])).toBe('sam. 17 → dim. 25 oct.');
+      expect(pollRangeLabel(['2026-10-30', '2026-11-02'])).toBe('ven. 30 oct. → lun. 2 nov.');
+      expect(pollRangeLabel(['2026-10-17'])).toBe('sam. 17 oct.');
+      expect(pollRangeLabel([])).toBe('');
+      expect(pollSlotLabel({ date: '2026-10-24', slot: 'EVENING' })).toBe('sam. 24 oct. · soir');
+      expect(
+        pollSummaryLabel([{ date: '2026-10-17' }, { date: '2026-10-25' }, { date: '2026-10-20' }], TONE),
+      ).toBe('3 créneaux · sam. 17 → dim. 25 oct.');
+    });
+
+    it('ouvert jusqu’au jour d’échéance compris ; terminé le lendemain ; une date posée clôt le sondage', () => {
+      expect(isPollOpen(pollCard(), '2026-10-20')).toBe(true);
+      expect(isPollOpen(pollCard(), '2026-10-21')).toBe(false);
+      expect(isPollEnded(pollCard(), '2026-10-21')).toBe(true);
+      expect(isPollEnded(pollCard(), '2026-10-20')).toBe(false);
+      expect(isPollOpen(pollCard({ status: 'CLOSED' }), TODAY)).toBe(false);
+      expect(isPollOpen(card('d', '2026-10-24'), TODAY)).toBe(false);
+      expect(hasPendingPoll(card('d', '2026-10-24'))).toBe(false);
+    });
+
+    it('vote à faire : éligible qui n’a répondu à aucun créneau ; plus après une réponse, ni hors éligibles', () => {
+      expect(needsVote(pollCard(), 'a', TODAY)).toBe(true);
+      expect(needsVote(pollCard(), HOST, TODAY)).toBe(true);
+      expect(needsVote(pollCard(), 'inconnu', TODAY)).toBe(false);
+      expect(needsVote(pollCard(), null, TODAY)).toBe(false);
+      const answered = pollCard({ votes: [{ optionId: 'o1', userId: 'a', answer: 'NO' }] });
+      expect(needsVote(answered, 'a', TODAY)).toBe(false);
+      expect(answeredSlotCount(answered, 'a')).toBe(1);
+      expect(needsVote(pollCard(), 'a', '2026-10-21')).toBe(false);
+      // Une réponse d’une personne qui n’est plus éligible ne compte pas.
+      const gone = pollCard({ votes: [{ optionId: 'o1', userId: 'parti', answer: 'YES' }] });
+      expect(respondentIds(gone)).toEqual([]);
+      expect(pollBestSlot(gone)).toBeNull();
+    });
+
+    it('badge : « Vote en cours » orange pour qui doit voter, cyan sinon ; plus de badge de vote une fois terminé', () => {
+      const todo = eventBadge(pollCard(), TODAY, TONE, 'a');
+      expect(todo).toMatchObject({ tone: 'todo', text: 'Vote en cours' });
+      const voted = pollCard({ votes: [{ optionId: 'o1', userId: 'a', answer: 'YES' }] });
+      expect(eventBadge(voted, TODAY, TONE, 'a')).toMatchObject({ tone: 'live', text: 'Vote en cours' });
+      expect(eventBadge(pollCard({ eligibleVoterIds: [HOST] }), TODAY, TONE, 'a')).toMatchObject({
+        tone: 'live',
+      });
+      expect(eventBadge(pollCard(), '2026-10-21', TONE, 'a').text).toBeUndefined();
+    });
+
+    it('ligne de date « Date à voter · jusqu’au … » ; puce « Vote à faire » qui l’emporte sur la situation', () => {
+      expect(eventDateLabel(pollCard(), TONE)).toBe('Date à voter · jusqu’au mar. 20 oct.');
+      expect(eventSituation(pollCard(), 'a', TODAY)).toEqual({
+        labelKey: 'partie.ralliement_event_chip_vote_todo',
+        dotted: false,
+      });
+      const voted = pollCard({ votes: [{ optionId: 'o1', userId: HOST, answer: 'YES' }] });
+      expect(eventSituation(voted, HOST, TODAY).labelKey).toBe(
+        'partie.ralliement_event_chip_participating',
+      );
+    });
+
+    it('tri : une conjonction à sondage (sans date) vient après les conjonctions datées', () => {
+      const { upcoming } = splitEvents([pollCard(), card('x', '2026-12-01')], TODAY);
+      expect(upcoming.map((c) => c.id)).toEqual(['x', 'p']);
+    });
+
+    it('meilleur créneau : le plus de « oui » parmi les éligibles, à égalité le plus de « peut-être » puis le plus proche', () => {
+      const votes = [
+        { optionId: 'o1', userId: 'a', answer: 'YES' as const },
+        { optionId: 'o2', userId: 'a', answer: 'YES' as const },
+        { optionId: 'o2', userId: 'b', answer: 'MAYBE' as const },
+      ];
+      expect(pollBestSlot(pollCard({ votes }))?.option.id).toBe('o2');
+      expect(pollBestSlot(pollCard({ votes }))?.yes).toBe(1);
+      expect(pollBestSlot(pollCard({ votes: [votes[0]] }))?.option.id).toBe('o1');
+      expect(
+        pollBestSlot(pollCard({ votes: [{ optionId: 'o1', userId: 'a', answer: 'NO' }] })),
+      ).toBeNull();
+    });
+
+    it('panneau membre : « à faire » avec la date de fin, puis ses réponses ; « terminé » après l’échéance', () => {
+      const todo = pollPanel(pollCard(), 'a', TODAY, TONE, name)!;
+      expect(todo).toMatchObject({
+        kind: 'member-todo',
+        text: 'Vote à faire. Vous êtes inscrit·e : donnez vos disponibilités avant le mar. 20 oct.',
+        answersLine: 'Vos réponses : 0 créneau sur 2',
+        bestLine: null,
+        waitingLine: null,
+      });
+      const voted = pollCard({
+        votes: [
+          { optionId: 'o1', userId: 'a', answer: 'YES' },
+          { optionId: 'o2', userId: 'a', answer: 'MAYBE' },
+        ],
+      });
+      expect(pollPanel(voted, 'a', TODAY, TONE, name)).toMatchObject({
+        kind: 'member-done',
+        answersLine: 'Vos réponses : 2 créneaux sur 2',
+        bestLine: 'Meilleur créneau pour l’instant : sam. 24 oct. · soir — 1 oui',
+      });
+      expect(pollPanel(pollCard(), 'a', '2026-10-21', TONE, name)).toMatchObject({
+        kind: 'member-done',
+        ended: true,
+        text: 'Le vote est terminé.',
+      });
+    });
+
+    it('panneau hôte : jours restants, réponses x sur N, qui n’a pas répondu — recalculé depuis les votes', () => {
+      const none = pollPanel(pollCard(), HOST, TODAY, TONE, name)!;
+      expect(none).toMatchObject({
+        kind: 'host',
+        text: 'Vous êtes l’hôte. Le vote se termine dans 3 jours — 2 créneaux proposés.',
+        answersLine: 'Réponses : 0 sur 3',
+        waitingLine: 'N’ont pas encore répondu : Léa, Zoé, Sam',
+      });
+      const some = pollCard({
+        votes: [
+          { optionId: 'o1', userId: HOST, answer: 'YES' },
+          { optionId: 'o1', userId: 'a', answer: 'YES' },
+        ],
+      });
+      expect(pollPanel(some, HOST, TODAY, TONE, name)).toMatchObject({
+        answersLine: 'Réponses : 2 sur 3',
+        waitingLine: 'N’ont pas encore répondu : Sam',
+      });
+      const all = pollCard({
+        votes: ['hote', 'a', 'b'].map((userId) => ({
+          optionId: 'o1',
+          userId,
+          answer: 'YES' as const,
+        })),
+      });
+      expect(pollPanel(all, HOST, TODAY, TONE, name)).toMatchObject({
+        answersLine: 'Réponses : 3 sur 3',
+        waitingLine: null,
+      });
+      // Demain / aujourd’hui.
+      expect(pollPanel(pollCard(), HOST, '2026-10-19', TONE, name)!.text).toContain('demain');
+      expect(pollPanel(pollCard(), HOST, '2026-10-20', TONE, name)!.text).toContain('aujourd’hui');
+    });
+
+    it('mois sans point (mars, mai, juin, août) : seul le point final d’une abréviation est retiré, jamais une lettre', () => {
+      const march = pollCard({ expiresAt: '2026-03-20T23:59:59.999Z' });
+      expect(pollPanel(march, 'a', '2026-03-10', TONE, name)!.text).toBe(
+        'Vote à faire. Vous êtes inscrit·e : donnez vos disponibilités avant le ven. 20 mars.',
+      );
+      const august = pollCard({ expiresAt: '2026-08-20T23:59:59.999Z' });
+      expect(pollPanel(august, 'a', '2026-08-10', TONE, name)!.text).toContain('jeu. 20 août.');
+    });
+
+    it('panneau d’un lecteur non éligible ; aucun panneau pour une conjonction datée', () => {
+      expect(
+        pollPanel(pollCard({ eligibleVoterIds: [HOST] }), 'a', TODAY, TONE, name)?.kind,
+      ).toBe('not-eligible');
+      expect(pollPanel(card('d', '2026-10-24'), 'a', TODAY, TONE, name)).toBeNull();
+    });
+
+    it('lignes de créneau : libellé et nombre d’inscrits disponibles, accordé', () => {
+      expect(pollSlotRows(pollCard(), TONE)).toEqual([
+        { id: 'o1', label: 'sam. 24 oct. · soir', available: '2 inscrits disponibles' },
+        { id: 'o2', label: 'dim. 25 oct. · matin', available: '1 inscrit disponible' },
+      ]);
     });
   });
 });

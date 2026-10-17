@@ -5,6 +5,7 @@ import { EventsModule } from '../events/events.module';
 import { EventsService } from '../events/events.service';
 import { PartiesModule } from '../parties/parties.module';
 import { PartiesService } from '../parties/parties.service';
+import { GROUP_POLL_VOTE_PORT } from '../poll/ports/group-poll-vote.port';
 import { PARTIE_SIGNALS_PORT } from '../poll/ports/partie-signals.port';
 import { SEANCE_DATE_PORT } from '../poll/ports/seance-date.port';
 
@@ -16,7 +17,8 @@ import { SEANCE_DATE_PORT } from '../poll/ports/seance-date.port';
  * `AvailabilityModule` et `PollModule` n'importent plus `PartiesModule`, `EventsModule` ni
  * `ScenariosModule`.
  *
- * - `OccupiedSpansPort`, `OwnEventsPort`, `SeanceDatePort` → `EventsService` ;
+ * - `OccupiedSpansPort`, `OwnEventsPort`, `SeanceDatePort`, `GroupPollVotePort` (Story 40.5) →
+ *   `EventsService` ;
  * - `PartieSignalsPort` → `PartiesService`.
  */
 @Global()
@@ -26,8 +28,15 @@ import { SEANCE_DATE_PORT } from '../poll/ports/seance-date.port';
     { provide: OCCUPIED_SPANS_PORT, useExisting: EventsService },
     { provide: OWN_EVENTS_PORT, useExisting: EventsService },
     { provide: SEANCE_DATE_PORT, useExisting: EventsService },
+    { provide: GROUP_POLL_VOTE_PORT, useExisting: EventsService },
     { provide: PARTIE_SIGNALS_PORT, useExisting: PartiesService },
   ],
-  exports: [OCCUPIED_SPANS_PORT, OWN_EVENTS_PORT, SEANCE_DATE_PORT, PARTIE_SIGNALS_PORT],
+  exports: [
+    OCCUPIED_SPANS_PORT,
+    OWN_EVENTS_PORT,
+    SEANCE_DATE_PORT,
+    GROUP_POLL_VOTE_PORT,
+    PARTIE_SIGNALS_PORT,
+  ],
 })
 export class PortsModule {}

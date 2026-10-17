@@ -271,7 +271,10 @@ export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly Parti
   SEANCE_RESERVE: ADMIN_AND_MEMBERS,
   // Vote de date
   POLL_READ: NOBODY,
-  POLL_VOTE: NOBODY,
+  // Story 40.5 : voter (et retirer son vote) sur le sondage de dates d'une conjonction — tout membre
+  // passe la cellule ; « éligible », « avant l'échéance », « date pas encore fixée » sont décidés par
+  // le sondage lui-même, via le port des votes de groupe (`poll/ports/`), jamais ici.
+  POLL_VOTE: ADMIN_AND_MEMBERS,
   POLL_CHOOSE: NOBODY,
   POLL_OPTIONS_SET: NOBODY,
   POLL_CLOSE: NOBODY,

@@ -3,30 +3,55 @@ import { FormsModule } from '@angular/forms';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import type { CreateEventDto, EventCardDto, EventSlot, PartieMemberDto } from '@master-jdr/shared';
+import type {
+  CreateEventDto,
+  EventCardDto,
+  EventPollOptionInput,
+  EventSlot,
+  PartieMemberDto,
+} from '@master-jdr/shared';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { fillTone } from '../../../core/theme/tone-format';
 import { SLOT_LABELS } from '../../calendar/agenda-badge.utils';
 import { toDateKey } from '../../calendar/day-detail.utils';
+import { pollSlotLabel, pollSummaryLabel } from '../event-card.util';
 
 /** Nombre de places proposé par défaut quand on passe à « Places limitées » (hôte compris). */
 export const DEFAULT_PLACES = 4;
 /** Minimum de places limitées : l'hôte en occupe une, il en faut au moins une autre. */
 export const MIN_PLACES = 2;
 
+/** Au moins deux créneaux pour un sondage (le serveur le vérifie aussi). */
+export const MIN_POLL_SLOTS = 2;
+
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+const SLOT_RANK: Record<EventSlot, number> = { MORNING: 0, AFTERNOON: 1, EVENING: 2 };
+
+/** Créneaux triés par jour puis créneau (matin < après-midi < soir). */
+function sortSlots(list: EventPollOptionInput[]): EventPollOptionInput[] {
+  return [...list].sort((a, b) =>
+    a.date === b.date ? SLOT_RANK[a.slot] - SLOT_RANK[b.slot] : a.date < b.date ? -1 : 1,
+  );
+}
+
 let nextUid = 0;
 
 /**
- * Champs d'une conjonction à date fixée, partagés par la fenêtre de création (Story 40.1) et le mode
- * édition de la fenêtre de détail (Story 40.2) : nom* → bascule « Date fixée | Sondage de dates »
- * (le sondage est visible mais désactivé jusqu'à la Story 40.5) → jour (champ de date natif) +
- * créneau → lieu → heure (`type="time"`, une étiquette « HH:MM ») → infos pratiques → participation
+ * Champs d'une conjonction, partagés par la fenêtre de création (Story 40.1) et le mode édition de la
+ * fenêtre de détail (Story 40.2) : nom* → bascule « Date fixée | Sondage de dates » → jour (champ de
+ * date natif) + créneau, OU (Story 40.5) la liste des créneaux candidats (jour + créneau + « Ajouter »,
+ * pastilles retirables, résumé « 3 créneaux · ven. 17 → sam. 25 oct. ») et « Le vote se termine le »
+ * → lieu → heure (`type="time"`, une étiquette « HH:MM ») → infos pratiques → participation
  * « Tous les membres | Places limitées » avec un compteur −/+.
  *
  * Story 40.4 : à la CRÉATION et places limitées seulement, « Réserver une place à des membres » — une
  * pastille par membre (l'hôte exclu), cochée = place réservée d'emblée. Au plus `places − 1` (l'hôte
  * occupe une place) : le compteur ne descend pas sous `réservées + 1`. En modification, le sélecteur
  * n'apparaît pas (la fenêtre de détail gère les réservations).
+ *
+ * Story 40.5 : à la modification le mode ne change pas (la bascule est figée sur celui de la
+ * conjonction) ; la liste des créneaux et l'échéance se corrigent. Les créneaux sont choisis ici, dans
+ * la fenêtre — le calendrier du groupe est l'objet de la Story 40.5b.
  *
  * Rendu des champs seulement : le parent tient le pied (boutons, double envoi, refus du serveur) et
  * lit `dto()` / `valid()` par `viewChild`. `prefill` pré-remplit le formulaire d'une conjonction
@@ -57,6 +82,20 @@ export class EventForm implements OnInit {
   protected readonly todayKey = toDateKey(new Date());
 
   protected readonly title = signal('');
+  /** Story 40.5 : mode de date. À la modification il suit la conjonction et ne change plus. */
+  protected readonly mode = signal<'fixed' | 'poll'>('fixed');
+  /** Créneaux candidats du sondage (triés par jour puis créneau) et leur champ de saisie. */
+  protected readonly pollOptions = signal<EventPollOptionInput[]>([]);
+  protected readonly pollDay = signal('');
+  protected readonly pollSlot = signal<EventSlot>('EVENING');
+  protected readonly pollDeadline = signal('');
+  /** Échéance de la conjonction à la modification : inchangée, elle reste acceptée même passée (le
+   *  serveur la tolère, pour corriger le lieu ou l'heure une fois le vote terminé). */
+  private initialDeadline = '';
+  /** Borne basse du champ d'échéance : aujourd'hui, ou l'échéance d'origine si elle est déjà passée. */
+  protected readonly deadlineMin = computed(() =>
+    this.initialDeadline && this.initialDeadline < this.todayKey ? this.initialDeadline : this.todayKey,
+  );
   protected readonly day = signal('');
   protected readonly slot = signal<EventSlot>('EVENING');
   protected readonly lieu = signal('');
@@ -79,19 +118,44 @@ export class EventForm implements OnInit {
   /** Plancher du compteur : jamais sous les places déjà réservées + l'hôte. */
   protected readonly minPlaces = computed(() => Math.max(MIN_PLACES, this.reserved().length + 1));
 
-  /** Nom non vide, jour au bon format et pas avant aujourd'hui. */
+  /** À la modification, le mode est celui de la conjonction : la bascule n'offre plus l'autre. */
+  protected readonly modeLocked = computed(() => this.prefill() !== null);
+  /** Résumé « 3 créneaux · ven. 17 → sam. 25 oct. », une fois au moins un créneau placé. */
+  protected readonly pollSummary = computed(() =>
+    this.pollOptions().length > 0 ? pollSummaryLabel(this.pollOptions(), this.theme.tone()) : null,
+  );
+  /** Le créneau en cours de saisie peut être ajouté : jour valide, pas passé, pas déjà proposé. */
+  protected readonly canAddSlot = computed(
+    () =>
+      DAY_KEY.test(this.pollDay()) &&
+      this.pollDay() >= this.todayKey &&
+      !this.pollOptions().some((o) => o.date === this.pollDay() && o.slot === this.pollSlot()),
+  );
+  /** Au moins deux créneaux sont proposés (sinon l'aide l'écrit). */
+  protected readonly enoughSlots = computed(() => this.pollOptions().length >= MIN_POLL_SLOTS);
+
+  /** Nom non vide, puis : (date fixée) un jour au bon format pas avant aujourd'hui ; (sondage) au moins
+   *  2 créneaux et une échéance au bon format pas avant aujourd'hui. Le serveur reste juge. */
   readonly valid = computed(
     () =>
       this.title().trim().length > 0 &&
-      /^\d{4}-\d{2}-\d{2}$/.test(this.day()) &&
-      this.day() >= this.todayKey,
+      (this.mode() === 'poll'
+        ? this.enoughSlots() &&
+          DAY_KEY.test(this.pollDeadline()) &&
+          (this.pollDeadline() >= this.todayKey || this.pollDeadline() === this.initialDeadline)
+        : DAY_KEY.test(this.day()) && this.day() >= this.todayKey),
   );
 
   /** Payload prêt à envoyer (textes nettoyés, champ vide → `null`). */
   readonly dto = computed((): CreateEventDto => ({
     title: this.title().trim(),
-    date: this.day(),
-    slot: this.slot(),
+    // Les deux modes sont exclusifs : un sondage n'envoie ni jour ni créneau, une date fixée aucun sondage.
+    ...(this.mode() === 'poll'
+      ? {
+          pollOptions: this.pollOptions().map((o) => ({ date: o.date, slot: o.slot })),
+          pollDeadline: this.pollDeadline(),
+        }
+      : { date: this.day(), slot: this.slot() }),
     lieu: this.lieu().trim() || null,
     heureRdv: this.heureRdv().trim() || null,
     notePratique: this.notePratique().trim() || null,
@@ -107,6 +171,14 @@ export class EventForm implements OnInit {
     if (!card) return;
     const seance = card.seance;
     this.title.set(card.title);
+    if (card.poll) {
+      this.mode.set('poll');
+      this.pollOptions.set(
+        sortSlots(card.poll.options.map((o) => ({ date: o.date, slot: o.slot as EventSlot }))),
+      );
+      this.initialDeadline = card.poll.expiresAt?.substring(0, 10) ?? '';
+      this.pollDeadline.set(this.initialDeadline);
+    }
     this.day.set(seance?.date ?? '');
     this.slot.set(seance?.slot && seance.slot !== 'FULL_DAY' ? seance.slot : 'EVENING');
     this.lieu.set(seance?.lieu ?? '');
@@ -116,6 +188,36 @@ export class EventForm implements OnInit {
       this.participation.set('limited');
       this.places.set(Math.max(MIN_PLACES, seance.capacity));
     }
+  }
+
+  /** Story 40.5 : à la création seulement ; à la modification le mode de la conjonction est figé. */
+  protected setMode(value: 'fixed' | 'poll'): void {
+    if (!this.modeLocked()) this.mode.set(value);
+  }
+
+  /** Story 40.5 : place le créneau saisi dans la liste (triée), puis vide le jour pour le suivant. */
+  protected addSlot(): void {
+    if (!this.canAddSlot()) return;
+    this.pollOptions.update((list) =>
+      sortSlots([...list, { date: this.pollDay(), slot: this.pollSlot() }]),
+    );
+    this.pollDay.set('');
+  }
+
+  protected removeSlot(option: EventPollOptionInput): void {
+    this.pollOptions.update((list) =>
+      list.filter((o) => !(o.date === option.date && o.slot === option.slot)),
+    );
+  }
+
+  protected slotLabel(option: EventPollOptionInput): string {
+    return pollSlotLabel(option);
+  }
+
+  protected slotRemoveAria(option: EventPollOptionInput): string {
+    return fillTone(this.theme.tone()['partie.ralliement_event_poll_slot_remove_aria'], {
+      slot: pollSlotLabel(option),
+    });
   }
 
   protected setParticipation(value: 'all' | 'limited'): void {

@@ -105,6 +105,16 @@ export function eventBadge(
   if (isPastEvent(card, todayKey)) {
     return { tone: 'done', labelKey: 'status.scenario_passe', draft: false };
   }
+  // Story 40.5 : tant que le vote est ouvert, la date n'est pas posée — « Vote en cours », orange pour
+  // un votant éligible qui n'a pas encore répondu, cyan pour tous les autres.
+  if (isPollOpen(card, todayKey)) {
+    return {
+      tone: needsVote(card, currentUserId, todayKey) ? 'todo' : 'live',
+      labelKey: 'status.scenario_a_venir',
+      draft: false,
+      text: tone['partie.ralliement_event_badge_poll'],
+    };
+  }
   if (isFullForViewer(card, currentUserId, todayKey)) {
     return {
       tone: 'done',
@@ -135,6 +145,15 @@ export function eventBadge(
 /** Date en gras de la carte : « Sam. 10 oct. · soir ». Sans date : « Date à fixer ». */
 export function eventDateLabel(card: EventCardDto, tone: EventTone): string {
   const day = eventDayKey(card);
+  // Story 40.5 : « Date à voter · jusqu'au sam. 25 oct. » tant que le sondage décide de la date.
+  if (!day && hasPendingPoll(card)) {
+    const deadline = pollDeadlineKey(card);
+    if (deadline) {
+      return fillTone(tone['partie.ralliement_event_poll_date_line'], {
+        date: shortDayLabel(deadline),
+      });
+    }
+  }
   if (!day) return tone['partie.ralliement_event_no_date'];
   const [y, m, d] = day.split('-').map(Number);
   const formatted = new Intl.DateTimeFormat('fr-FR', {
@@ -200,6 +219,7 @@ export function isPendingParticipant(participant: EventParticipantDto): boolean 
 export interface EventSituation {
   labelKey:
     | 'partie.ralliement_event_chip_participating'
+    | 'partie.ralliement_event_chip_vote_todo'
     | 'partie.ralliement_event_chip_reserved'
     | 'partie.ralliement_event_chip_was_there'
     | 'partie.ralliement_event_chip_not_registered';
@@ -211,6 +231,10 @@ export function eventSituation(
   currentUserId: string | null | undefined,
   todayKey: string,
 ): EventSituation {
+  // Story 40.5 : « Vote à faire » l'emporte sur toute autre ligne tant que le vote attend la personne.
+  if (needsVote(card, currentUserId, todayKey)) {
+    return { labelKey: 'partie.ralliement_event_chip_vote_todo', dotted: false };
+  }
   // Story 40.4 : « Place réservée » tant que la conjonction est à venir ; une fois passée, une place
   // jamais acceptée n'a pas été une participation.
   if (hasReservedPlace(card) && !isPastEvent(card, todayKey)) {
@@ -298,4 +322,242 @@ export function splitEvents(
     .sort(byDay)
     .reverse();
   return { upcoming, past };
+}
+
+// ─── Sondage de dates d'une conjonction (Story 40.5) ───────────────────────────────────────────────
+// Tout se calcule ici, depuis la carte vivante : le serveur sert la liste des votants éligibles et les
+// réponses ; le résumé du vote (réponses, meilleur créneau, « n'ont pas encore répondu ») n'est PAS
+// servi, il est recalculé à l'écran et suit donc les réponses qui arrivent en direct.
+
+/** Libellé court d'un jour en minuscules : « sam. 25 oct. » (clé `YYYY-MM-DD`, jour UTC). */
+export function shortDayLabel(key: string, withMonth = true): string {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Intl.DateTimeFormat('fr-FR', {
+    weekday: 'short',
+    day: 'numeric',
+    ...(withMonth ? { month: 'short' } : {}),
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(y, m - 1, d)));
+}
+
+/** Plage des jours d'un sondage : « ven. 17 → sam. 25 oct. » (le mois n'est écrit qu'une fois quand les
+ *  deux bouts le partagent). Un seul jour : « ven. 17 oct. ». */
+export function pollRangeLabel(keys: readonly string[]): string {
+  if (keys.length === 0) return '';
+  const sorted = [...keys].sort();
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  if (first === last) return shortDayLabel(first);
+  const sameMonth = first.substring(0, 7) === last.substring(0, 7);
+  return `${shortDayLabel(first, !sameMonth)} → ${shortDayLabel(last)}`;
+}
+
+/** Créneau candidat écrit : « sam. 25 oct. · soir ». */
+export function pollSlotLabel(option: { date: string; slot: DaySlot }): string {
+  return `${shortDayLabel(option.date)} · ${SLOT_LABELS[option.slot].toLocaleLowerCase('fr-FR')}`;
+}
+
+/** Jour d'échéance du vote (clé `YYYY-MM-DD`, dernier jour où l'on vote), ou `null`. */
+export function pollDeadlineKey(card: EventCardDto): string | null {
+  return card.poll?.expiresAt?.substring(0, 10) ?? null;
+}
+
+/** La conjonction a un sondage de dates qui décide encore de sa date (pas de date posée). */
+export function hasPendingPoll(card: EventCardDto): boolean {
+  return card.poll !== null && !card.seance?.date;
+}
+
+/** Le vote est ouvert : sondage ouvert, pas de date posée, échéance non dépassée (le jour d'échéance
+ *  reste un jour de vote). */
+export function isPollOpen(card: EventCardDto, todayKey: string): boolean {
+  if (!card.poll || card.poll.status !== 'OPEN' || card.seance?.date) return false;
+  const deadline = pollDeadlineKey(card);
+  return deadline === null || deadline >= todayKey;
+}
+
+/** Le vote est terminé sans qu'une date soit posée (échéance dépassée). */
+export function isPollEnded(card: EventCardDto, todayKey: string): boolean {
+  return hasPendingPoll(card) && !isPollOpen(card, todayKey);
+}
+
+/** La personne est un votant éligible de cette conjonction. */
+export function canVoteOn(card: EventCardDto, userId: string | null | undefined): boolean {
+  return !!userId && !!card.poll && card.poll.eligibleVoterIds.includes(userId);
+}
+
+/** Réponses d'un votant éligible (celles d'une personne qui ne l'est plus ne comptent pas). */
+function answersOf(card: EventCardDto, userId: string): { optionId: string; answer: string }[] {
+  const poll = card.poll;
+  if (!poll || !poll.eligibleVoterIds.includes(userId)) return [];
+  return poll.votes.filter((v) => v.userId === userId);
+}
+
+/** Nombre de créneaux auxquels la personne a répondu. */
+export function answeredSlotCount(card: EventCardDto, userId: string | null | undefined): number {
+  if (!userId) return 0;
+  return new Set(answersOf(card, userId).map((v) => v.optionId)).size;
+}
+
+/** Votants éligibles qui ont répondu au moins à un créneau. */
+export function respondentIds(card: EventCardDto): string[] {
+  const poll = card.poll;
+  if (!poll) return [];
+  const voted = new Set(poll.votes.map((v) => v.userId));
+  return poll.eligibleVoterIds.filter((id) => voted.has(id));
+}
+
+/** Vote à faire : le vote est ouvert, la personne peut voter et n'a répondu à aucun créneau. */
+export function needsVote(
+  card: EventCardDto,
+  userId: string | null | undefined,
+  todayKey: string,
+): boolean {
+  return (
+    isPollOpen(card, todayKey) && canVoteOn(card, userId) && answeredSlotCount(card, userId) === 0
+  );
+}
+
+/** Meilleur créneau pour l'instant : celui qui réunit le plus de « oui » parmi les votants éligibles
+ *  (à égalité, le plus de « peut-être », puis le plus proche). `null` tant que personne n'a dit oui. */
+export function pollBestSlot(
+  card: EventCardDto,
+): { option: { id: string; date: string; slot: DaySlot }; yes: number } | null {
+  const poll = card.poll;
+  if (!poll) return null;
+  const eligible = new Set(poll.eligibleVoterIds);
+  let best: { option: (typeof poll.options)[number]; yes: number; maybe: number } | null = null;
+  for (const option of poll.options) {
+    const votes = poll.votes.filter((v) => v.optionId === option.id && eligible.has(v.userId));
+    const yes = votes.filter((v) => v.answer === 'YES').length;
+    const maybe = votes.filter((v) => v.answer === 'MAYBE').length;
+    if (!best || yes > best.yes || (yes === best.yes && maybe > best.maybe)) {
+      best = { option, yes, maybe };
+    }
+  }
+  return best && best.yes > 0 ? { option: best.option, yes: best.yes } : null;
+}
+
+/** « dans 3 jours » / « demain » / « aujourd'hui » : le temps qu'il reste pour voter. */
+function pollWhen(card: EventCardDto, todayKey: string, tone: EventTone): string {
+  const deadline = pollDeadlineKey(card);
+  const days = deadline === null ? 0 : daysBetweenKeys(todayKey, deadline);
+  if (days <= 0) return tone['partie.ralliement_event_poll_ends_today'];
+  if (days === 1) return tone['partie.ralliement_event_poll_ends_tomorrow'];
+  return fillTone(tone['partie.ralliement_event_poll_ends_in_days'], { n: days });
+}
+
+/** Panneau du sondage dans la fenêtre de détail : membre (cadre « à faire » tant qu'il n'a pas voté),
+ *  hôte (cadre accent), ou simple lecteur non éligible. `nameOf` nomme un votant (membres du groupe
+ *  puis participants) ; les noms ne sont écrits que pour l'hôte. */
+export interface PollPanel {
+  kind: 'member-todo' | 'member-done' | 'host' | 'not-eligible';
+  /** Vote terminé sans date posée : la phrase dit qu'il est terminé. */
+  ended: boolean;
+  text: string;
+  /** « Vos réponses : 2 créneaux sur 5 » (membre) ou « Réponses : 3 sur 4 » (hôte). */
+  answersLine: string | null;
+  /** « Meilleur créneau pour l'instant : sam. 25 oct. — 3 oui ». */
+  bestLine: string | null;
+  /** Hôte seulement : « N'ont pas encore répondu : Léa, Max ». */
+  waitingLine: string | null;
+}
+
+export function pollPanel(
+  card: EventCardDto,
+  userId: string | null | undefined,
+  todayKey: string,
+  tone: EventTone,
+  nameOf: (id: string) => string,
+): PollPanel | null {
+  const poll = card.poll;
+  if (!poll || card.seance?.date) return null;
+  const ended = isPollEnded(card, todayKey);
+  const deadline = pollDeadlineKey(card);
+  // Le point de l'abréviation (« oct. ») ne doit pas doubler celui qui ferme la phrase.
+  const dateText = deadline ? shortDayLabel(deadline).replace(/\.$/, '') : '';
+  const best = pollBestSlot(card);
+  const bestLine = best
+    ? fillTone(tone['partie.ralliement_event_poll_best'], {
+        date: pollSlotLabel(best.option),
+        n: best.yes,
+      })
+    : null;
+  const total = poll.options.length;
+
+  if (isHostOf(card, userId)) {
+    const responded = new Set(respondentIds(card));
+    const missing = poll.eligibleVoterIds.filter((id) => !responded.has(id));
+    return {
+      kind: 'host',
+      ended,
+      text: ended
+        ? tone['partie.ralliement_event_poll_ended']
+        : fillTone(tone['partie.ralliement_event_poll_host_summary'], {
+            when: pollWhen(card, todayKey, tone),
+            n: total,
+          }),
+      answersLine: fillTone(tone['partie.ralliement_event_poll_host_answers'], {
+        x: responded.size,
+        n: poll.eligibleVoterIds.length,
+      }),
+      bestLine,
+      waitingLine:
+        missing.length > 0
+          ? fillTone(tone['partie.ralliement_event_poll_host_waiting'], {
+              names: missing.map(nameOf).join(', '),
+            })
+          : null,
+    };
+  }
+
+  if (!canVoteOn(card, userId)) {
+    return {
+      kind: 'not-eligible',
+      ended,
+      text: ended
+        ? tone['partie.ralliement_event_poll_ended']
+        : tone['partie.ralliement_event_poll_not_eligible'],
+      answersLine: null,
+      bestLine,
+      waitingLine: null,
+    };
+  }
+
+  const answered = answeredSlotCount(card, userId);
+  const todo = !ended && answered === 0;
+  return {
+    kind: todo ? 'member-todo' : 'member-done',
+    ended,
+    text: ended
+      ? tone['partie.ralliement_event_poll_ended']
+      : todo
+        ? fillTone(tone['partie.ralliement_event_poll_member_todo'], { date: dateText })
+        : fillTone(tone['partie.ralliement_event_poll_member_voted'], { date: dateText }),
+    answersLine: fillTone(tone['partie.ralliement_event_poll_my_answers'], {
+      x: frUnit(tone['partie.ralliement_event_unit_slot'], answered),
+      n: total,
+    }),
+    bestLine,
+    waitingLine: null,
+  };
+}
+
+/** Ligne d'un créneau candidat de la fiche : « sam. 25 oct. · soir » et le nombre d'inscrits libres. */
+export function pollSlotRows(
+  card: EventCardDto,
+  tone: EventTone,
+): { id: string; label: string; available: string }[] {
+  return (card.poll?.options ?? []).map((o) => ({
+    id: o.id,
+    label: pollSlotLabel(o),
+    available: frUnit(tone['partie.ralliement_event_unit_available'], o.availableCount),
+  }));
+}
+
+/** Résumé du formulaire : « 3 créneaux · ven. 17 → sam. 25 oct. ». */
+export function pollSummaryLabel(options: readonly { date: string }[], tone: EventTone): string {
+  return fillTone(tone['partie.ralliement_event_poll_summary'], {
+    count: frUnit(tone['partie.ralliement_event_unit_slot'], options.length),
+    range: pollRangeLabel(options.map((o) => o.date)),
+  });
 }

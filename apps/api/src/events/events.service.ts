@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,6 +10,7 @@ import type {
   DaySlot,
   EventCardDto,
   EventParticipantDto,
+  EventPollDto,
   InscriptionStatus,
   MyCalendarOpenInscriptionEntry,
   MyCalendarSeanceEntry,
@@ -24,15 +26,21 @@ import type {
   OwnEventsRange,
   OwnRolesResolver,
 } from '../availability/ports/own-events.port';
-import type { PartieGrant } from '../permissions/permission.service';
+import {
+  RALLIEMENT_UNAVAILABLE_MESSAGE,
+  type PartieGrant,
+} from '../permissions/permission.service';
 import {
   VISIBLE_SEANCE_WHERE,
   isHiddenDraft,
   isSpoilRestricted,
 } from '../permissions/scenario-visibility';
+import type { GroupPollVotePort } from '../poll/ports/group-poll-vote.port';
 import type { SeanceDatePort } from '../poll/ports/seance-date.port';
 import { PrismaService } from '../prisma/prisma.service';
 import { todayKeyUtc } from './day-key';
+import { eligibleVoters } from './eligible-voters';
+import { isFreeOn, type DeclaredAvailability } from './slot-availability';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 
 /** Données de base d'un événement (Story 37.3, AD-3). `ownerId` = propriétaire de la partie pour le
@@ -51,8 +59,18 @@ export interface CreateEventInput {
  *  instant) et capacité (`null` = sans limite, sinon le nombre de places, hôte compris). Les règles
  *  de saisie (jour non passé, créneau précis, bornes) sont vérifiées par l'appelant. */
 export interface EventSeanceInput {
-  date: Date;
-  slot: DaySlot;
+  /** Jour et créneau de la séance ; `null` pour une conjonction à sondage de dates (Story 40.5), dont la
+   *  séance n'a pas de date tant que le vote n'a pas abouti. */
+  date: Date | null;
+  slot: DaySlot | null;
+  /** Story 40.5 : écrit, DANS la transaction de création, le sondage de dates de la conjonction (par
+   *  `PollService`, seul écrivain de `SessionPoll`) et rend son identifiant, que la séance porte
+   *  (`Seance.pollId`). Fourni par l'appelant — `events/` ne connaît pas `poll/` à l'écriture. Exige
+   *  une séance sans date. */
+  createPoll?: (tx: Prisma.TransactionClient) => Promise<{ id: string }>;
+  /** Story 40.5 : à la modification, met à jour (dans la transaction) le sondage déjà rattaché à la
+   *  séance — créneaux et échéance. Exige une séance sans date, déjà liée à un sondage. */
+  updatePoll?: (tx: Prisma.TransactionClient, pollId: string) => Promise<void>;
   lieu: string | null;
   heureRdv: string | null;
   notePratique: string | null;
@@ -115,6 +133,18 @@ export const RESERVE_TOO_MANY_MESSAGE =
 /** Refus de réserver la même personne deux fois dans une même demande (Story 40.4). */
 export const RESERVE_DUPLICATE_MESSAGE = 'Une même personne ne peut pas recevoir deux places';
 
+/** Refus d'une conjonction qui mêle les deux modes (date fixée et sondage), ou dont le mode change à la
+ *  modification (Story 40.5). */
+export const POLL_MODE_MESSAGE =
+  'Une conjonction se propose à date fixée OU par sondage de dates, et son mode ne change pas';
+/** Refus de voter quand la date de la conjonction est déjà fixée (Story 40.5). */
+export const VOTE_DATE_SET_MESSAGE =
+  'La date de cette conjonction est déjà fixée : le vote est terminé';
+/** Refus de voter après l'échéance du sondage (Story 40.5). */
+export const VOTE_ENDED_MESSAGE = 'Le vote est terminé : l’échéance est dépassée';
+/** Refus de voter quand on n'est pas un votant éligible de la conjonction (Story 40.5). */
+export const VOTE_NOT_ELIGIBLE_MESSAGE = 'Vous ne pouvez pas voter sur cette conjonction';
+
 /** Destinataire d'un rappel : identité minimale, jamais plus que l'adresse à qui écrire. */
 export interface ReminderRecipient {
   id: string;
@@ -166,6 +196,15 @@ function isConfirmed(inscription: { status?: InscriptionStatus }): boolean {
   return inscription.status !== 'RESERVED';
 }
 
+/** Inscrits d'une séance tels que lus pour les cartes (Story 40.2/40.4), plus — Story 40.5 — les lignes
+ *  d'inscription brutes (hôte exclu), dont les votants éligibles et les libres d'un créneau se déduisent. */
+interface Roster {
+  participants: EventParticipantDto[];
+  placesTaken: number;
+  myInscription: InscriptionStatus | null;
+  rows: { userId: string; status: InscriptionStatus }[];
+}
+
 /** Ordre des créneaux d'une même journée (tri des cartes, Story 40.1). */
 const SLOT_ORDER: Record<DaySlot, number> = { MORNING: 0, AFTERNOON: 1, EVENING: 2, FULL_DAY: 3 };
 
@@ -204,7 +243,9 @@ const SLOT_ORDER: Record<DaySlot, number> = { MORNING: 0, AFTERNOON: 1, EVENING:
  * `…InTx` n'émettent jamais — l'appelant émet après SON commit.
  */
 @Injectable()
-export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDatePort {
+export class EventsService
+  implements OccupiedSpansPort, OwnEventsPort, SeanceDatePort, GroupPollVotePort
+{
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtimeEvents: RealtimeEventsService,
@@ -266,10 +307,17 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       await tx.seance.create({ data: { eventId: event.id } });
       return { event, extension };
     }
+    // Story 40.5 : conjonction à sondage de dates — le sondage est écrit ICI (même transaction que
+    // l'événement), la séance n'a pas de date et porte `pollId`. Date et sondage sont exclusifs.
+    if ((seance.createPoll === undefined) === (seance.date === null)) {
+      throw new BadRequestException(POLL_MODE_MESSAGE);
+    }
+    const poll = seance.createPoll ? await seance.createPoll(tx) : null;
     // Story 40.1 : séance datée d'emblée (conjonction à date fixée) — une plage d'un seul créneau.
     const created = await tx.seance.create({
       data: {
         eventId: event.id,
+        ...(poll ? { pollId: poll.id } : {}),
         startDate: seance.date,
         startSlot: seance.slot,
         endDate: seance.date,
@@ -405,12 +453,14 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
             heureRdv: true,
             notePratique: true,
             inscriptionMax: true,
+            pollId: true,
           },
         },
       },
     });
 
     const rosterBySeance = await this.rosterOf(grant.partieId, viewerId, events);
+    const pollBySeance = await this.pollsOf(grant.partieId, events, rosterBySeance);
 
     const cards = events.map((e): EventCardDto => {
       const s = e.seances[0];
@@ -434,6 +484,7 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
           : null,
         participants: roster?.participants ?? [],
         myInscription: roster?.myInscription ?? null,
+        poll: s ? (pollBySeance.get(s.id) ?? null) : null,
       };
     });
     // Tri stable (création déjà ordonnée par la requête) : par date puis créneau (matin <
@@ -465,24 +516,8 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       owner: { displayName: string } | null;
       seances: { id: string }[];
     }[],
-  ): Promise<
-    Map<
-      string,
-      {
-        participants: EventParticipantDto[];
-        placesTaken: number;
-        myInscription: InscriptionStatus | null;
-      }
-    >
-  > {
-    const result = new Map<
-      string,
-      {
-        participants: EventParticipantDto[];
-        placesTaken: number;
-        myInscription: InscriptionStatus | null;
-      }
-    >();
+  ): Promise<Map<string, Roster>> {
+    const result = new Map<string, Roster>();
     const seanceIds = events.flatMap((e) => e.seances.map((s) => s.id));
     if (seanceIds.length === 0) return result;
 
@@ -540,7 +575,136 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
           status: i.status,
         });
       }
-      result.set(s.id, { participants, placesTaken, myInscription });
+      result.set(s.id, {
+        participants,
+        placesTaken,
+        myInscription,
+        rows: (inscritsBySeance.get(s.id) ?? []).map((i) => ({
+          userId: i.userId,
+          status: i.status,
+        })),
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Sondages de dates des conjonctions listées (Story 40.5), par identifiant de séance : projection
+   * EXPLICITE (`EventPollDto`), lue pour des membres du groupe seulement. Lectures groupées pour TOUS
+   * les événements — les sondages (créneaux + réponses), les membres du groupe (seulement si une
+   * conjonction accueille tous les membres) et les disponibilités déclarées des inscrits — jamais une
+   * requête par événement ni par créneau.
+   *
+   * `eligibleVoterIds` suit `eligibleVoters()` ; les réponses servies sont celles des votants
+   * éligibles (quelqu'un qui s'est désinscrit ne pèse plus dans le résumé). `availableCount` : parmi
+   * les INSCRITS (l'hôte + les inscriptions confirmées), combien sont libres sur le créneau d'après
+   * leurs disponibilités déclarées — un nombre, jamais des noms.
+   */
+  private async pollsOf(
+    partieId: string,
+    events: {
+      ownerId: string | null;
+      seances: { id: string; pollId: string | null; inscriptionMax: number | null }[];
+    }[],
+    rosters: Map<string, Roster>,
+  ): Promise<Map<string, EventPollDto>> {
+    const result = new Map<string, EventPollDto>();
+    const targets = events.flatMap((e) => {
+      const s = e.seances[0];
+      return s?.pollId ? [{ ownerId: e.ownerId, seance: s, pollId: s.pollId }] : [];
+    });
+    if (targets.length === 0) return result;
+
+    const [polls, members] = await Promise.all([
+      this.prisma.sessionPoll.findMany({
+        where: { id: { in: targets.map((t) => t.pollId) }, partieId },
+        select: {
+          id: true,
+          expiresAt: true,
+          status: true,
+          options: {
+            orderBy: [{ date: 'asc' }, { id: 'asc' }],
+            select: { id: true, date: true, slot: true },
+          },
+          votes: { select: { optionId: true, userId: true, answer: true } },
+        },
+      }),
+      targets.some((t) => t.seance.inscriptionMax === null)
+        ? this.prisma.membership.findMany({ where: { partieId }, select: { userId: true } })
+        : Promise.resolve([] as { userId: string }[]),
+    ]);
+    const pollById = new Map(polls.map((p) => [p.id, p]));
+    const memberIds = members.map((m) => m.userId);
+
+    // Inscrits de chaque conjonction (l'hôte + les inscriptions confirmées) : une seule lecture des
+    // disponibilités pour l'ensemble.
+    const inscritsByPoll = new Map<string, string[]>();
+    for (const t of targets) {
+      const rows = rosters.get(t.seance.id)?.rows ?? [];
+      inscritsByPoll.set(t.pollId, [
+        ...new Set([
+          ...(t.ownerId ? [t.ownerId] : []),
+          ...rows.filter(isConfirmed).map((r) => r.userId),
+        ]),
+      ]);
+    }
+    const allInscrits = [...new Set([...inscritsByPoll.values()].flat())];
+    const declarations = allInscrits.length
+      ? await this.prisma.availabilityDeclaration.findMany({
+          where: { userId: { in: allInscrits }, expiresAt: { gt: new Date() } },
+          select: {
+            userId: true,
+            kind: true,
+            recurKind: true,
+            dayOfWeek: true,
+            slot: true,
+            startDate: true,
+            endDate: true,
+            expiresAt: true,
+          },
+        })
+      : [];
+    const declarationsByUser = new Map<string, DeclaredAvailability[]>();
+    for (const d of declarations) {
+      const list = declarationsByUser.get(d.userId) ?? [];
+      list.push(d);
+      declarationsByUser.set(d.userId, list);
+    }
+
+    for (const t of targets) {
+      const poll = pollById.get(t.pollId);
+      if (!poll) continue;
+      const eligibleVoterIds = eligibleVoters({
+        hostId: t.ownerId,
+        inscriptionMax: t.seance.inscriptionMax,
+        inscriptions: rosters.get(t.seance.id)?.rows ?? [],
+        memberIds,
+      });
+      const eligible = new Set(eligibleVoterIds);
+      const inscrits = inscritsByPoll.get(t.pollId) ?? [];
+      const now = new Date();
+      result.set(t.seance.id, {
+        id: poll.id,
+        expiresAt: poll.expiresAt?.toISOString() ?? null,
+        status: poll.status,
+        eligibleVoterIds,
+        options: [...poll.options]
+          .sort(
+            (a, b) =>
+              a.date.getTime() - b.date.getTime() || SLOT_ORDER[a.slot] - SLOT_ORDER[b.slot],
+          )
+          .map((o) => ({
+            id: o.id,
+            date: o.date.toISOString().substring(0, 10),
+            slot: o.slot,
+            availableCount: inscrits.filter((userId) =>
+              isFreeOn(declarationsByUser.get(userId) ?? [], o.date, o.slot, now),
+            ).length,
+          })),
+        votes: poll.votes
+          .filter((v) => eligible.has(v.userId))
+          .map((v) => ({ optionId: v.optionId, userId: v.userId, answer: v.answer })),
+      });
     }
     return result;
   }
@@ -578,12 +742,18 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
           seances: {
             orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
             take: 1,
-            select: { id: true, startDate: true, startSlot: true },
+            select: { id: true, startDate: true, startSlot: true, pollId: true },
           },
         },
       });
       const seance = event?.seances[0];
       if (!event || !seance) throw new NotFoundException('Conjonction introuvable');
+
+      // Story 40.5 : le mode (date fixée / sondage de dates) ne change pas à la modification — une
+      // conjonction à sondage garde ses créneaux et sa séance sans date, une conjonction datée garde
+      // son jour. La modification d'une conjonction à sondage ne pose jamais de date de séance.
+      const pollMode = input.seance.date === null;
+      if (pollMode !== Boolean(seance.pollId)) throw new BadRequestException(POLL_MODE_MESSAGE);
 
       const currentDay = seance.startDate?.toISOString().substring(0, 10) ?? null;
       if (currentDay !== null && currentDay < todayKeyUtc()) {
@@ -607,24 +777,41 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       }
 
       await tx.event.update({ where: { id: eventId }, data: { title: input.title } });
-      const dateChanged =
-        currentDay !== input.seance.date.toISOString().substring(0, 10) ||
-        seance.startSlot !== input.seance.slot;
-      await tx.seance.update({
-        where: { id: seance.id },
-        data: {
-          startDate: input.seance.date,
-          startSlot: input.seance.slot,
-          endDate: input.seance.date,
-          endSlot: input.seance.slot,
-          lieu: input.seance.lieu,
-          heureRdv: input.seance.heureRdv,
-          notePratique: input.seance.notePratique,
-          inscriptionMax: capacity,
-          // Nouvelle date → le rappel de la veille est ré-armé (Story 37.9).
-          ...(dateChanged ? { reminderSentAt: null } : {}),
-        },
-      });
+      if (pollMode) {
+        // Créneaux (réconciliés : un créneau conservé garde ses réponses) et échéance du sondage.
+        if (!input.seance.updatePoll || !seance.pollId) {
+          throw new BadRequestException(POLL_MODE_MESSAGE);
+        }
+        await input.seance.updatePoll(tx, seance.pollId);
+        await tx.seance.update({
+          where: { id: seance.id },
+          data: {
+            lieu: input.seance.lieu,
+            heureRdv: input.seance.heureRdv,
+            notePratique: input.seance.notePratique,
+            inscriptionMax: capacity,
+          },
+        });
+      } else {
+        const dateChanged =
+          currentDay !== input.seance.date!.toISOString().substring(0, 10) ||
+          seance.startSlot !== input.seance.slot;
+        await tx.seance.update({
+          where: { id: seance.id },
+          data: {
+            startDate: input.seance.date,
+            startSlot: input.seance.slot,
+            endDate: input.seance.date,
+            endSlot: input.seance.slot,
+            lieu: input.seance.lieu,
+            heureRdv: input.seance.heureRdv,
+            notePratique: input.seance.notePratique,
+            inscriptionMax: capacity,
+            // Nouvelle date → le rappel de la veille est ré-armé (Story 37.9).
+            ...(dateChanged ? { reminderSentAt: null } : {}),
+          },
+        });
+      }
       await this.recalculateNextSessionInTx(tx, grant.partieId);
     });
     this.realtimeEvents.emit(partieTopic(grant.partieId));
@@ -1109,6 +1296,58 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     }
   }
 
+  // ─── Vote sur le sondage d'une conjonction (Story 40.5) ─────────────────────────────────────
+
+  /**
+   * `GroupPollVotePort` : un vote (ou son retrait) sur le sondage d'un groupe est-il recevable ? Une
+   * seule lecture de la séance rattachée au sondage (avec son hôte, sa capacité et ses inscriptions),
+   * plus celle des membres seulement quand la conjonction accueille tous les membres. Refus, dans
+   * l'ordre : partie qui n'est pas un groupe `CAMPAGNE_EPISODIQUE` (403) ; sondage sans conjonction de
+   * cette partie (400) ; date déjà fixée (400) ; échéance dépassée (400) ; votant hors de
+   * `eligibleVoters` (403). Ne lève rien d'autre, n'écrit rien.
+   */
+  async assertCanVote(
+    poll: { id: string; partieId: string; expiresAt: Date | null },
+    partie: { kind: PartieKind },
+    userId: string,
+  ): Promise<void> {
+    if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
+      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
+    }
+    const seance = await this.prisma.seance.findUnique({
+      where: { pollId: poll.id },
+      select: {
+        startDate: true,
+        inscriptionMax: true,
+        inscriptions: { select: { userId: true, status: true } },
+        event: { select: { partieId: true, ownerId: true } },
+      },
+    });
+    if (!seance || seance.event.partieId !== poll.partieId) {
+      throw new BadRequestException('Poll introuvable ou fermé');
+    }
+    if (seance.startDate) throw new BadRequestException(VOTE_DATE_SET_MESSAGE);
+    if (poll.expiresAt && poll.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException(VOTE_ENDED_MESSAGE);
+    }
+    const memberIds =
+      seance.inscriptionMax === null
+        ? (
+            await this.prisma.membership.findMany({
+              where: { partieId: poll.partieId },
+              select: { userId: true },
+            })
+          ).map((m) => m.userId)
+        : [];
+    const voters = eligibleVoters({
+      hostId: seance.event.ownerId,
+      inscriptionMax: seance.inscriptionMax,
+      inscriptions: seance.inscriptions,
+      memberIds,
+    });
+    if (!voters.includes(userId)) throw new ForbiddenException(VOTE_NOT_ELIGIBLE_MESSAGE);
+  }
+
   // ─── Destinataires du rappel de la veille ───────────────────────────────────────────────────
 
   /**
@@ -1390,7 +1629,14 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
       // Séances à inscription ouverte de mes parties CAMPAGNE_EPISODIQUE — jamais filtrées par
       // fenêtre (D-13, Story 30.5) : une séance en attente d'inscriptions n'a pas encore de date.
       // Une date validée (plage de la séance) fige le roster (`inscrire()`) : plus « ouverte ».
-      if (s.inscriptionMax != null && !s.startDate && partie.kind === 'CAMPAGNE_EPISODIQUE') {
+      // Story 40.5 : une conjonction de groupe à sondage n'a pas de date non plus — son sondage est
+      // le sien, jamais une « inscription ouverte » du calendrier personnel du JDR.
+      if (
+        s.inscriptionMax != null &&
+        !s.startDate &&
+        partie.kind === 'CAMPAGNE_EPISODIQUE' &&
+        !ralliementIds.has(partie.id)
+      ) {
         openInscriptions.push({
           seanceId: s.id,
           partieId: partie.id,

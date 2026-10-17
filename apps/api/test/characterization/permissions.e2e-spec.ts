@@ -384,6 +384,57 @@ describe('Droits sur une partie et ses événements (Story 37.6)', () => {
     expect(event.title).toBe('Scénario A');
   });
 
+  // Story 40.5 : voter est ouvert aux membres d'un groupe de ralliement, mais le sondage d'une
+  // conjonction ne s'atteint pas d'une famille à l'autre : la partie du sondage est celle de la route
+  // (un sondage d'une autre partie est inconnu), jamais plus large que celle où l'on a un rôle.
+  it('sondage de groupe : le joueur du JDR ne vote pas sur celui d’un groupe, ni le membre du groupe sur celui du JDR (403), sans écriture', async () => {
+    const { id: groupe } = await h.createPartie(
+      mjB,
+      'CAMPAGNE_EPISODIQUE',
+      'droits groupe 40-5',
+      'ralliement',
+    );
+    const created = await mjB.agent
+      .post(`/parties/${groupe}/events`)
+      .send({
+        title: 'Une conjonction à sondage',
+        pollOptions: [
+          { date: isoDay(10), slot: 'EVENING' },
+          { date: isoDay(11), slot: 'MORNING' },
+        ],
+        pollDeadline: isoDay(5),
+      })
+      .expect(201);
+    const groupPoll = body<{ poll: { id: string; options: { id: string }[] } }>(created).poll;
+    const groupOption = groupPoll.options[0].id;
+
+    // Le MJ et le joueur de la partie de JDR n'ont aucun rôle dans le groupe.
+    for (const who of [mjA, joueurA, etranger]) {
+      const res = await who.agent
+        .post(`/parties/${groupe}/poll/${groupPoll.id}/vote`)
+        .send({ optionId: groupOption, answer: 'YES' })
+        .expect(403);
+      expect(body<ErrorLike>(res).message).toBe(NO_ACCESS_MESSAGE);
+      await who.agent
+        .delete(`/parties/${groupe}/poll/${groupPoll.id}/vote/${groupOption}`)
+        .expect(403);
+    }
+    // L'administrateur du groupe n'a aucun rôle dans la partie de JDR : le vote du JDR lui reste fermé.
+    const res = await mjB.agent
+      .post(`/parties/${partieA}/poll/${pollA}/vote`)
+      .send({ optionId: optionA, answer: 'YES' })
+      .expect(403);
+    expect(body<ErrorLike>(res).message).toBe(NO_ACCESS_MESSAGE);
+    // Et par la route de SON groupe, le sondage du JDR est inconnu (400), sans écriture.
+    await mjB.agent
+      .post(`/parties/${groupe}/poll/${pollA}/vote`)
+      .send({ optionId: optionA, answer: 'YES' })
+      .expect(400);
+
+    expect(await h.prisma.pollVote.count({ where: { pollId: groupPoll.id } })).toBe(0);
+    expect(await h.prisma.pollVote.count({ where: { pollId: pollA, userId: mjB.id } })).toBe(0);
+  });
+
   describe('capacités JDR, invitations et favoris (Story 37.7)', () => {
     let joueurB: TestUser;
     let ami: TestUser;
