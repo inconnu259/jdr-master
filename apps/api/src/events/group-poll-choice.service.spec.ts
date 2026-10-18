@@ -1,10 +1,6 @@
 import { ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import type { EmailService } from '../email/email.service';
-import {
-  HOST_ONLY_MESSAGE,
-  RALLIEMENT_UNAVAILABLE_MESSAGE,
-  type PermissionService,
-} from '../permissions/permission.service';
+import { HOST_ONLY_MESSAGE, type PermissionService } from '../permissions/permission.service';
 import type { EventsService } from './events.service';
 import { GroupPollChoiceService } from './group-poll-choice.service';
 
@@ -50,13 +46,13 @@ describe('GroupPollChoiceService (Story 40.6)', () => {
       );
     });
 
-    it('rencontre isolée (ONE_SHOT) → 403, avant toute lecture', async () => {
-      const refusal = service.assertCanChoose(POLL, { kind: 'ONE_SHOT' }, 'hote');
+    it('rencontre isolée (ONE_SHOT, Story 41.2) : mêmes règles — le droit est décidé sur l’événement du sondage', async () => {
+      await expect(
+        service.assertCanChoose(POLL, { kind: 'ONE_SHOT' }, 'hote'),
+      ).resolves.toBeUndefined();
 
-      await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
-      await expect(refusal).rejects.toThrow(RALLIEMENT_UNAVAILABLE_MESSAGE);
-      expect(events.eventIdOfPoll).not.toHaveBeenCalled();
-      expect(permissions.assert).not.toHaveBeenCalled();
+      expect(events.eventIdOfPoll).toHaveBeenCalledWith('poll-1', 'g1');
+      expect(permissions.assert).toHaveBeenCalledWith('hote', 'POLL_CHOOSE', { eventId: 'e1' });
     });
 
     it('sondage rattaché à aucune conjonction de cette partie → 404, aucun droit décidé', async () => {

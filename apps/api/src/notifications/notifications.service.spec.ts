@@ -246,7 +246,7 @@ describe('NotificationsService', () => {
       errorLog.mockRestore();
     });
 
-    it('rencontre isolée de ralliement (ONE_SHOT) : session-reminder à tous, comme avant', async () => {
+    it('rencontre isolée de ralliement (ONE_SHOT, Story 41.2) : e-mail neutre de la conjonction, à tous les membres', async () => {
       const s = conjonction();
       prisma.seance.findMany.mockResolvedValue([
         { ...s, event: { ...s.event, partie: { ...s.event.partie, kind: 'ONE_SHOT' } } },
@@ -256,7 +256,7 @@ describe('NotificationsService', () => {
 
       expect(email.sendMail).toHaveBeenCalledTimes(5);
       for (const [template] of email.sendMail.mock.calls as [string][]) {
-        expect(template).toBe('session-reminder');
+        expect(template).toBe('conjonction-reminder');
       }
     });
   });
@@ -306,14 +306,17 @@ describe('NotificationsService', () => {
             status: string;
             relanceSentAt: null;
             expiresAt: { gt: Date; lte: Date };
-            seance: { is: { startDate: null; event: { partie: { kind: string } } } };
+            seance: {
+              is: { startDate: null; event: { partie: { gameSystemId: { in: string[] } } } };
+            };
           };
         },
       ];
       expect(args.where.status).toBe('OPEN');
       expect(args.where.relanceSentAt).toBeNull();
       expect(args.where.seance.is.startDate).toBeNull();
-      expect(args.where.seance.is.event.partie.kind).toBe('CAMPAGNE_EPISODIQUE');
+      // Story 41.2 : tout ralliement (groupe ou soirée isolée), jamais le JDR.
+      expect(args.where.seance.is.event.partie.gameSystemId.in).toEqual(['ralliement']);
       // expiresAt − 48 h ≤ maintenant < expiresAt − 24 h  ⇔  maintenant + 24 h < expiresAt ≤ maintenant + 48 h.
       const { gt, lte } = args.where.expiresAt;
       expect(gt.getTime()).toBeGreaterThanOrEqual(avant + 24 * 3_600_000);
@@ -388,17 +391,26 @@ describe('NotificationsService', () => {
       expect(recipients()).toEqual(['a@example.com', 'b@example.com']);
     });
 
-    it('un sondage de JDR ou de rencontre isolée trouvé malgré le filtre : rien envoyé, rien marqué', async () => {
+    it('un sondage de JDR trouvé malgré le filtre : rien envoyé, rien marqué', async () => {
       const jdr = votePoll();
       jdr.seance.event.partie.gameSystemId = 'ryuutama';
-      const isolee = votePoll({ id: 'poll2' });
-      isolee.seance.event.partie.kind = 'ONE_SHOT';
-      prisma.sessionPoll.findMany.mockResolvedValue([jdr, isolee]);
+      prisma.sessionPoll.findMany.mockResolvedValue([jdr]);
 
       await service.sendDueReminders();
 
       expect(email.sendMail).not.toHaveBeenCalled();
       expect(prisma.sessionPoll.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('soirée isolée (Story 41.2) : la relance part aux membres qui n’ont pas répondu', async () => {
+      const isolee = votePoll();
+      isolee.seance.event.partie.kind = 'ONE_SHOT';
+      prisma.sessionPoll.findMany.mockResolvedValue([isolee]);
+
+      await service.sendDueReminders();
+
+      expect(recipients()).toEqual(['b@example.com', 'c@example.com']);
+      expect(prisma.sessionPoll.updateMany).toHaveBeenCalledTimes(1);
     });
 
     it('un échec d’envoi est loggé, ne lève jamais, et le sondage est quand même marqué', async () => {

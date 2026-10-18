@@ -416,15 +416,8 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
             .send({ title: 'Une conjonction', date: '2030-01-01', slot: 'EVENING' }),
       },
       { label: 'GET poll', send: (u) => u.agent.get(`${p(partieId)}/poll`) },
-      {
-        label: 'POST poll/:id/vote',
-        send: (u) =>
-          u.agent.post(`${p(partieId)}/poll/${ZERO}/vote`).send({ optionId: ZERO, answer: 'YES' }),
-      },
-      {
-        label: 'PATCH poll/:id/choose',
-        send: (u) => u.agent.patch(`${p(partieId)}/poll/${ZERO}/choose`).send({ optionId: ZERO }),
-      },
+      // Story 41.2 : voter, fixer la date et prolonger le vote sont ouverts à la soirée isolée (describe
+      // dédié en fin de fichier) — retirés de cette liste de capacités absentes.
       {
         label: 'PUT poll/:id/options',
         send: (u) =>
@@ -1888,13 +1881,12 @@ describe('Ralliement — consulter et modifier une conjonction (Story 40.2)', ()
       expect((await stored(scenario.id)).title).toBe('Scénario');
     });
 
-    it('une rencontre isolée (ONE_SHOT) : 403 « indisponible », même à son administrateur', async () => {
+    it('une rencontre isolée (ONE_SHOT, Story 41.2) : son hôte la complète ; les cas détaillés sont en fin de fichier', async () => {
       const { id: isoleeId } = await h.createPartie(admin, 'ONE_SHOT', 'edit-isolee', 'ralliement');
       const event = await h.prisma.event.findFirstOrThrow({ where: { partieId: isoleeId } });
-      const res = await edit(admin, isoleeId, event.id, payload({ title: 'Piraté' }));
-      expect(res.status).toBe(403);
-      expect(body<ErrorLike>(res).message).toBe(UNAVAILABLE);
-      expect((await stored(event.id)).title).toBe(event.title);
+      const res = await edit(admin, isoleeId, event.id, payload({ title: 'Complétée' }));
+      expect(res.status).toBe(200);
+      expect((await stored(event.id)).title).toBe('Complétée');
     });
 
     it('une conjonction passée : 400 français, rien n’est écrit', async () => {
@@ -3553,11 +3545,10 @@ describe("Ralliement — fixer la date d'une conjonction (Story 40.6)", () => {
       expect(dateMails(mailsBefore)).toEqual([]);
     });
 
-    it('la rencontre isolée (ONE_SHOT) ne fixe aucune date : 403 « indisponible »', async () => {
+    it('la rencontre isolée (ONE_SHOT, Story 41.2) suit les mêmes règles : un sondage inconnu y est introuvable (404)', async () => {
       const { id: oneShot } = await h.createPartie(admin, 'ONE_SHOT', 'fixe-solo', 'ralliement');
       const res = await choose(admin, randomUUID(), randomUUID(), oneShot);
-      expect(res.status).toBe(403);
-      expect(message(res)).toBe(UNAVAILABLE);
+      expect(res.status).toBe(404);
     });
   });
 
@@ -3954,13 +3945,12 @@ describe('Ralliement — prolonger le vote et relancer la veille (Story 40.7)', 
       await unchanged(card.poll!.id, before);
     });
 
-    it("la rencontre isolée (ONE_SHOT) et le JDR : 403 ; le sondage d'un autre groupe par la route du sien : 400", async () => {
+    it("la rencontre isolée (ONE_SHOT, Story 41.2) comme un groupe, le JDR : 403 ; le sondage d'un autre groupe par la route du sien : 400", async () => {
       const card = await create(host);
       const before = (await pollRow(card.poll!.id)).expiresAt!;
 
-      const oneShot = await extend(admin, randomUUID(), isoDay(9), oneShotId);
-      expect(oneShot.status).toBe(403);
-      expect(message(oneShot)).toBe("Cette action n'est pas disponible pour ce type de partie");
+      // Story 41.2 : la soirée isolée prolonge son vote comme un groupe — un sondage inconnu y est refusé en 400.
+      expect((await extend(admin, randomUUID(), isoDay(9), oneShotId)).status).toBe(400);
       // JDR : la capacité n'existe pas, même pour le MJ (propriétaire).
       expect((await extend(admin, randomUUID(), isoDay(9), jdrId)).status).toBe(403);
       // L'administrateur de l'autre groupe, par la route de SON groupe, ne touche pas ce sondage.
@@ -4529,7 +4519,9 @@ describe('Ralliement — lire l’événement unique d’une soirée isolée (St
   });
 
   it('l’hôte et un invité lisent exactement un événement : titre de la soirée, hôte = créateur, non daté, sans limite', async () => {
-    const partie = body<{ name: string }>(await admin.agent.get(`/parties/${soireeId}`).expect(200));
+    const partie = body<{ name: string }>(
+      await admin.agent.get(`/parties/${soireeId}`).expect(200),
+    );
     for (const who of [admin, guest]) {
       const list = body<CardLike[]>(
         await who.agent.get(`/parties/${soireeId}/events/list`).expect(200),
@@ -4563,6 +4555,214 @@ describe('Ralliement — lire l’événement unique d’une soirée isolée (St
       .post(`/parties/${soireeId}/events`)
       .send({ title: 'Second', date: isoDay(5), slot: 'EVENING' })
       .expect(403);
+    expect(await h.prisma.event.count({ where: { partieId: soireeId } })).toBe(1);
+  });
+});
+
+// ─── Poser la rencontre d'une soirée isolée (Story 41.2) ───────────────────────────────────
+//
+// Une soirée naît avec un événement SANS date ni sondage (« date à fixer », Story 38.2). L'hôte le complète
+// par la route de modification, à date fixée ou par sondage ; le vote, la fixation et la prolongation sont
+// ceux des conjonctions, avec l'hôte et les membres de la soirée pour votants et destinataires.
+describe('Ralliement — poser la rencontre d’une soirée isolée (Story 41.2)', () => {
+  let h: Harness;
+  let host: TestUser;
+  let guest: TestUser;
+  let stranger: TestUser;
+  let soireeId: string;
+
+  type CardLike = {
+    id: string;
+    title: string;
+    hostId: string | null;
+    seance: {
+      id: string;
+      date: string | null;
+      slot: string | null;
+      capacity: number | null;
+    } | null;
+    poll: { id: string; options: { id: string }[]; eligibleVoterIds: string[] } | null;
+  };
+  type ErrorLike = { statusCode: number; message: string | string[] };
+
+  const DATE_MAIL = 'conjonction-date-fixee';
+  const newSoiree = async (name: string) => {
+    const { id } = await h.createPartie(host, 'ONE_SHOT', name, 'ralliement');
+    await h.addMember(id, guest);
+    const event = await h.prisma.event.findFirstOrThrow({ where: { partieId: id } });
+    return { id, eventId: event.id };
+  };
+  const edit = (who: TestUser, partieId: string, eventId: string, sent: Record<string, unknown>) =>
+    who.agent.patch(`/parties/${partieId}/events/${eventId}`).send(sent);
+  const pollPayload = (over: Record<string, unknown> = {}) => ({
+    title: 'Marathon Pandémie',
+    pollOptions: [
+      { date: isoDay(8), slot: 'EVENING' },
+      { date: isoDay(9), slot: 'MORNING' },
+    ],
+    pollDeadline: isoDay(5),
+    ...over,
+  });
+  const cardOf = async (who: TestUser, partieId: string) =>
+    body<CardLike[]>(await who.agent.get(`/parties/${partieId}/events/list`).expect(200))[0];
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [host, guest, stranger] = await Promise.all([
+      h.createUser('pose-hote'),
+      h.createUser('pose-invite'),
+      h.createUser('pose-etranger'),
+    ]);
+    ({ id: soireeId } = await newSoiree('pose'));
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it('date fixée : l’événement existant est complété (aucun second), la prochaine date de la soirée est posée', async () => {
+    const { id, eventId } = await newSoiree('pose-fixe');
+    const res = await edit(host, id, eventId, {
+      title: 'Soirée jeux',
+      date: isoDay(6),
+      slot: 'EVENING',
+      lieu: 'Chez Léa',
+    });
+    expect(res.status).toBe(200);
+    const card = body<CardLike>(res);
+    expect(card.id).toBe(eventId);
+    expect(card.seance?.date).toBe(isoDay(6));
+    expect(card.seance?.capacity).toBeNull();
+    expect(await h.prisma.event.count({ where: { partieId: id } })).toBe(1);
+    const partie = body<{ nextSessionDate: string | null }>(
+      await guest.agent.get(`/parties/${id}`).expect(200),
+    );
+    expect(partie.nextSessionDate?.substring(0, 10)).toBe(isoDay(6));
+  });
+
+  it('sondage : créé et rattaché à l’événement, qui reste sans date ; l’hôte et les membres sont les votants', async () => {
+    const { id, eventId } = await newSoiree('pose-sondage');
+    const res = await edit(host, id, eventId, pollPayload());
+    expect(res.status).toBe(200);
+    const card = body<CardLike>(res);
+    expect(card.seance?.date).toBeNull();
+    expect(card.poll?.options).toHaveLength(2);
+    expect([...card.poll!.eligibleVoterIds].sort()).toEqual([host.id, guest.id].sort());
+    const seance = await h.prisma.seance.findFirstOrThrow({ where: { eventId } });
+    expect(seance.pollId).toBe(card.poll!.id);
+    expect(await h.prisma.event.count({ where: { partieId: id } })).toBe(1);
+  });
+
+  it('vote : l’hôte et un membre votent ; un étranger est refusé (403), tout comme après l’échéance (400)', async () => {
+    const { id, eventId } = await newSoiree('pose-vote');
+    const card = body<CardLike>(await edit(host, id, eventId, pollPayload()));
+    const [o1] = card.poll!.options;
+    const vote = (who: TestUser) =>
+      who.agent
+        .post(`/parties/${id}/poll/${card.poll!.id}/vote`)
+        .send({ optionId: o1.id, answer: 'YES' });
+    expect((await vote(host)).status).toBe(201);
+    expect((await vote(guest)).status).toBe(201);
+    expect((await vote(stranger)).status).toBe(403);
+
+    await h.prisma.sessionPoll.update({
+      where: { id: card.poll!.id },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+    expect((await vote(guest)).status).toBe(400);
+  });
+
+  it('fixer la date : l’hôte seul ; la séance est datée, le sondage clos, l’e-mail n° 4 va aux membres sauf l’hôte', async () => {
+    const { id, eventId } = await newSoiree('pose-choix');
+    const card = body<CardLike>(await edit(host, id, eventId, pollPayload()));
+    const [o1] = card.poll!.options;
+    const choose = (who: TestUser) =>
+      who.agent.patch(`/parties/${id}/poll/${card.poll!.id}/choose`).send({ optionId: o1.id });
+    expect((await choose(guest)).status).toBe(403);
+    expect((await choose(stranger)).status).toBe(403);
+
+    const mailsBefore = h.email.calls.length;
+    expect((await choose(host)).status).toBeLessThan(300);
+    const fixed = await cardOf(guest, id);
+    expect(fixed.seance?.date).toBe(isoDay(8));
+    expect(fixed.poll).toBeNull();
+    const mails = h.email.calls.slice(mailsBefore).filter((c) => c.template === DATE_MAIL);
+    expect(mails.map((c) => c.to)).toEqual([guest.email]);
+  });
+
+  it('prolonger le vote : l’hôte seul ; la nouvelle échéance est enregistrée', async () => {
+    const { id, eventId } = await newSoiree('pose-prolonge');
+    const card = body<CardLike>(await edit(host, id, eventId, pollPayload()));
+    const extend = (who: TestUser) =>
+      who.agent.patch(`/parties/${id}/poll/${card.poll!.id}/extend`).send({ expiresAt: isoDay(9) });
+    expect((await extend(guest)).status).toBe(403);
+    expect((await extend(host)).status).toBeLessThan(300);
+    const poll = await h.prisma.sessionPoll.findUniqueOrThrow({ where: { id: card.poll!.id } });
+    expect(poll.expiresAt?.toISOString().substring(0, 10)).toBe(isoDay(9));
+  });
+
+  it('modifier : un membre non hôte et un étranger sont refusés (403), rien n’est écrit', async () => {
+    const { id, eventId } = await newSoiree('pose-droits');
+    for (const who of [guest, stranger]) {
+      const res = await edit(who, id, eventId, {
+        title: 'Piraté',
+        date: isoDay(6),
+        slot: 'EVENING',
+      });
+      expect(res.status).toBe(403);
+    }
+    const event = await h.prisma.event.findUniqueOrThrow({ where: { id: eventId } });
+    expect(event.title).not.toBe('Piraté');
+    const seance = await h.prisma.seance.findFirstOrThrow({ where: { eventId } });
+    expect(seance.startDate).toBeNull();
+  });
+
+  it('places limitées ou places réservées : refusées (400) sur une soirée', async () => {
+    const { id, eventId } = await newSoiree('pose-places');
+    const date = { title: 'Soirée', date: isoDay(6), slot: 'EVENING' };
+    for (const extra of [{ capacity: 4 }, { reservedUserIds: [guest.id] }]) {
+      const res = await edit(host, id, eventId, { ...date, ...extra });
+      expect(res.status).toBe(400);
+      expect(String((res.body as ErrorLike).message)).toContain('sur invitation');
+    }
+    expect((await h.prisma.seance.findFirstOrThrow({ where: { eventId } })).startDate).toBeNull();
+  });
+
+  it('date ou échéance passées sur une soirée en attente de date : 400, rien n’est écrit', async () => {
+    const { id, eventId } = await newSoiree('pose-passe');
+    const past = await edit(host, id, eventId, { title: 'X', date: isoDay(-1), slot: 'EVENING' });
+    expect(past.status).toBe(400);
+    const pastDeadline = await edit(host, id, eventId, pollPayload({ pollDeadline: isoDay(-1) }));
+    expect(pastDeadline.status).toBe(400);
+    const pastSlot = await edit(
+      host,
+      id,
+      eventId,
+      pollPayload({
+        pollOptions: [
+          { date: isoDay(-2), slot: 'EVENING' },
+          { date: isoDay(8), slot: 'MORNING' },
+        ],
+      }),
+    );
+    expect(pastSlot.status).toBe(400);
+    const seance = await h.prisma.seance.findFirstOrThrow({ where: { eventId } });
+    expect(seance.startDate).toBeNull();
+    expect(seance.pollId).toBeNull();
+  });
+
+  it('le mode ne change plus une fois posé : un sondage ne devient pas une date fixée (400)', async () => {
+    const { id, eventId } = await newSoiree('pose-mode');
+    expect((await edit(host, id, eventId, pollPayload())).status).toBe(200);
+    const res = await edit(host, id, eventId, { title: 'X', date: isoDay(6), slot: 'EVENING' });
+    expect(res.status).toBe(400);
+  });
+
+  it('la soirée reste à un seul événement : proposer une conjonction est refusé (403)', async () => {
+    const res = await host.agent
+      .post(`/parties/${soireeId}/events`)
+      .send({ title: 'Second', date: isoDay(5), slot: 'EVENING' });
+    expect(res.status).toBe(403);
     expect(await h.prisma.event.count({ where: { partieId: soireeId } })).toBe(1);
   });
 });

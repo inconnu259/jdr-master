@@ -10,10 +10,25 @@
     <app-event-dialog
       [inline]="true"
       [description]="description()"
+      (saved)="onSaved($event)"
+      (refreshRequested)="refresh()"
+      (calendarRequested)="openCalendar()"
+      (completeRequested)="openCreate()"
       [partieId]="partieId()"
       [card]="c"
       [todayKey]="todayKey"
       [currentUserId]="currentUserId()"
+    />
+  }
+  @if (creating() && card(); as c) {
+    <!-- Story 41.2 : la fenêtre de conjonction complète l'événement déjà créé avec la soirée. -->
+    <app-event-create
+      [partieId]="partieId()"
+      [eventId]="c.id"
+      [initialTitle]="c.title"
+      [draft]="creationDraft()"
+      (created)="onCompleted($event)"
+      (closed)="closeCreate()"
     />
   }
 </section>

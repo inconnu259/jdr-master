@@ -258,3 +258,111 @@ describe('EventForm — calendrier du groupe et brouillon (Story 40.5b)', () => 
     ]);
   });
 });
+
+@Component({
+  imports: [EventForm],
+  template: `<app-event-form
+    [prefill]="card()"
+    [soiree]="soiree()"
+    [initialTitle]="initialTitle()"
+  />`,
+})
+class SoireeHost {
+  card = signal<EventCardDto | null>(null);
+  soiree = signal(true);
+  initialTitle = signal('');
+  form = viewChild.required(EventForm);
+}
+
+describe('EventForm — soirée isolée (Story 41.2)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  /** Événement d'une soirée fraîchement créée : ni date ni sondage. */
+  const awaiting = (): EventCardDto => ({
+    ...pollCard(dayKey(5)),
+    poll: null,
+  });
+
+  async function mount(card: EventCardDto | null, title = '') {
+    await TestBed.configureTestingModule({
+      imports: [SoireeHost],
+      providers: [
+        provideNoopAnimations(),
+        { provide: ThemeToneService, useValue: { tone: signal(TONE) } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(SoireeHost);
+    fixture.componentInstance.card.set(card);
+    fixture.componentInstance.initialTitle.set(title);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    return { fixture, form: fixture.componentInstance.form(), el };
+  }
+
+  it('création : le nom est pré-rempli, la participation est en lecture seule, le dto n’envoie jamais de capacité', async () => {
+    const { form, el } = await mount(null, 'Marathon Pandémie');
+
+    expect(el.querySelector<HTMLInputElement>('.ec__name')!.value).toBe('Marathon Pandémie');
+    expect(el.querySelector('.ec__participation-readonly')?.textContent).toContain(
+      TONE['partie.ralliement_soiree_participation_form'],
+    );
+    expect(el.querySelector('.ec__participation')).toBeNull();
+    expect(el.querySelector('.ec__reserve')).toBeNull();
+    expect(form.dto().capacity).toBeNull();
+    expect(form.dto().reservedUserIds).toBeUndefined();
+  });
+
+  it('un brouillon restauré prime sur le nom pré-rempli', async () => {
+    await TestBed.configureTestingModule({
+      imports: [DraftSoireeHost],
+      providers: [
+        provideNoopAnimations(),
+        { provide: ThemeToneService, useValue: { tone: signal(TONE) } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(DraftSoireeHost);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>('.ec__name')!.value,
+    ).toBe('Titre du brouillon');
+  });
+
+  it('un événement qui attend sa date garde les deux modes ouverts ; un sondage existant reste figé', async () => {
+    const open = await mount(awaiting());
+    const toggles = Array.from(
+      open.el.querySelectorAll<HTMLButtonElement>('.ec__date-mode button'),
+    );
+    expect(toggles).toHaveLength(2);
+    expect(toggles.every((b) => !b.disabled)).toBe(true);
+    TestBed.resetTestingModule();
+
+    const locked = await mount(pollCard(dayKey(5)));
+    const lockedToggles = Array.from(
+      locked.el.querySelectorAll<HTMLButtonElement>('.ec__date-mode button'),
+    );
+    expect(lockedToggles.some((b) => b.disabled)).toBe(true);
+  });
+});
+
+@Component({
+  imports: [EventForm],
+  template: `<app-event-form [soiree]="true" initialTitle="Nom pré-rempli" [draft]="draft" />`,
+})
+class DraftSoireeHost {
+  draft: ConjonctionDraft = {
+    partieId: 'p1',
+    title: 'Titre du brouillon',
+    pollOptions: [{ date: dayKey(8), slot: 'EVENING' }],
+    pollDeadline: dayKey(5),
+    lieu: '',
+    heureRdv: '',
+    notePratique: '',
+    participation: 'all',
+    places: 4,
+    reserved: [],
+  };
+}

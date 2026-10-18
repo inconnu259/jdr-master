@@ -1,4 +1,13 @@
-import { Component, OnInit, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { Router } from '@angular/router';
 import type { EventCardDto, PartieMemberDto } from '@master-jdr/shared';
@@ -45,6 +54,10 @@ export class EventCreate implements OnInit {
   readonly partieId = input.required<string>();
   /** Story 40.5b : brouillon restauré au retour du calendrier du groupe. */
   readonly draft = input<ConjonctionDraft | null>(null);
+  /** Story 41.2 : mode « soirée isolée » — l'événement existe déjà (créé avec la partie) : la fenêtre le
+   *  COMPLÈTE (modification) au lieu d'en créer un, nom pré-rempli, participation en lecture seule. */
+  readonly eventId = input<string | null>(null);
+  readonly initialTitle = input('');
   readonly created = output<EventCardDto>();
   readonly closed = output<void>();
 
@@ -55,9 +68,11 @@ export class EventCreate implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly members = signal<PartieMemberDto[]>([]);
   protected readonly hostId = computed(() => this.auth.currentUser()?.id ?? null);
+  /** Story 41.2 : la soirée isolée n'a ni places limitées ni réservations — aucun membre à charger. */
+  protected readonly soiree = computed(() => this.eventId() !== null);
 
   ngOnInit(): void {
-    void this.loadMembers();
+    if (!this.soiree()) void this.loadMembers();
   }
 
   /** Membres du groupe pour le sélecteur de places réservées. Un échec n'empêche pas de créer. */
@@ -83,7 +98,11 @@ export class EventCreate implements OnInit {
     this.busy.set(true);
     this.error.set(null);
     try {
-      const card = await this.api.create(this.partieId(), this.form().dto());
+      const eventId = this.eventId();
+      const dto = this.form().dto();
+      const card = eventId
+        ? await this.api.update(this.partieId(), eventId, dto)
+        : await this.api.create(this.partieId(), dto);
       this.created.emit(card);
     } catch (err) {
       this.error.set(

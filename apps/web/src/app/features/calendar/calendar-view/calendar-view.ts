@@ -1938,8 +1938,8 @@ export class CalendarView implements OnInit {
     let group = false;
     try {
       const partie = await this.partiesSvc.get(id);
-      group =
-        familyOf(partie.gameSystemId) === 'ralliement' && partie.kind === 'CAMPAGNE_EPISODIQUE';
+      // Story 41.2 : la soirée isolée (`ONE_SHOT`) vote aussi dans le calendrier du groupe.
+      group = familyOf(partie.gameSystemId) === 'ralliement';
     } catch {
       group = false;
     }

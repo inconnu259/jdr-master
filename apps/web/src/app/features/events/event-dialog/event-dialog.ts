@@ -126,6 +126,9 @@ export class EventDialog {
   /** Description de la partie, affichée sous le titre en mode `inline` seulement (la soirée isolée n'a
    *  plus d'onglet « Détails » où la lire). */
   readonly description = input<string | null>(null);
+  /** Story 41.2 : l'hôte veut compléter une soirée qui attend sa date — l'onglet ouvre alors la fenêtre de
+   *  création (mêmes champs, brouillon du calendrier compris) au lieu de l'édition en ligne. */
+  readonly completeRequested = output<void>();
   /** Carte à jour renvoyée par le serveur (modification par l'hôte, inscription, désinscription) :
    *  l'onglet la met à jour tout de suite. */
   readonly saved = output<EventCardDto>();
@@ -162,7 +165,16 @@ export class EventDialog {
 
   protected readonly past = computed(() => isPastEvent(this.card(), this.todayKey()));
   protected readonly canEdit = computed(
-    () => !this.inline() && isHostOf(this.card(), this.currentUserId()) && !this.past(),
+    () => isHostOf(this.card(), this.currentUserId()) && !this.past(),
+  );
+  /** Story 41.2 : événement sans date ni sondage (une soirée fraîchement créée). */
+  protected readonly awaitingDate = computed(() => {
+    const seance = this.card().seance;
+    return seance !== null && seance.date === null && this.card().poll === null;
+  });
+  /** Pied en ligne : seulement quand il porte une action (modifier, enregistrer) ou une erreur. */
+  protected readonly showInlineFooter = computed(
+    () => this.editing() || this.canEdit() || this.error() !== null,
   );
   protected readonly badge = computed(() =>
     eventBadge(this.card(), this.todayKey(), this.theme.tone(), this.currentUserId()),
@@ -287,6 +299,11 @@ export class EventDialog {
 
   protected startEdit(): void {
     this.error.set(null);
+    // Story 41.2 : une soirée qui attend sa date se complète dans la fenêtre de création.
+    if (this.inline() && this.awaitingDate()) {
+      this.completeRequested.emit();
+      return;
+    }
     this.editing.set(true);
   }
 

@@ -507,13 +507,21 @@ export class PartieForm implements OnInit {
         }
       }
       await this.myPartiesSvc.refreshAll();
-      void this.router.navigate(['/parties', partie.id]);
+      // Story 41.2 : une soirée isolée s'ouvre sur la fenêtre de conjonction (état de navigation à usage
+      // unique, consommé par l'onglet de la soirée) ; toute autre partie ouvre simplement sa page.
+      const soiree = this.isRalliement() && partie.kind === 'ONE_SHOT';
+      void this.router.navigate(
+        ['/parties', partie.id],
+        soiree ? { state: { soireeCreation: true } } : {},
+      );
     } catch (err) {
       // AC15 — distinguer les causes plutôt qu'un texte unique. Un refus de conversion porte son
       // propre message serveur, qui nomme la cause réelle : le relayer plutôt que le masquer.
       this.error.set(
         this.serverMessage(err) ??
-          this.theme.tone()[this.isRalliement() ? 'partie.ralliement_save_error' : 'partie.save_error'],
+          this.theme.tone()[
+            this.isRalliement() ? 'partie.ralliement_save_error' : 'partie.save_error'
+          ],
       );
       this.courantChoice.set(null);
     } finally {

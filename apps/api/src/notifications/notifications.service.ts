@@ -1,10 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import type { DaySlot } from '@prisma/client';
-import { GAME_SYSTEMS, type PartieKind } from '@master-jdr/shared';
+import { GAME_SYSTEMS, familyOf, type PartieKind } from '@master-jdr/shared';
 import {
   EventsService,
-  isRalliementGroup,
   type ReminderSeance,
   type VoteReminderPoll,
 } from '../events/events.service';
@@ -147,12 +146,13 @@ export class NotificationsService {
     // Destinataires : une seule définition, dans `events/` (propriétaire + membres pour le JDR, avec
     // l'anti-spoil des brouillons cachés ; hôte + inscrits pour un groupe).
     const recipients = this.events.reminderRecipients(seance);
-    const group = isRalliementGroup(partie);
+    // Story 41.2 : tout ralliement (groupe ou soirée isolée) reçoit l'e-mail neutre de la conjonction.
+    const group = familyOf(partie.gameSystemId) === 'ralliement';
     const link = `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${partie.id}`;
     const sessionDate = this.formatSessionDate(seance.startDate!, seance.startSlot);
     for (const recipient of recipients) {
       // Story 40.3 : un groupe reçoit l'e-mail neutre de la conjonction (hôte et inscrits seulement) ;
-      // le JDR et la rencontre isolée gardent `session-reminder`.
+      // Story 41.2 : la soirée isolée aussi (propriétaire et membres) ; le JDR garde `session-reminder`.
       const result = group
         ? await this.email.sendMail('conjonction-reminder', recipient.email, {
             eventTitle: seance.event.title,
@@ -200,10 +200,8 @@ export class NotificationsService {
             is: {
               startDate: null,
               event: {
-                partie: {
-                  kind: 'CAMPAGNE_EPISODIQUE',
-                  gameSystemId: { in: RALLIEMENT_SYSTEM_IDS },
-                },
+                // Story 41.2 : groupe comme soirée isolée (tout ralliement a un sondage de dates).
+                partie: { gameSystemId: { in: RALLIEMENT_SYSTEM_IDS } },
               },
             },
           },
@@ -261,8 +259,8 @@ export class NotificationsService {
     const seance = poll.seance;
     if (!seance) return;
     const partie = seance.event.partie;
-    // Garde de défense en plus du filtre de la requête : ni JDR ni rencontre isolée.
-    if (!isRalliementGroup(partie)) return;
+    // Garde de défense en plus du filtre de la requête : pas de relance pour le JDR.
+    if (familyOf(partie.gameSystemId) !== 'ralliement') return;
     const recipients = this.events.voteReminderRecipients({ votes: poll.votes, seance });
     const link = `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${partie.id}/guild-calendar`;
     // Jour d'échéance en toutes lettres (jour UTC de `expiresAt`, sans créneau) : « samedi 24 octobre ».

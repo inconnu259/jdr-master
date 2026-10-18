@@ -898,6 +898,41 @@ describe('PartieForm', () => {
       },
     );
 
+    it('Story 41.2 : une soirée isolée tout juste créée navigue avec l’état qui ouvre la fenêtre de conjonction ; un groupe ou une quête, sans état', async () => {
+      const cases: [PartieKind, boolean][] = [
+        ['ONE_SHOT', true],
+        ['CAMPAGNE_EPISODIQUE', false],
+      ];
+      for (const [kind, opens] of cases) {
+        const { fixture, partiesSvc } = await createComponent();
+        const router = TestBed.inject(Router);
+        partiesSvc.create.mockResolvedValue({ id: 'new-1', kind, name: 'Soirée' });
+        const comp = fixture.componentInstance as any;
+        comp.setMode('ralliement');
+        comp.form.patchValue({ name: 'Soirée', kind });
+        await comp.submit();
+        const args = (router.navigate as ReturnType<typeof vi.fn>).mock.lastCall as [
+          unknown[],
+          { state?: { soireeCreation?: boolean } } | undefined,
+        ];
+        expect(args[0]).toEqual(['/parties', 'new-1']);
+        expect(args[1]?.state?.soireeCreation === true, kind).toBe(opens);
+        TestBed.resetTestingModule();
+      }
+
+      const { fixture, partiesSvc } = await createComponent();
+      const router = TestBed.inject(Router);
+      partiesSvc.create.mockResolvedValue({ id: 'quete-1', kind: 'ONE_SHOT', name: 'Quête' });
+      const comp = fixture.componentInstance as any;
+      comp.form.patchValue({ name: 'Quête', gameSystemId: 'draconis', kind: 'ONE_SHOT' });
+      await comp.submit();
+      const args = (router.navigate as ReturnType<typeof vi.fn>).mock.lastCall as [
+        unknown[],
+        { state?: unknown } | undefined,
+      ];
+      expect(args[1]?.state).toBeUndefined();
+    });
+
     it('édition d’une quête : la bascule est absente', async () => {
       const { fixture } = await createComponent('p1');
       expect(fixture.nativeElement.querySelector('.mode-toggle')).toBeNull();

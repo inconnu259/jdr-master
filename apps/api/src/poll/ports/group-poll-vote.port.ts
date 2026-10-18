@@ -11,7 +11,6 @@ export interface GroupPollVotePort {
   /**
    * Vérifie qu'un vote (ou son retrait) de `userId` sur le sondage d'un GROUPE de ralliement est
    * recevable, et lève sinon une erreur HTTP française, sans rien écrire :
-   * - 403 si la partie n'est pas un groupe `CAMPAGNE_EPISODIQUE` (la rencontre isolée n'a pas de sondage) ;
    * - 403 si `userId` n'est pas un votant éligible de la conjonction ;
    * - 400 si le sondage n'est rattaché à aucune conjonction de cette partie, si la date est déjà
    *   fixée, ou si l'échéance (`expiresAt`) est dépassée.

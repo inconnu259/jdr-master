@@ -4549,6 +4549,16 @@ describe('CalendarView — le calendrier d’un groupe (Story 40.5b)', () => {
     expect(eventsApi.list).toHaveBeenCalledTimes(1);
   });
 
+  it('Story 41.2 : une soirée isolée (ONE_SHOT) est traitée comme un groupe — ses conjonctions sont lues', async () => {
+    const { comp, eventsApi } = await createGroupView({
+      userId: HOST,
+      party: { ...GROUP_PARTY, kind: 'ONE_SHOT' },
+    });
+
+    expect(comp.isGroup()).toBe(true);
+    expect(eventsApi.list).toHaveBeenCalledWith('g1');
+  });
+
   it('un autre :id (autre groupe) : conjonctions relues pour lui, composition fermée', async () => {
     const { comp, eventsApi, tick } = await createGroupView({ userId: HOST });
     comp.startGroupCompose('e1');

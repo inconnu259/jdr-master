@@ -26,10 +26,7 @@ import type {
   OwnEventsRange,
   OwnRolesResolver,
 } from '../availability/ports/own-events.port';
-import {
-  RALLIEMENT_UNAVAILABLE_MESSAGE,
-  type PartieGrant,
-} from '../permissions/permission.service';
+import { type PartieGrant } from '../permissions/permission.service';
 import {
   VISIBLE_SEANCE_WHERE,
   isHiddenDraft,
@@ -785,9 +782,13 @@ export class EventsService
       // Story 40.6 : une conjonction dont la date a été fixée depuis son sondage (`pollId` posé ET séance
       // datée) est désormais une conjonction datée : on la modifie en mode « date fixée », sans
       // pouvoir changer le jour ni le créneau.
+      // Story 41.2 : une soirée isolée naît SANS date ni sondage (« date à fixer ») — troisième état, que
+      // la première modification complète par l'un ou l'autre mode (aucun événement de groupe n'y est jamais).
+      const awaitingDate = seance.startDate === null && !seance.pollId;
       const undatedPoll = Boolean(seance.pollId) && seance.startDate === null;
       const pollMode = input.seance.date === null;
-      if (pollMode !== undatedPoll) throw new BadRequestException(POLL_MODE_MESSAGE);
+      if (!awaitingDate && pollMode !== undatedPoll)
+        throw new BadRequestException(POLL_MODE_MESSAGE);
 
       const currentDay = seance.startDate?.toISOString().substring(0, 10) ?? null;
       if (currentDay !== null && currentDay < todayKeyUtc()) {
@@ -811,7 +812,22 @@ export class EventsService
       }
 
       await tx.event.update({ where: { id: eventId }, data: { title: input.title } });
-      if (pollMode) {
+      if (pollMode && awaitingDate) {
+        // Story 41.2 : le vote s'ouvre dès que les créneaux sont posés — le sondage est créé ICI (par
+        // `PollService`, via la fermeture de l'appelant) et la séance le porte, toujours sans date.
+        if (!input.seance.createPoll) throw new BadRequestException(POLL_MODE_MESSAGE);
+        const poll = await input.seance.createPoll(tx);
+        await tx.seance.update({
+          where: { id: seance.id },
+          data: {
+            pollId: poll.id,
+            lieu: input.seance.lieu,
+            heureRdv: input.seance.heureRdv,
+            notePratique: input.seance.notePratique,
+            inscriptionMax: capacity,
+          },
+        });
+      } else if (pollMode) {
         // Créneaux (réconciliés : un créneau conservé garde ses réponses) et échéance du sondage.
         if (!input.seance.updatePoll || !seance.pollId) {
           throw new BadRequestException(POLL_MODE_MESSAGE);
@@ -852,6 +868,18 @@ export class EventsService
       await this.recalculateNextSessionInTx(tx, grant.partieId);
     });
     this.realtimeEvents.emit(partieTopic(grant.partieId));
+  }
+
+  /** Story 41.2 : l'événement attend-il sa date (séance sans date ni sondage) ? Lecture seule, pour que
+   *  l'appelant choisisse les règles de saisie (création ou modification) avant la transaction ; l'état
+   *  est relu sous verrou par `updateHosted`. Un événement qui n'existe pas n'attend rien. */
+  async isAwaitingDate(eventId: string): Promise<boolean> {
+    const seance = await this.prisma.seance.findFirst({
+      where: { eventId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { startDate: true, pollId: true },
+    });
+    return !!seance && seance.startDate === null && seance.pollId === null;
   }
 
   // ─── Appartenance à la partie de l'autorisation ──────────────────────────────────────────────
@@ -1376,18 +1404,16 @@ export class EventsService
    * `GroupPollVotePort` : un vote (ou son retrait) sur le sondage d'un groupe est-il recevable ? Une
    * seule lecture de la séance rattachée au sondage (avec son hôte, sa capacité et ses inscriptions),
    * plus celle des membres seulement quand la conjonction accueille tous les membres. Refus, dans
-   * l'ordre : partie qui n'est pas un groupe `CAMPAGNE_EPISODIQUE` (403) ; sondage sans conjonction de
-   * cette partie (400) ; date déjà fixée (400) ; échéance dépassée (400) ; votant hors de
+   * l'ordre : sondage sans conjonction de cette partie (400) ; date déjà fixée (400) ; échéance dépassée (400) ; votant hors de
    * `eligibleVoters` (403). Ne lève rien d'autre, n'écrit rien.
    */
   async assertCanVote(
     poll: { id: string; partieId: string; expiresAt: Date | null },
-    partie: { kind: PartieKind },
+    _partie: { kind: PartieKind },
     userId: string,
   ): Promise<void> {
-    if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
-      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
-    }
+    // Story 41.2 : tout ralliement vote (groupe comme soirée isolée) — l'appelant n'ouvre ce port qu'à
+    // la famille `ralliement`, et les votants éligibles restent ceux d'`eligibleVoters`.
     const seance = await this.prisma.seance.findUnique({
       where: { pollId: poll.id },
       select: {
@@ -1463,8 +1489,8 @@ export class EventsService
 
   /**
    * De quoi écrire l'e-mail « C'est fixé » (Story 40.6), lu APRÈS le commit : titre, date, lieu et les
-   * destinataires — les inscrits CONFIRMÉS, l'hôte exclu, une adresse chacun. `null` si la conjonction
-   * n'existe plus ou n'est pas datée.
+   * destinataires — les inscrits CONFIRMÉS d'un groupe, ou les membres d'une soirée isolée (Story 41.2),
+   * l'hôte exclu, une adresse chacun. `null` si la conjonction n'existe plus ou n'est pas datée.
    */
   async dateFixedNotice(
     pollId: string,
@@ -1475,7 +1501,23 @@ export class EventsService
         startDate: true,
         startSlot: true,
         lieu: true,
-        event: { select: { title: true, partieId: true, ownerId: true } },
+        event: {
+          select: {
+            title: true,
+            partieId: true,
+            ownerId: true,
+            // Story 41.2 : les membres d'une soirée isolée (la soirée n'a pas d'inscriptions).
+            partie: {
+              select: {
+                kind: true,
+                memberships: {
+                  orderBy: [{ joinedAt: 'asc' }, { userId: 'asc' }],
+                  select: { user: { select: { id: true, email: true } } },
+                },
+              },
+            },
+          },
+        },
         inscriptions: {
           where: { status: 'CONFIRMED' },
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -1485,13 +1527,17 @@ export class EventsService
     });
     if (!seance || !seance.startDate) return null;
     const hostId = seance.event.ownerId;
+    const invited =
+      seance.event.partie.kind === 'ONE_SHOT'
+        ? seance.event.partie.memberships
+        : seance.inscriptions;
     return {
       partieId: seance.event.partieId,
       eventTitle: seance.event.title,
       startDate: seance.startDate,
       startSlot: seance.startSlot,
       lieu: seance.lieu,
-      recipients: seance.inscriptions.map((i) => i.user).filter((user) => user.id !== hostId),
+      recipients: invited.map((i) => i.user).filter((user) => user.id !== hostId),
     };
   }
 

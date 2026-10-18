@@ -15,6 +15,8 @@
   <app-event-form
     [members]="members()"
     [hostId]="hostId()"
+    [soiree]="soiree()"
+    [initialTitle]="initialTitle()"
     [draft]="draft()"
     (submitted)="submit()"
     (composeRequested)="pickInCalendar()"

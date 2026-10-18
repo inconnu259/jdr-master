@@ -84,6 +84,12 @@ export class EventForm implements OnInit {
   readonly members = input<PartieMemberDto[]>([]);
   /** Story 40.4 : l'hôte (la personne connectée), exclu du sélecteur — il occupe déjà une place. */
   readonly hostId = input<string | null>(null);
+  /** Story 41.2 : soirée isolée — participation en lecture seule (« sur invitation · pas de limite »), ni
+   *  places limitées ni réservations ; le dto n'envoie alors jamais de capacité. */
+  readonly soiree = input(false);
+  /** Story 41.2 : nom pré-rempli à la création (la soirée existe déjà, son nom est celui de la partie).
+   *  Lu une fois ; un brouillon restauré prime. */
+  readonly initialTitle = input('');
 
   protected readonly uid = `event-form-${++nextUid}`;
   protected readonly slots: readonly EventSlot[] = ['MORNING', 'AFTERNOON', 'EVENING'];
@@ -104,7 +110,9 @@ export class EventForm implements OnInit {
   private initialDeadline = '';
   /** Borne basse du champ d'échéance : aujourd'hui, ou l'échéance d'origine si elle est déjà passée. */
   protected readonly deadlineMin = computed(() =>
-    this.initialDeadline && this.initialDeadline < this.todayKey ? this.initialDeadline : this.todayKey,
+    this.initialDeadline && this.initialDeadline < this.todayKey
+      ? this.initialDeadline
+      : this.todayKey,
   );
   protected readonly day = signal('');
   protected readonly slot = signal<EventSlot>('EVENING');
@@ -118,7 +126,7 @@ export class EventForm implements OnInit {
 
   /** Le sélecteur de places réservées : à la création, places limitées. */
   protected readonly canReserve = computed(
-    () => this.prefill() === null && this.participation() === 'limited',
+    () => !this.soiree() && this.prefill() === null && this.participation() === 'limited',
   );
   protected readonly candidates = computed(() =>
     this.members().filter((m) => m.userId !== this.hostId()),
@@ -128,8 +136,14 @@ export class EventForm implements OnInit {
   /** Plancher du compteur : jamais sous les places déjà réservées + l'hôte. */
   protected readonly minPlaces = computed(() => Math.max(MIN_PLACES, this.reserved().length + 1));
 
-  /** À la modification, le mode est celui de la conjonction : la bascule n'offre plus l'autre. */
-  protected readonly modeLocked = computed(() => this.prefill() !== null);
+  /** À la modification, le mode est celui de la conjonction : la bascule n'offre plus l'autre. Story 41.2 :
+   *  sauf pour une soirée qui attend encore sa date (ni date ni sondage), dont les deux modes restent ouverts. */
+  protected readonly modeLocked = computed(() => {
+    const card = this.prefill();
+    if (card === null) return false;
+    const awaitingDate = card.seance !== null && card.seance.date === null && card.poll === null;
+    return !awaitingDate;
+  });
   /** Résumé « 3 créneaux · ven. 17 → sam. 25 oct. », une fois au moins un créneau placé. */
   protected readonly pollSummary = computed(() =>
     this.pollOptions().length > 0 ? pollSummaryLabel(this.pollOptions(), this.theme.tone()) : null,
@@ -169,7 +183,7 @@ export class EventForm implements OnInit {
     lieu: this.lieu().trim() || null,
     heureRdv: this.heureRdv().trim() || null,
     notePratique: this.notePratique().trim() || null,
-    capacity: this.participation() === 'limited' ? this.places() : null,
+    capacity: !this.soiree() && this.participation() === 'limited' ? this.places() : null,
     // Story 40.4 : places réservées d'emblée — créations à places limitées seulement.
     ...(this.canReserve() && this.reserved().length > 0
       ? { reservedUserIds: [...this.reserved()] }
@@ -178,6 +192,7 @@ export class EventForm implements OnInit {
 
   ngOnInit(): void {
     const draft = this.draft();
+    if (this.prefill() === null && !draft) this.title.set(this.initialTitle());
     if (draft && this.prefill() === null) this.restore(draft);
     const card = this.prefill();
     if (!card) return;

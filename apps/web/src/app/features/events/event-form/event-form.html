@@ -213,6 +213,14 @@
   </mat-form-field>
 
   <!-- Participation -->
+  @if (soiree()) {
+    <!-- Story 41.2 : une soirée se fait sur invitation, sans limite — lecture seule, on invite ensuite
+         depuis l'onglet des invitations. -->
+    <div class="ec__field ec__participation-readonly">
+      <span class="ec__label">{{ theme.tone()['partie.ralliement_event_participation_label'] }}</span>
+      <p class="ec__places-hint">{{ theme.tone()['partie.ralliement_soiree_participation_form'] }}</p>
+    </div>
+  } @else {
   <div class="ec__field">
     <span class="ec__label" [id]="uid + '-participation'">{{
       theme.tone()['partie.ralliement_event_participation_label']
@@ -267,6 +275,8 @@
       </div>
     }
   </div>
+
+  }
 
   <!-- Story 40.4 : réserver une place à des membres (création, places limitées). Pastilles à cocher ;
        l'état coché est écrit (coche + aria-pressed), jamais porté par la couleur seule. -->

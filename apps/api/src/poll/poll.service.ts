@@ -1,20 +1,10 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { DaySlot, PartieKind, PartieRole, SessionPollDto } from '@master-jdr/shared';
 // Import RUNTIME du registre des systèmes (Story 40.5) : la famille de la partie décide si le vote
 // passe par les règles d'un groupe. Jamais `import type` sur une valeur.
 import { familyOf } from '@master-jdr/shared';
 import { countParticipants } from '../common/participant-count.util';
-import {
-  PermissionService,
-  RALLIEMENT_UNAVAILABLE_MESSAGE,
-  type PartieGrant,
-} from '../permissions/permission.service';
+import { PermissionService, type PartieGrant } from '../permissions/permission.service';
 import {
   HIDDEN_DRAFT_POLL_WHERE,
   VISIBLE_POLL_WHERE,
@@ -240,7 +230,6 @@ export class PollService {
     dto: CastVoteDto,
   ): Promise<void> {
     const { role, partie } = await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
-    this.assertGroupVoteKind(partie);
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -284,14 +273,6 @@ export class PollService {
     // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement.
     await this.partieSignals.notifyChanged(partieId);
-  }
-
-  /** Story 40.5 : seul un GROUPE de ralliement (CAMPAGNE_EPISODIQUE) vote — la rencontre isolée n'a
-   *  pas de sondage (403, avant toute lecture du sondage). Une partie de JDR n'est pas concernée. */
-  private assertGroupVoteKind(partie: { kind: PartieKind; gameSystemId: string }): void {
-    if (familyOf(partie.gameSystemId) === 'ralliement' && partie.kind !== 'CAMPAGNE_EPISODIQUE') {
-      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
-    }
   }
 
   /** Story 40.5 : un vote (ou son retrait) sur le sondage d'un GROUPE de ralliement passe en plus par
@@ -347,7 +328,6 @@ export class PollService {
     userId: string,
   ): Promise<void> {
     const { role, partie } = await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
-    this.assertGroupVoteKind(partie);
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -431,7 +411,7 @@ export class PollService {
   /**
    * Story 40.6 — l'hôte fixe la date d'une conjonction depuis son sondage (UX-DR12). Le droit « hôte »
    * est décidé par `events/` derrière le port, sur l'événement du sondage (403 pour tout autre membre,
-   * administrateur compris, et pour la rencontre isolée). Puis UNE transaction : verrou de la partie puis
+   * administrateur compris). Puis UNE transaction : verrou de la partie puis
    * de l'événement, relecture du sondage (ouvert, de la partie, option de ce sondage), sondage clos avec
    * la date choisie, plage de la séance et prochaine séance écrites par `SeanceDatePort` — tout ou rien.
    * Une date déjà fixée ou un sondage déjà fermé est refusé (400) : la date ne se rouvre jamais. L'échéance
@@ -445,8 +425,7 @@ export class PollService {
     dto: ChooseDateDto,
   ): Promise<void> {
     const partieId = partie.id;
-    // Le port refuse d'abord la rencontre isolée (403), puis un sondage qui n'est pas celui d'une conjonction
-    // de cette partie (404), puis tout membre qui n'est pas l'hôte (403) — avant toute écriture.
+    // Le port refuse d'abord un sondage qui n'est pas celui d'une conjonction de cette partie (404), puis tout membre qui n'est pas l'hôte (403) — avant toute écriture.
     await this.groupChoice.assertCanChoose({ id: pollId, partieId }, partie, userId);
     await this.prisma.$transaction(async (tx) => {
       const { dated } = await this.groupVotes.lockConjonction(tx, { id: pollId, partieId });
@@ -475,7 +454,7 @@ export class PollService {
   /**
    * Story 40.7 — l'hôte prolonge le vote de sa conjonction (UX-DR12). Le droit « hôte » est décidé par
    * `events/` derrière le port, sur l'événement du sondage (403 pour tout autre membre, administrateur
-   * compris, et pour la rencontre isolée) ; la route n'existe pas en JDR (cellule `POLL_EXTEND` fermée).
+   * compris) ; la route n'existe pas en JDR (cellule `POLL_EXTEND` fermée).
    * Puis UNE transaction sous le verrou de la conjonction (partie puis événement, comme la fixation de
    * la date) : le sondage doit être ouvert et la date non fixée, le nouveau jour strictement après le jour
    * d'échéance actuel et pas avant aujourd'hui (400 sinon, rien n'est écrit). L'échéance déjà dépassée
@@ -491,8 +470,7 @@ export class PollService {
     dto: ExtendPollDto,
   ): Promise<void> {
     const { partie } = await this.permissions.assert(userId, 'POLL_EXTEND', { partieId });
-    // Le port refuse d'abord la rencontre isolée (403), puis un sondage qui n'est pas celui d'une conjonction
-    // de cette partie (400), puis tout membre qui n'est pas l'hôte (403) — avant toute écriture.
+    // Le port refuse d'abord un sondage qui n'est pas celui d'une conjonction de cette partie (400), puis tout membre qui n'est pas l'hôte (403) — avant toute écriture.
     await this.groupExtension.assertCanExtend({ id: pollId, partieId }, partie, userId);
     const newDay = dto.expiresAt;
     const newDeadline = endOfDayUtc(newDay);

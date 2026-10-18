@@ -1,10 +1,7 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { PartieKind } from '@master-jdr/shared';
 import { EmailService } from '../email/email.service';
-import {
-  PermissionService,
-  RALLIEMENT_UNAVAILABLE_MESSAGE,
-} from '../permissions/permission.service';
+import { PermissionService } from '../permissions/permission.service';
 import type { GroupPollChoosePort } from '../poll/ports/group-poll-choose.port';
 import { EventsService } from './events.service';
 import { formatSessionDate } from './session-date';
@@ -29,12 +26,11 @@ export class GroupPollChoiceService implements GroupPollChoosePort {
 
   async assertCanChoose(
     poll: { id: string; partieId: string },
-    partie: { kind: PartieKind },
+    _partie: { kind: PartieKind },
     userId: string,
   ): Promise<void> {
-    if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
-      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
-    }
+    // Story 41.2 : la soirée isolée fixe aussi sa date depuis son sondage — l'appelant n'ouvre ce port
+    // qu'à la famille `ralliement`.
     const eventId = await this.events.eventIdOfPoll(poll.id, poll.partieId);
     if (!eventId) throw new NotFoundException('Poll introuvable');
     // Le droit « hôte de la conjonction » est décidé par `PermissionService` sur l'ÉVÉNEMENT du sondage,

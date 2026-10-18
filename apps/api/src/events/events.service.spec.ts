@@ -96,6 +96,8 @@ function makePrisma() {
       update: jest.fn(),
       // Story 40.5 : séance d'un sondage (vote d'un groupe).
       findUnique: jest.fn(),
+      // Story 41.2 : l'événement attend-il sa date ?
+      findFirst: jest.fn(),
     },
     // Story 40.5 : sondages des cartes (créneaux + réponses) et disponibilités déclarées des inscrits.
     sessionPoll: { delete: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
@@ -2506,6 +2508,82 @@ describe('EventsService (Story 37.3)', () => {
         expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
       });
 
+      it('en attente de date (soirée isolée, Story 41.2) : un sondage est créé dans la transaction et la séance le porte, sans date', async () => {
+        pollSeance({ pollId: null });
+        prisma.tx.inscription.count.mockResolvedValue(0);
+        const createPoll = jest.fn().mockResolvedValue({ id: 'poll-9' });
+
+        await service.updateHosted(GRANT_E1, 'e1', {
+          title: 'Soirée',
+          seance: { ...SEANCE_POLL, capacity: null, createPoll },
+        });
+
+        expect(createPoll).toHaveBeenCalledWith(prisma.tx);
+        expect(prisma.tx.seance.update).toHaveBeenCalledWith({
+          where: { id: 'se1' },
+          data: {
+            pollId: 'poll-9',
+            lieu: 'Lyon 3e',
+            heureRdv: null,
+            notePratique: null,
+            inscriptionMax: null,
+          },
+        });
+        expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      });
+
+      it('en attente de date : une date fixée est écrite (plage d’un créneau), le rappel est ré-armé', async () => {
+        pollSeance({ pollId: null });
+        prisma.tx.inscription.count.mockResolvedValue(0);
+        const day = new Date(Date.now() + 5 * 86_400_000);
+        day.setUTCHours(0, 0, 0, 0);
+
+        await service.updateHosted(GRANT_E1, 'e1', {
+          title: 'Soirée',
+          seance: {
+            date: day,
+            slot: 'EVENING',
+            lieu: null,
+            heureRdv: null,
+            notePratique: null,
+            capacity: null,
+          },
+        });
+
+        const data = callArg<{ data: Record<string, unknown> }>(prisma.tx.seance.update).data;
+        expect(data).toEqual(
+          objectLike({
+            startDate: day,
+            startSlot: 'EVENING',
+            endDate: day,
+            endSlot: 'EVENING',
+            reminderSentAt: null,
+          }),
+        );
+        expect(data).not.toHaveProperty('pollId');
+      });
+
+      it('en attente de date : un sondage sans fermeture de création → 400, rien n’est écrit', async () => {
+        pollSeance({ pollId: null });
+        prisma.tx.inscription.count.mockResolvedValue(0);
+
+        await expect(
+          service.updateHosted(GRANT_E1, 'e1', { title: 'X', seance: { ...SEANCE_POLL } }),
+        ).rejects.toThrow(POLL_MODE_MESSAGE);
+        expect(prisma.tx.seance.update).not.toHaveBeenCalled();
+      });
+
+      it('isAwaitingDate() : séance sans date ni sondage seulement', async () => {
+        prisma.seance.findFirst.mockResolvedValue({ startDate: null, pollId: null });
+        await expect(service.isAwaitingDate('e1')).resolves.toBe(true);
+        prisma.seance.findFirst.mockResolvedValue({ startDate: null, pollId: 'poll-1' });
+        await expect(service.isAwaitingDate('e1')).resolves.toBe(false);
+        prisma.seance.findFirst.mockResolvedValue({ startDate: new Date(), pollId: null });
+        await expect(service.isAwaitingDate('e1')).resolves.toBe(false);
+        prisma.seance.findFirst.mockResolvedValue(null);
+        await expect(service.isAwaitingDate('e1')).resolves.toBe(false);
+      });
+
       it('le mode ne change pas : date fournie pour une conjonction à sondage, ou sondage pour une conjonction datée → 400', async () => {
         pollSeance();
         await expect(
@@ -2775,7 +2853,7 @@ describe('EventsService (Story 37.3)', () => {
         expect(prisma.membership.findMany).not.toHaveBeenCalled();
       });
 
-      it('sondage rattaché à aucune conjonction de cette partie → 400 ; rencontre isolée → 403', async () => {
+      it('sondage rattaché à aucune conjonction de cette partie → 400 ; rencontre isolée : mêmes règles (Story 41.2)', async () => {
         prisma.seance.findUnique.mockResolvedValue(null);
         await expect(service.assertCanVote(POLL, GROUPE, 'hote')).rejects.toThrow(
           'Poll introuvable ou fermé',
@@ -2786,10 +2864,11 @@ describe('EventsService (Story 37.3)', () => {
           BadRequestException,
         );
 
+        // Story 41.2 : la soirée isolée vote comme un groupe — l'hôte est un votant éligible.
         seanceRow();
         await expect(
           service.assertCanVote(POLL, { kind: 'ONE_SHOT' }, 'hote'),
-        ).rejects.toBeInstanceOf(ForbiddenException);
+        ).resolves.toBeUndefined();
       });
     });
   });
@@ -2853,12 +2932,45 @@ describe('EventsService (Story 37.3)', () => {
         startDate: day,
         startSlot: 'EVENING',
         lieu: 'Chez Léa',
-        event: { title: 'Catane', partieId: 'p1', ownerId: 'hote' },
+        event: {
+          title: 'Catane',
+          partieId: 'p1',
+          ownerId: 'hote',
+          partie: { kind: 'CAMPAGNE_EPISODIQUE', memberships: [] },
+        },
         inscriptions: [
           { user: { id: 'a', email: 'a@example.com' } },
           { user: { id: 'b', email: 'b@example.com' } },
         ],
         ...over,
+      });
+
+      it('soirée isolée (Story 41.2) : destinataires = membres de la partie, hôte exclu, sans inscription', async () => {
+        prisma.seance.findUnique.mockResolvedValue(
+          seanceRow({
+            inscriptions: [],
+            event: {
+              title: 'Soirée',
+              partieId: 'p1',
+              ownerId: 'hote',
+              partie: {
+                kind: 'ONE_SHOT',
+                memberships: [
+                  { user: { id: 'hote', email: 'hote@example.com' } },
+                  { user: { id: 'a', email: 'a@example.com' } },
+                  { user: { id: 'b', email: 'b@example.com' } },
+                ],
+              },
+            },
+          }),
+        );
+
+        const notice = await service.dateFixedNotice('poll-1');
+
+        expect(notice?.recipients).toEqual([
+          { id: 'a', email: 'a@example.com' },
+          { id: 'b', email: 'b@example.com' },
+        ]);
       });
 
       it('destinataires = inscrits CONFIRMÉS (requête filtrée), hôte exclu, une adresse chacun', async () => {

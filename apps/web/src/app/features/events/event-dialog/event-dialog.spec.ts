@@ -566,7 +566,7 @@ describe('EventDialog — rendu en ligne d’une soirée isolée (Story 41.1)', 
     );
   });
 
-  it('ni participants, ni inscription, ni réservation, ni modification, ni pied — même pour l’hôte', async () => {
+  it('ni participants, ni inscription, ni réservation, ni « Refermer » — même pour l’hôte ; un invité n’a aucun pied', async () => {
     for (const userId of [HOST, ME]) {
       const { q } = await mount(soireeCard(), userId);
       for (const sel of [
@@ -577,15 +577,39 @@ describe('EventDialog — rendu en ligne d’une soirée isolée (Story 41.1)', 
         '.ed__respond',
         '.ed__unsubscribe',
         '.ed__reserve',
-        '.ed__edit',
         '.ed__close',
-        '.ed__footer',
-        '.ed__actions',
       ]) {
         expect(q(sel), `${userId} ${sel}`).toBeNull();
       }
+      // Story 41.2 : seul l'hôte a un pied (« Modifier »), les autres aucun.
+      expect(q('.ed__edit') !== null, userId).toBe(userId === HOST);
+      expect(q('.ed__footer') !== null, userId).toBe(userId === HOST);
       TestBed.resetTestingModule();
     }
+  });
+
+  it('« Modifier » sur une soirée qui attend sa date demande la fenêtre de création (Story 41.2) ; datée, il édite en ligne', async () => {
+    const { fixture, q } = await mount(soireeCard(), HOST);
+    const dialog = fixture.debugElement.children[0].componentInstance as {
+      completeRequested: { subscribe: (fn: () => void) => void };
+    };
+    let requests = 0;
+    dialog.completeRequested.subscribe(() => requests++);
+    q<HTMLButtonElement>('.ed__edit')!.click();
+    expect(requests).toBe(1);
+    expect(q('app-event-form')).toBeNull();
+
+    TestBed.resetTestingModule();
+    const dated = soireeCard();
+    dated.seance!.date = '2099-12-20';
+    dated.seance!.slot = 'EVENING';
+    const second = await mount(dated, HOST);
+    second.q<HTMLButtonElement>('.ed__edit')!.click();
+    second.fixture.detectChanges();
+    expect(second.q('app-event-form')).not.toBeNull();
+    // Soirée : participation en lecture seule dans le formulaire d'édition.
+    expect(second.q('.ec__participation-readonly')).not.toBeNull();
+    expect(second.q('.ec__participation')).toBeNull();
   });
 
   it('une soirée passée est « Passé », avec la situation au passé', async () => {

@@ -13,7 +13,6 @@ export interface GroupPollExtendPort {
   /**
    * Décide, AVANT toute écriture, que `userId` peut prolonger le vote de la conjonction qui porte ce
    * sondage, et lève sinon une erreur HTTP française, sans rien écrire :
-   * - 403 si la partie n'est pas un groupe `CAMPAGNE_EPISODIQUE` (la rencontre isolée n'a pas de sondage) ;
    * - 400 si le sondage n'est rattaché à aucune conjonction de cette partie ;
    * - 403 si `userId` n'est pas l'hôte de la conjonction (administrateur compris).
    * L'appelant a déjà obtenu la cellule de rôle `POLL_EXTEND` sur la partie. Jamais appelé pour le JDR.

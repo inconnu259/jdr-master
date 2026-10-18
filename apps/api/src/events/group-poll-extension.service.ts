@@ -1,9 +1,6 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import type { PartieKind } from '@master-jdr/shared';
-import {
-  PermissionService,
-  RALLIEMENT_UNAVAILABLE_MESSAGE,
-} from '../permissions/permission.service';
+import { PermissionService } from '../permissions/permission.service';
 import type { GroupPollExtendPort } from '../poll/ports/group-poll-extend.port';
 import { EventsService } from './events.service';
 
@@ -23,12 +20,11 @@ export class GroupPollExtensionService implements GroupPollExtendPort {
 
   async assertCanExtend(
     poll: { id: string; partieId: string },
-    partie: { kind: PartieKind },
+    _partie: { kind: PartieKind },
     userId: string,
   ): Promise<void> {
-    if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
-      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
-    }
+    // Story 41.2 : la soirée isolée prolonge aussi son vote — l'appelant n'ouvre ce port qu'à la famille
+    // `ralliement`.
     const eventId = await this.events.eventIdOfPoll(poll.id, poll.partieId);
     if (!eventId) throw new BadRequestException('Poll introuvable ou fermé');
     // Le droit « hôte de la conjonction » est décidé par `PermissionService` sur l'ÉVÉNEMENT du sondage,

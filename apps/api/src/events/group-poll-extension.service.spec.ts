@@ -1,9 +1,5 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import {
-  HOST_ONLY_MESSAGE,
-  RALLIEMENT_UNAVAILABLE_MESSAGE,
-  type PermissionService,
-} from '../permissions/permission.service';
+import { HOST_ONLY_MESSAGE, type PermissionService } from '../permissions/permission.service';
 import type { EventsService } from './events.service';
 import { GroupPollExtensionService } from './group-poll-extension.service';
 
@@ -40,13 +36,13 @@ describe('GroupPollExtensionService (Story 40.7)', () => {
     await expect(service.assertCanExtend(POLL, GROUPE, 'autre')).rejects.toThrow(HOST_ONLY_MESSAGE);
   });
 
-  it('rencontre isolée (ONE_SHOT) → 403, avant toute lecture', async () => {
-    const refusal = service.assertCanExtend(POLL, { kind: 'ONE_SHOT' }, 'hote');
+  it('rencontre isolée (ONE_SHOT, Story 41.2) : mêmes règles — le droit est décidé sur l’événement du sondage', async () => {
+    await expect(
+      service.assertCanExtend(POLL, { kind: 'ONE_SHOT' }, 'hote'),
+    ).resolves.toBeUndefined();
 
-    await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(refusal).rejects.toThrow(RALLIEMENT_UNAVAILABLE_MESSAGE);
-    expect(events.eventIdOfPoll).not.toHaveBeenCalled();
-    expect(permissions.assert).not.toHaveBeenCalled();
+    expect(events.eventIdOfPoll).toHaveBeenCalledWith('poll-1', 'g1');
+    expect(permissions.assert).toHaveBeenCalledWith('hote', 'POLL_EXTEND', { eventId: 'e1' });
   });
 
   it('sondage rattaché à aucune conjonction de cette partie (ou d’une autre) → 400, aucun droit décidé', async () => {

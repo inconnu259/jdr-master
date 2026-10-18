@@ -10,7 +10,7 @@
 <ng-template #body>
 
   @if (editing()) {
-    <app-event-form [prefill]="card()" (submitted)="save()" />
+    <app-event-form [prefill]="card()" [soiree]="inline()" (submitted)="save()" />
   } @else {
     <!-- Panneau de situation : ma situation (avec « S'inscrire », ou « Complet » écrit quand il n'y a
          plus de place), puis date, heure et lieu en grand. Pas de vote à ce palier. -->
@@ -292,9 +292,11 @@
             {{ theme.tone()['partie.ralliement_event_edit_btn'] }}
           </button>
         }
-        <button mat-flat-button type="button" class="ed__close" (click)="closed.emit()">
-          {{ theme.tone()['partie.ralliement_event_close_btn'] }}
-        </button>
+        @if (!inline()) {
+          <button mat-flat-button type="button" class="ed__close" (click)="closed.emit()">
+            {{ theme.tone()['partie.ralliement_event_close_btn'] }}
+          </button>
+        }
       }
     </div>
 </ng-template>
@@ -308,6 +310,11 @@
       <p class="ed__description">{{ text }}</p>
     }
     <ng-container [ngTemplateOutlet]="body" />
+    @if (showInlineFooter()) {
+      <footer class="ed__footer">
+        <ng-container [ngTemplateOutlet]="foot" />
+      </footer>
+    }
   </article>
 } @else {
   <app-detail-surface

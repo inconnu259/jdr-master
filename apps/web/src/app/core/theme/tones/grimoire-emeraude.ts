@@ -400,6 +400,8 @@ export const grimoireEmeraude = {
   'partie.ralliement_soiree_guests_tab': 'Invités',
   'partie.ralliement_soiree_invitations_tab': 'Invitations',
   'partie.ralliement_soiree_participation': 'Sur invitation · pas de limite',
+  'partie.ralliement_soiree_participation_form':
+    'Sur invitation · pas de limite — vous invitez ensuite depuis l’onglet Invitations',
   'partie.ralliement_event_host': 'Hôte : {name}',
   'partie.ralliement_event_situation': 'Ma situation',
   'partie.ralliement_event_chip_participating': 'Je participe',

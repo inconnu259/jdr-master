@@ -30,6 +30,10 @@ export const INVALID_DAY_MESSAGE = "Cette date n'existe pas";
 /** Refus d'un jour passé : aujourd'hui est accepté. */
 export const PAST_DAY_MESSAGE = 'La date ne peut pas être passée';
 
+/** Refus de places limitées ou de réservations sur une soirée isolée (Story 41.2). */
+export const ISOLATED_NO_PLACES_MESSAGE =
+  'Une soirée se fait sur invitation : ni places limitées, ni places réservées';
+
 /** Texte saisi nettoyé : espaces de bord retirés, chaîne vide → `null`. */
 function cleaned(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
@@ -42,7 +46,9 @@ function cleaned(value: string | null | undefined): string | null {
  * Orchestration côté ralliement de `EventsService` (écrivain unique d'`Event`/`Seance`) : décision du
  * droit (`PermissionService.assert`, seul décideur), garde de nature (un groupe
  * `CAMPAGNE_EPISODIQUE` seulement — la rencontre isolée relève de l'epic 41), règles de saisie
- * (jour réel, jamais passé), puis signaux après validation.
+ * (jour réel, jamais passé), puis signaux après validation. Story 41.2 : la soirée isolée (`ONE_SHOT`) y
+ * complète (`update`) l'événement unique créé avec elle ; proposer, s'inscrire et réserver restent
+ * réservés au groupe.
  *
  * Service distinct d'`EventsService` pour une raison de graphe : `PartiesService` dépend
  * d'`EventsService`, et le port des signaux (`PARTIE_SIGNALS_PORT`) EST `PartiesService`. Injecter le
@@ -113,13 +119,21 @@ export class GroupEventsService {
   ): Promise<EventCardDto> {
     const grant = await this.permissions.assert(userId, 'EVENT_UPDATE', { eventId });
     if (grant.partieId !== partieId) throw new NotFoundException('Conjonction introuvable');
-    if (grant.partie.kind !== 'CAMPAGNE_EPISODIQUE') {
-      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
+    // Story 41.2 : la soirée isolée (`ONE_SHOT`) complète son événement unique par la même route —
+    // sur invitation, donc ni places limitées ni réservations.
+    const isolated = grant.partie.kind === 'ONE_SHOT';
+    if (isolated) {
+      if (dto.capacity != null || (dto.reservedUserIds?.length ?? 0) > 0) {
+        throw new BadRequestException(ISOLATED_NO_PLACES_MESSAGE);
+      }
     }
 
+    // Une soirée qui attend encore sa date est complétée comme une création (jours et échéance jamais
+    // passés) ; tout autre événement suit les règles de modification (créneaux conservés tolérés).
+    const completing = isolated && (await this.events.isAwaitingDate(eventId));
     await this.events.updateHosted(grant, eventId, {
       title: dto.title.trim(),
-      seance: this.seanceInput(dto, grant.partieId, userId, 'update'),
+      seance: this.seanceInput(dto, grant.partieId, userId, completing ? 'create' : 'update'),
     });
     // Après validation et après `partie:{id}` (émis par `EventsService.updateHosted`) ; ne lève jamais.
     await this.partieSignals.notifyChanged(grant.partieId);
