@@ -42,6 +42,7 @@ import {
   RALLIEMENT_UNAVAILABLE_MESSAGE,
 } from '../permissions/permission.service';
 import type { PartieSignalsPort } from '../poll/ports/partie-signals.port';
+import { PollVoteCleanupService } from '../poll/poll-vote-cleanup.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import {
@@ -222,6 +223,8 @@ export class PartiesService implements PartieSignalsPort {
     private readonly events: EventsService,
     // Story 37.6 (AD-6) : toute décision de droit sur une partie passe par ce service.
     private readonly permissions: PermissionService,
+    // Story 40.8 : le module `poll/` retire les réponses de la personne qui sort (`leave()`).
+    private readonly polls: PollVoteCleanupService,
   ) {}
 
   /** Story 29.17, AC2/AC4 : refus explicite partagé par `create()` et `update()` — un seul endroit
@@ -509,6 +512,8 @@ export class PartiesService implements PartieSignalsPort {
    *
    * Groupe (`ralliement`) : tout se passe sous `SELECT … FOR UPDATE` de la partie, les rôles étant
    * relus après le verrou (la décision de droit date d'avant). Puis :
+   * - Story 40.8 : les places à venir (réservées ou confirmées) et les votes ouverts de la personne
+   *   sont libérés d'abord, dans la même transaction (le passé et les conjonctions qu'elle héberge restent) ;
    * - l'adhésion est supprimée, et `ownerId` remis à `null` si la personne était le créateur ;
    * - retrait : l'appelant doit encore être `ADMIN`, la cible un simple `MEMBER` (créateur compris) —
    *   un autre administrateur ou soi-même → 409 ;
@@ -584,11 +589,16 @@ export class PartiesService implements PartieSignalsPort {
         }
       }
 
-      // Points d'extension, dans CETTE transaction et sous ce verrou (aucune nouvelle route) :
-      // - epic 40 : retirer les inscriptions à venir et les votes ouverts de la personne ;
+      // Story 40.8 : dans CETTE transaction et sous ce verrou (aucune nouvelle route), les places et
+      // les votes de la personne sont libérés — inscriptions (réservées ou confirmées) aux
+      // conjonctions à venir, puis réponses aux sondages ouverts. Les données passées, les sondages
+      // fermés et les conjonctions à venir qu'elle organise restent. Ordre des verrous : partie, puis
+      // lignes `Event` (triées) prises par `EventsService`.
+      await this.events.releaseUpcomingInscriptionsInTx(tx, partieId, userId);
+      await this.polls.removeOpenVotesInTx(tx, partieId, userId);
+      // Points d'extension suivants, dans cette même transaction :
       // - epic 42 : annuler les événements à venir qu'elle organise ;
       // - epic 43 : suppression de compte, nouveau motif de `LeaveCause`.
-      // Les données passées sont conservées.
       await tx.membership.deleteMany({ where: { partieId, userId } });
       // Le créateur qui sort ne laisse pas de propriétaire derrière lui : sans ligne d'adhésion,
       // `ownerId` le ferait encore compter comme administrateur (`ralliementRole`).

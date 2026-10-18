@@ -38,7 +38,7 @@ import {
 import type { GroupPollVotePort } from '../poll/ports/group-poll-vote.port';
 import type { SeanceDatePort } from '../poll/ports/seance-date.port';
 import { PrismaService } from '../prisma/prisma.service';
-import { todayKeyUtc } from './day-key';
+import { parseDayKey, todayKeyUtc } from './day-key';
 import { eligibleVoters } from './eligible-voters';
 import { isFreeOn, type DeclaredAvailability } from './slot-availability';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
@@ -1266,6 +1266,43 @@ export class EventsService
     });
     this.realtimeEvents.emit(partieTopic(grant.partieId));
     if (accepted > 0) this.realtimeEvents.emit(userTopic(userId));
+  }
+
+  /**
+   * Story 40.8 — libère, DANS la transaction de l'appelant (`PartiesService.leave()`, déjà sous le
+   * verrou de la partie), les inscriptions (`RESERVED` comme `CONFIRMED`) d'une personne qui quitte ou
+   * est retirée du groupe, sur les conjonctions À VENIR de ce groupe : jour de la séance aujourd'hui ou
+   * plus tard (jour UTC, comme `assertNotPast`), ou séance sans date (sondage ouvert). Les conjonctions
+   * passées gardent la personne parmi leurs participants. L'hôte n'a pas de ligne d'inscription : ses
+   * conjonctions à venir restent (l'épique 42 les annulera). Ordre des verrous commun à tous les
+   * écrivains : la partie (déjà prise par l'appelant) PUIS les lignes `Event` concernées, triées par
+   * identifiant. N'émet rien : l'appelant émet après SON commit. Renvoie le nombre de lignes retirées.
+   */
+  async releaseUpcomingInscriptionsInTx(
+    tx: Prisma.TransactionClient,
+    partieId: string,
+    userId: string,
+  ): Promise<number> {
+    const todayStart = parseDayKey(todayKeyUtc());
+    const where: Prisma.InscriptionWhereInput = {
+      userId,
+      seance: {
+        event: { partieId },
+        OR: [{ startDate: null }, ...(todayStart ? [{ startDate: { gte: todayStart } }] : [])],
+      },
+    };
+    const rows = await tx.inscription.findMany({
+      where,
+      select: { seance: { select: { eventId: true } } },
+    });
+    if (rows.length === 0) return 0;
+    const eventIds = [...new Set(rows.map((r) => r.seance.eventId))].sort();
+    for (const eventId of eventIds) {
+      await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
+    }
+    // Suppression sous les verrous, par la même condition : seules les lignes à venir de la personne.
+    const { count } = await tx.inscription.deleteMany({ where });
+    return count;
   }
 
   /**

@@ -65,6 +65,7 @@ import type { AggregatedSlotDto, AvailableSlotDto, PartieKind } from '@master-jd
 import { GAME_SYSTEMS, isOpenForCreation, kindsOf } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { EventsService } from '../events/events.service';
+import { PollVoteCleanupService } from '../poll/poll-vote-cleanup.service';
 import {
   ADMIN_ONLY_MESSAGE,
   PermissionService,
@@ -87,6 +88,7 @@ import {
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import { anyOf, arrayLike, callArg, objectLike, stringLike } from '../common/test-utils/jest-typed';
+import type { Prisma } from '@prisma/client';
 
 describe('PartiesService', () => {
   let service: PartiesService;
@@ -133,6 +135,10 @@ describe('PartiesService', () => {
       create: jest.Mock;
       findMany: jest.Mock;
     };
+    inscription: {
+      findMany: jest.Mock;
+      deleteMany: jest.Mock;
+    };
     partieFavorite: {
       findUnique: jest.Mock;
       findMany: jest.Mock;
@@ -151,6 +157,7 @@ describe('PartiesService', () => {
     computeSlotStatus: jest.Mock;
   };
   let realtimeEvents: { emit: jest.Mock };
+  let polls: { removeOpenVotesInTx: jest.Mock };
 
   const partie = {
     id: 'p1',
@@ -219,6 +226,11 @@ describe('PartiesService', () => {
         // Recalcul de `nextSessionDate` à la conversion de type (séances éligibles, anti-spoil).
         findMany: jest.fn().mockResolvedValue([]),
       },
+      // Story 40.8 : libération des inscriptions à venir de qui sort d'un groupe (défaut : aucune).
+      inscription: {
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       // Défaut « aucun favori » — les tests dédiés au favori (Story 29.8) reconfigurent
       // explicitement ces mocks.
       partieFavorite: {
@@ -245,6 +257,7 @@ describe('PartiesService', () => {
       computeSlotStatus: jest.fn().mockReturnValue('UNKNOWN'),
     };
     realtimeEvents = { emit: jest.fn() };
+    polls = { removeOpenVotesInTx: jest.fn().mockResolvedValue(0) };
     service = new PartiesService(
       prisma as unknown as PrismaService,
       avail as unknown as AvailabilityService,
@@ -257,6 +270,7 @@ describe('PartiesService', () => {
       // restent exercés de bout en bout (partie lue, puis `Membership` si l'appelant n'est pas
       // le propriétaire), comme l'étaient `getOwned`/`getViewable`.
       new PermissionService(prisma as unknown as PrismaService),
+      polls as unknown as PollVoteCleanupService,
     );
   });
 
@@ -1586,6 +1600,80 @@ describe('PartiesService', () => {
       expect(ordre.indexOf('commit')).toBeLessThan(ordre.indexOf(partieTopic('p1')));
     });
 
+    it('Story 40.8 : libère les places à venir puis les votes ouverts, sous le verrou, avant de supprimer l’adhésion', async () => {
+      const ordre: string[] = [];
+      prisma.$queryRaw.mockImplementation((strings: TemplateStringsArray) => {
+        ordre.push(strings.join('?').includes('"Partie"') ? 'verrou-partie' : 'verrou-event');
+        return Promise.resolve([{ id: 'x' }]);
+      });
+      prisma.inscription.findMany.mockResolvedValue([
+        { seance: { eventId: 'evB' } },
+        { seance: { eventId: 'evA' } },
+        { seance: { eventId: 'evB' } },
+      ]);
+      prisma.inscription.deleteMany.mockImplementation(() => {
+        ordre.push('inscriptions');
+        return Promise.resolve({ count: 3 });
+      });
+      polls.removeOpenVotesInTx.mockImplementation(() => {
+        ordre.push('votes');
+        return Promise.resolve(2);
+      });
+      prisma.membership.deleteMany.mockImplementation(() => {
+        ordre.push('adhesion');
+        return Promise.resolve({ count: 1 });
+      });
+
+      await service.leave('p1', 'membre1', { type: 'LEFT' });
+
+      expect(ordre).toEqual([
+        'verrou-partie',
+        'verrou-event',
+        'verrou-event',
+        'inscriptions',
+        'votes',
+        'adhesion',
+      ]);
+      // Seules les inscriptions de la personne, du groupe, à venir (jour UTC aujourd'hui ou plus tard) ou sans date.
+      const { where } = callArg<{ where: Prisma.InscriptionWhereInput }>(
+        prisma.inscription.deleteMany,
+      );
+      expect(where).toEqual({
+        userId: 'membre1',
+        seance: {
+          event: { partieId: 'p1' },
+          OR: [
+            { startDate: null },
+            {
+              startDate: {
+                gte: new Date(`${new Date().toISOString().substring(0, 10)}T00:00:00.000Z`),
+              },
+            },
+          ],
+        },
+      });
+      expect(polls.removeOpenVotesInTx).toHaveBeenCalledWith(expect.anything(), 'p1', 'membre1');
+    });
+
+    it('Story 40.8 : un retrait par un administrateur libère aussi les places et les votes de la cible', async () => {
+      await service.leave('p1', 'membre1', { type: 'REMOVED', byUserId: 'admin1' });
+      expect(prisma.inscription.findMany).toHaveBeenCalled();
+      expect(polls.removeOpenVotesInTx).toHaveBeenCalledWith(expect.anything(), 'p1', 'membre1');
+    });
+
+    it('Story 40.8 : un échec du nettoyage laisse l’adhésion en place (transaction annulée)', async () => {
+      polls.removeOpenVotesInTx.mockRejectedValue(new Error('boom'));
+      await expect(service.leave('p1', 'membre1', { type: 'LEFT' })).rejects.toThrow('boom');
+      expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('Story 40.8 : le dernier administrateur supprime le groupe sans nettoyage (cascade)', async () => {
+      await service.leave('p1', 'admin1', { type: 'LEFT', deleteIfLastAdmin: true });
+      expect(prisma.inscription.findMany).not.toHaveBeenCalled();
+      expect(polls.removeOpenVotesInTx).not.toHaveBeenCalled();
+    });
+
     it("un simple membre n'est jamais « dernier administrateur » : aucun recomptage, le drapeau est ignoré", async () => {
       await service.leave('p1', 'membre1', { type: 'LEFT', deleteIfLastAdmin: true });
       expect(prisma.membership.count).not.toHaveBeenCalled();
@@ -2578,6 +2666,7 @@ describe('PartiesService', () => {
         realtime,
         new EventsService(p, realtime),
         permissions,
+        { removeOpenVotesInTx: jest.fn() } as unknown as PollVoteCleanupService,
       );
 
       const mjResults = (await svc.getAvailableSlots(

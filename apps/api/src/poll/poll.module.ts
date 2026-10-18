@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { PollController } from './poll.controller';
 import { PollService } from './poll.service';
+import { PollVoteCleanupService } from './poll-vote-cleanup.service';
 
 @Module({
   // Story 37.8 : couche 1 — aucune dépendance vers `parties/`, `events/`, `availability/` ni
@@ -10,9 +11,10 @@ import { PollService } from './poll.service';
   // Story 37.6 : PermissionsModule (transverse) décide des droits sur la partie.
   imports: [PermissionsModule],
   controllers: [PollController],
-  providers: [PollService],
+  // Story 40.8 : `PollVoteCleanupService` (sans dépendance) est injecté par `PartiesService.leave()`.
+  providers: [PollService, PollVoteCleanupService],
   // Story 8.7 : ScenariosService orchestre la création d'un poll lié à une séance via
   // PollService.create() — export requis pour l'import cross-module depuis ScenariosModule.
-  exports: [PollService],
+  exports: [PollService, PollVoteCleanupService],
 })
 export class PollModule {}

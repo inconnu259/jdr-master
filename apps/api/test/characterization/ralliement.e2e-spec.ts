@@ -3,6 +3,7 @@ import request, { type Response } from 'supertest';
 import { EventsService } from '../../src/events/events.service';
 import { NotificationsService } from '../../src/notifications/notifications.service';
 import { PartiesService } from '../../src/parties/parties.service';
+import { PollVoteCleanupService } from '../../src/poll/poll-vote-cleanup.service';
 import {
   RealtimeEventsService,
   partieTopic,
@@ -4166,5 +4167,327 @@ describe('Ralliement — prolonger le vote et relancer la veille (Story 40.7)', 
       expect(h.email.calls.slice(before).filter((c) => c.template === RELANCE_MAIL)).toEqual([]);
       expect((await pollRow(poll.id)).relanceSentAt).toBeNull();
     });
+  });
+});
+
+// Story 40.8 — qui quitte un groupe, ou en est retiré, libère ses places et ses votes : inscriptions
+// (`RESERVED` et `CONFIRMED`) aux conjonctions à venir et réponses aux sondages ouverts, dans la
+// transaction de `leave()`. Le passé, les sondages fermés et les conjonctions qu'il organise restent.
+describe('Ralliement — libérer places et votes de qui quitte le groupe (Story 40.8)', () => {
+  let h: Harness;
+  let admin: TestUser;
+  let host: TestUser;
+  let leaver: TestUser;
+  let other: TestUser;
+  let third: TestUser;
+  let groupId: string;
+  let oneShotId: string;
+  let jdrId: string;
+
+  type CardLike = {
+    id: string;
+    seance: { id: string; placesTaken: number } | null;
+    participants: { userId: string; isHost: boolean }[];
+    myInscription: string | null;
+    poll: {
+      id: string;
+      options: { id: string }[];
+      votes: { userId: string }[];
+    } | null;
+  };
+
+  const propose = async (who: TestUser, over: Record<string, unknown> = {}) => {
+    const res = await who.agent
+      .post(`/parties/${groupId}/events`)
+      .send({ title: 'Soirée', date: isoDay(6), slot: 'EVENING', capacity: 6, ...over });
+    expect(res.status).toBe(201);
+    return body<CardLike>(res);
+  };
+  const proposePoll = (who: TestUser, over: Record<string, unknown> = {}) =>
+    propose(who, {
+      date: undefined,
+      slot: undefined,
+      capacity: null,
+      pollOptions: [
+        { date: isoDay(8), slot: 'EVENING' },
+        { date: isoDay(9), slot: 'MORNING' },
+      ],
+      pollDeadline: isoDay(5),
+      ...over,
+    });
+  const signUp = (who: TestUser, seanceId: string) =>
+    who.agent.post(`/scenarios/seances/${seanceId}/inscription`);
+  const reserve = (who: TestUser, seanceId: string, userId: string) =>
+    who.agent.post(`/scenarios/seances/${seanceId}/reservations`).send({ userId });
+  const vote = (who: TestUser, pollId: string, optionId: string) =>
+    who.agent.post(`/parties/${groupId}/poll/${pollId}/vote`).send({ optionId, answer: 'YES' });
+  const leave = (who: TestUser) => who.agent.delete(`/parties/${groupId}/members/me`);
+  const remove = (who: TestUser, targetId: string) =>
+    who.agent.delete(`/parties/${groupId}/members/${targetId}`);
+  const rows = async (seanceId: string) =>
+    (
+      await h.prisma.inscription.findMany({ where: { seanceId }, orderBy: { createdAt: 'asc' } })
+    ).map((i) => [i.userId, i.status]);
+  const votesOf = (pollId: string, userId: string) =>
+    h.prisma.pollVote.count({ where: { pollId, userId } });
+  const cardFor = async (who: TestUser, eventId: string) =>
+    body<CardLike[]>(await who.agent.get(`/parties/${groupId}/events/list`).expect(200)).find(
+      (c) => c.id === eventId,
+    )!;
+  const member = (userId: string) =>
+    h.prisma.membership.findUnique({ where: { userId_partieId: { userId, partieId: groupId } } });
+  const setDay = (seanceId: string, day: string) => {
+    const date = new Date(`${day}T00:00:00.000Z`);
+    return h.prisma.seance.update({
+      where: { id: seanceId },
+      data: { startDate: date, endDate: date },
+    });
+  };
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, host, leaver, other, third] = await Promise.all([
+      h.createUser('lib-admin'),
+      h.createUser('lib-hote'),
+      h.createUser('lib-partant'),
+      h.createUser('lib-autre'),
+      h.createUser('lib-tiers'),
+    ]);
+    ({ id: groupId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'lib', 'ralliement'));
+    for (const who of [host, other, third]) await h.addMember(groupId, who);
+    ({ id: oneShotId } = await h.createPartie(admin, 'ONE_SHOT', 'lib-isolee', 'ralliement'));
+    ({ id: jdrId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'lib-jdr'));
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  // Le départ est le sujet de chaque scénario : la personne est (re)membre avant chacun.
+  beforeEach(async () => {
+    if (!(await member(leaver.id))) await h.addMember(groupId, leaver);
+  });
+
+  it('départ volontaire : places à venir (confirmées, réservées, du jour, sans date) et votes ouverts libérés ; le passé, le sondage fermé et la conjonction hébergée restent ; en direct', async () => {
+    const upcoming = await propose(host, { title: 'À venir' });
+    const reserved = await propose(host, { title: 'Réservée' });
+    const today = await propose(host, { title: 'Aujourd’hui' });
+    const past = await propose(host, { title: 'Passée' });
+    const undated = await proposePoll(host, { title: 'Sans date' });
+    const closed = await proposePoll(host, { title: 'Sondage fermé' });
+    const hosted = await propose(leaver, { title: 'Hébergée' });
+
+    await signUp(leaver, upcoming.seance!.id).expect(201);
+    await reserve(host, reserved.seance!.id, leaver.id).expect(201);
+    await signUp(leaver, today.seance!.id).expect(201);
+    await setDay(today.seance!.id, isoDay(0));
+    await signUp(leaver, past.seance!.id).expect(201);
+    await setDay(past.seance!.id, isoDay(-2));
+    await signUp(leaver, undated.seance!.id).expect(201);
+    await vote(leaver, undated.poll!.id, undated.poll!.options[0].id).expect(201);
+    await vote(leaver, undated.poll!.id, undated.poll!.options[1].id).expect(201);
+    await vote(other, undated.poll!.id, undated.poll!.options[0].id).expect(201);
+    await vote(leaver, closed.poll!.id, closed.poll!.options[0].id).expect(201);
+    await h.prisma.sessionPoll.update({
+      where: { id: closed.poll!.id },
+      data: { status: 'CLOSED' },
+    });
+    await signUp(other, hosted.seance!.id).expect(201);
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    const notify = jest.spyOn(h.app.get(PartiesService), 'notifyPartieSignalsChanged');
+    try {
+      await leave(leaver).expect(200);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(emit).toHaveBeenCalledWith(userTopic(leaver.id));
+      expect(notify).toHaveBeenCalledWith(groupId, expect.anything());
+    } finally {
+      emit.mockRestore();
+      notify.mockRestore();
+    }
+
+    expect(await member(leaver.id)).toBeNull();
+    // Libérés.
+    expect(await rows(upcoming.seance!.id)).toEqual([]);
+    expect(await rows(reserved.seance!.id)).toEqual([]);
+    expect(await rows(today.seance!.id)).toEqual([]);
+    expect(await rows(undated.seance!.id)).toEqual([]);
+    expect(await votesOf(undated.poll!.id, leaver.id)).toBe(0);
+    // Conservés : le passé (la personne y reste parmi les participants), le sondage fermé, l'hébergée.
+    expect(await rows(past.seance!.id)).toEqual([[leaver.id, 'CONFIRMED']]);
+    expect(await votesOf(closed.poll!.id, leaver.id)).toBe(1);
+    expect(await h.prisma.event.count({ where: { id: hosted.id, ownerId: leaver.id } })).toBe(1);
+    expect(await rows(hosted.seance!.id)).toEqual([[other.id, 'CONFIRMED']]);
+    // Les votes des autres ne bougent pas.
+    expect(await votesOf(undated.poll!.id, other.id)).toBe(1);
+
+    // Les cartes des autres membres suivent : places libérées, résumé du sondage sans le partant.
+    expect((await cardFor(host, upcoming.id)).participants.map((p) => p.userId)).toEqual([host.id]);
+    expect((await cardFor(third, upcoming.id)).seance?.placesTaken).toBe(1);
+    expect((await cardFor(host, reserved.id)).seance?.placesTaken).toBe(1);
+    const summary = (await cardFor(host, undated.id)).poll!;
+    expect(summary.votes.map((v) => v.userId)).toEqual([other.id]);
+    expect((await cardFor(host, past.id)).participants.map((p) => p.userId)).toContain(leaver.id);
+  });
+
+  it('retrait par un administrateur : la place réservée est libérée et le signal « réservation à confirmer » disparaît', async () => {
+    const card = await propose(host, { title: 'Réservée au retiré', capacity: 4 });
+    await reserve(host, card.seance!.id, leaver.id).expect(201);
+    const signals = async () =>
+      body<Record<string, { signals: string[] }>>(
+        await leaver.agent.get('/me/party-signals').expect(200),
+      )[groupId]?.signals ?? [];
+    expect(await signals()).toContain('RESERVATION_A_CONFIRMER');
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    try {
+      await remove(admin, leaver.id).expect(200);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(emit).toHaveBeenCalledWith(userTopic(leaver.id));
+    } finally {
+      emit.mockRestore();
+    }
+
+    expect(await rows(card.seance!.id)).toEqual([]);
+    expect((await cardFor(host, card.id)).seance?.placesTaken).toBe(1);
+    expect(await member(leaver.id)).toBeNull();
+    // Plus membre : le groupe ne figure plus dans ses signaux.
+    expect(await signals()).not.toContain('RESERVATION_A_CONFIRMER');
+  });
+
+  it('dernière place : un inscrit part, un autre membre s’inscrit aussitôt avec succès', async () => {
+    const card = await propose(host, { title: 'Dernière place', capacity: 2 });
+    await signUp(leaver, card.seance!.id).expect(201);
+    expect((await signUp(third, card.seance!.id)).status).toBe(409);
+
+    await leave(leaver).expect(200);
+
+    await signUp(third, card.seance!.id).expect(201);
+    expect(await rows(card.seance!.id)).toEqual([[third.id, 'CONFIRMED']]);
+  });
+
+  it('sondage ouvert : les votes du partant disparaissent, ceux des autres restent', async () => {
+    const card = await proposePoll(host, { title: 'Sondage ouvert' });
+    const [o1, o2] = card.poll!.options;
+    await vote(leaver, card.poll!.id, o1.id).expect(201);
+    await vote(leaver, card.poll!.id, o2.id).expect(201);
+    await vote(third, card.poll!.id, o1.id).expect(201);
+    expect((await cardFor(host, card.id)).poll!.votes).toHaveLength(3);
+
+    await leave(leaver).expect(200);
+
+    const summary = (await cardFor(host, card.id)).poll!;
+    expect(summary.votes.map((v) => v.userId)).toEqual([third.id]);
+  });
+
+  it('un échec du nettoyage annule tout : adhésion, places et votes intacts, rien n’est émis', async () => {
+    const card = await proposePoll(host, { title: 'Atomicité' });
+    await signUp(leaver, card.seance!.id).expect(201);
+    await vote(leaver, card.poll!.id, card.poll!.options[0].id).expect(201);
+    const dated = await propose(host, { title: 'Atomicité datée' });
+    await signUp(leaver, dated.seance!.id).expect(201);
+
+    const fail = jest
+      .spyOn(h.app.get(PollVoteCleanupService), 'removeOpenVotesInTx')
+      .mockRejectedValue(new Error('boom'));
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    try {
+      const res = await leave(leaver);
+      expect(res.status).toBe(500);
+      expect(emit).not.toHaveBeenCalled();
+    } finally {
+      fail.mockRestore();
+      emit.mockRestore();
+    }
+
+    expect(await member(leaver.id)).not.toBeNull();
+    // Les inscriptions déjà supprimées plus tôt dans la transaction sont revenues.
+    expect(await rows(card.seance!.id)).toEqual([[leaver.id, 'CONFIRMED']]);
+    expect(await rows(dated.seance!.id)).toEqual([[leaver.id, 'CONFIRMED']]);
+    expect(await votesOf(card.poll!.id, leaver.id)).toBe(1);
+  });
+
+  it('seul le groupe quitté est nettoyé : une inscription dans un autre groupe reste', async () => {
+    const { id: otherGroupId } = await h.createPartie(
+      admin,
+      'CAMPAGNE_EPISODIQUE',
+      'lib-autre-groupe',
+      'ralliement',
+    );
+    await h.addMember(otherGroupId, leaver);
+    const res = await admin.agent
+      .post(`/parties/${otherGroupId}/events`)
+      .send({ title: 'Ailleurs', date: isoDay(6), slot: 'EVENING', capacity: 4 });
+    const elsewhere = body<CardLike>(res);
+    await signUp(leaver, elsewhere.seance!.id).expect(201);
+    const here = await propose(host, { title: 'Ici' });
+    await signUp(leaver, here.seance!.id).expect(201);
+
+    await leave(leaver).expect(200);
+
+    expect(await rows(here.seance!.id)).toEqual([]);
+    expect(await rows(elsewhere.seance!.id)).toEqual([[leaver.id, 'CONFIRMED']]);
+  });
+
+  it('JDR : le retrait par le MJ garde inscriptions et votes (comportement inchangé)', async () => {
+    await h.addMember(jdrId, leaver);
+    const event = await h.prisma.event.create({
+      data: { partieId: jdrId, title: 'Séance jdr', ownerId: admin.id },
+    });
+    const day = new Date(`${isoDay(6)}T00:00:00.000Z`);
+    const seance = await h.prisma.seance.create({
+      data: {
+        eventId: event.id,
+        startDate: day,
+        endDate: day,
+        startSlot: 'EVENING',
+        endSlot: 'EVENING',
+      },
+    });
+    await h.prisma.inscription.create({ data: { seanceId: seance.id, userId: leaver.id } });
+    const poll = await h.prisma.sessionPoll.create({
+      data: {
+        partieId: jdrId,
+        createdById: admin.id,
+        expiresAt: new Date(Date.now() + 3 * 86_400_000),
+        options: { create: [{ date: new Date(`${isoDay(8)}T00:00:00.000Z`), slot: 'EVENING' }] },
+      },
+      include: { options: true },
+    });
+    await h.prisma.pollVote.create({
+      data: { pollId: poll.id, optionId: poll.options[0].id, userId: leaver.id, answer: 'YES' },
+    });
+
+    await admin.agent.delete(`/parties/${jdrId}/members/${leaver.id}`).expect(200);
+
+    expect(await rows(seance.id)).toEqual([[leaver.id, 'CONFIRMED']]);
+    expect(await votesOf(poll.id, leaver.id)).toBe(1);
+  });
+
+  it('rencontre isolée : le départ reste refusé (403), inscription intacte', async () => {
+    await h.addMember(oneShotId, leaver);
+    const event = await h.prisma.event.findFirstOrThrow({ where: { partieId: oneShotId } });
+    const seance = await h.prisma.seance.findFirstOrThrow({ where: { eventId: event.id } });
+    await h.prisma.inscription.create({ data: { seanceId: seance.id, userId: leaver.id } });
+
+    await leaver.agent.delete(`/parties/${oneShotId}/members/me`).expect(403);
+
+    expect(await rows(seance.id)).toEqual([[leaver.id, 'CONFIRMED']]);
+  });
+
+  it('dernier administrateur : le groupe est supprimé sans nettoyage (cascade), comme avant', async () => {
+    const { id: soloId } = await h.createPartie(
+      third,
+      'CAMPAGNE_EPISODIQUE',
+      'lib-solo',
+      'ralliement',
+    );
+    const res = await third.agent
+      .post(`/parties/${soloId}/events`)
+      .send({ title: 'Solo', date: isoDay(6), slot: 'EVENING', capacity: 4 });
+    const eventId = body<CardLike>(res).id;
+    await third.agent.delete(`/parties/${soloId}/members/me?deleteIfLastAdmin=true`).expect(200);
+    expect(await h.prisma.partie.count({ where: { id: soloId } })).toBe(0);
+    expect(await h.prisma.event.count({ where: { id: eventId } })).toBe(0);
   });
 });

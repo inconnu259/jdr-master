@@ -70,6 +70,8 @@ function makePrisma() {
       createMany: jest.fn(),
       deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      // Story 40.8 : inscriptions à venir de qui quitte le groupe.
+      findMany: jest.fn().mockResolvedValue([]),
     },
     // Story 40.4 : appartenance des personnes à qui une place est réservée.
     membership: { findMany: jest.fn().mockResolvedValue([]) },
@@ -1549,6 +1551,63 @@ describe('EventsService (Story 37.3)', () => {
 
         await expect(service.reservationNotice('e1', ['cible'])).resolves.toBeNull();
       });
+    });
+  });
+
+  describe('releaseUpcomingInscriptionsInTx() — départ du groupe (Story 40.8)', () => {
+    const today = new Date().toISOString().substring(0, 10);
+
+    it("sans inscription à venir : rien n'est verrouillé ni supprimé", async () => {
+      prisma.tx.inscription.findMany.mockResolvedValue([]);
+      await expect(
+        service.releaseUpcomingInscriptionsInTx(prisma.tx as never, 'p1', 'u1'),
+      ).resolves.toBe(0);
+      expect(prisma.tx.$queryRaw).not.toHaveBeenCalled();
+      expect(prisma.tx.inscription.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('verrouille les événements concernés (triés, sans doublon) PUIS supprime les lignes à venir de la personne', async () => {
+      const ordre: string[] = [];
+      prisma.tx.inscription.findMany.mockResolvedValue([
+        { seance: { eventId: 'evB' } },
+        { seance: { eventId: 'evA' } },
+        { seance: { eventId: 'evB' } },
+      ]);
+      prisma.tx.$queryRaw.mockImplementation((_s: TemplateStringsArray, id: string) => {
+        ordre.push(`verrou:${id}`);
+        return Promise.resolve([{ id }]);
+      });
+      prisma.tx.inscription.deleteMany.mockImplementation(() => {
+        ordre.push('delete');
+        return Promise.resolve({ count: 3 });
+      });
+
+      await expect(
+        service.releaseUpcomingInscriptionsInTx(prisma.tx as never, 'p1', 'u1'),
+      ).resolves.toBe(3);
+
+      expect(ordre).toEqual(['verrou:evA', 'verrou:evB', 'delete']);
+      // Aucune émission : l'appelant émet après son commit.
+      expect(realtime.emit).not.toHaveBeenCalled();
+    });
+
+    it("ne vise que la personne, la partie, et les séances d'aujourd'hui ou plus tard (jour UTC) ou sans date — réservées comme confirmées", async () => {
+      prisma.tx.inscription.findMany.mockResolvedValue([{ seance: { eventId: 'evA' } }]);
+      await service.releaseUpcomingInscriptionsInTx(prisma.tx as never, 'p1', 'u1');
+      const where = callArg<{ where: Prisma.InscriptionWhereInput }>(
+        prisma.tx.inscription.deleteMany,
+      ).where;
+      expect(where).toEqual({
+        userId: 'u1',
+        seance: {
+          event: { partieId: 'p1' },
+          OR: [{ startDate: null }, { startDate: { gte: new Date(`${today}T00:00:00.000Z`) } }],
+        },
+      });
+      // Aucun filtre de statut : `RESERVED` et `CONFIRMED` sont libérés.
+      expect(JSON.stringify(where)).not.toContain('status');
+      // La même condition sert à choisir les verrous et à supprimer.
+      expect(callArg<{ where: unknown }>(prisma.tx.inscription.findMany).where).toEqual(where);
     });
   });
 
