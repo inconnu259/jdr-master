@@ -4491,3 +4491,78 @@ describe('Ralliement — libérer places et votes de qui quitte le groupe (Story
     expect(await h.prisma.event.count({ where: { id: eventId } })).toBe(0);
   });
 });
+
+// ─── Soirée isolée : lecture de son événement unique (Story 41.1) ──────────────────────────
+//
+// La page d'une soirée isolée (ralliement ONE_SHOT) affiche en ligne l'unique événement créé avec
+// elle, lu par la liste existante de la partie. Les refus propres à la soirée (un seul
+// administrateur, pas de second événement, pas de déplacement) sont couverts plus haut : rôles
+// (39.4), départ (39.5), proposer (40.1), modifier (40.2), s'inscrire (40.3).
+describe('Ralliement — lire l’événement unique d’une soirée isolée (Story 41.1)', () => {
+  let h: Harness;
+  let admin: TestUser;
+  let guest: TestUser;
+  let stranger: TestUser;
+  let soireeId: string;
+
+  type CardLike = {
+    id: string;
+    title: string;
+    hostId: string | null;
+    seance: { id: string; date: string | null; capacity: number | null } | null;
+    participants: { userId: string; isHost: boolean }[];
+  };
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, guest, stranger] = await Promise.all([
+      h.createUser('soiree-hote'),
+      h.createUser('soiree-invite'),
+      h.createUser('soiree-etranger'),
+    ]);
+    ({ id: soireeId } = await h.createPartie(admin, 'ONE_SHOT', 'soiree', 'ralliement'));
+    await h.addMember(soireeId, guest);
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it('l’hôte et un invité lisent exactement un événement : titre de la soirée, hôte = créateur, non daté, sans limite', async () => {
+    const partie = body<{ name: string }>(await admin.agent.get(`/parties/${soireeId}`).expect(200));
+    for (const who of [admin, guest]) {
+      const list = body<CardLike[]>(
+        await who.agent.get(`/parties/${soireeId}/events/list`).expect(200),
+      );
+      expect(list).toHaveLength(1);
+      const [card] = list;
+      expect(card.title).toBe(partie.name);
+      expect(card.hostId).toBe(admin.id);
+      expect(card.seance?.date).toBeNull();
+      expect(card.seance?.capacity).toBeNull();
+    }
+  });
+
+  it('l’hôte figure parmi les participants de la carte ; les invités sont lus dans la liste des membres de la partie', async () => {
+    const [card] = body<CardLike[]>(
+      await guest.agent.get(`/parties/${soireeId}/events/list`).expect(200),
+    );
+    expect(card.participants.find((p) => p.userId === admin.id)?.isHost).toBe(true);
+    const members = body<{ userId: string }[]>(
+      await guest.agent.get(`/parties/${soireeId}/members`).expect(200),
+    );
+    expect(members.map((m) => m.userId).sort()).toEqual([admin.id, guest.id].sort());
+  });
+
+  it('un étranger à la soirée ne lit rien de son événement (403)', async () => {
+    await stranger.agent.get(`/parties/${soireeId}/events/list`).expect(403);
+  });
+
+  it('la soirée reste à un seul événement : proposer une conjonction est refusé (403), même à l’hôte', async () => {
+    await admin.agent
+      .post(`/parties/${soireeId}/events`)
+      .send({ title: 'Second', date: isoDay(5), slot: 'EVENING' })
+      .expect(403);
+    expect(await h.prisma.event.count({ where: { partieId: soireeId } })).toBe(1);
+  });
+});

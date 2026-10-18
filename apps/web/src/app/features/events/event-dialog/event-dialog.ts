@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   Component,
   computed,
@@ -96,7 +97,14 @@ let nextUid = 0;
  */
 @Component({
   selector: 'app-event-dialog',
-  imports: [MatButtonModule, DetailSurface, StatusBadge, ParticipantChip, EventForm],
+  imports: [
+    MatButtonModule,
+    NgTemplateOutlet,
+    DetailSurface,
+    StatusBadge,
+    ParticipantChip,
+    EventForm,
+  ],
   templateUrl: './event-dialog.html',
   styleUrl: './event-dialog.scss',
 })
@@ -111,6 +119,10 @@ export class EventDialog {
   /** Clé `YYYY-MM-DD` du jour courant, figée par l'écran parent. */
   readonly todayKey = input.required<string>();
   readonly currentUserId = input<string | null>(null);
+  /** Story 41.1 : rendu EN LIGNE (page d'une rencontre isolée) au lieu de la fenêtre — mêmes blocs, sans
+   *  `DetailSurface`, sans participants ni actions d'inscription/réservation/modification (la modification
+   *  par l'hôte arrive avec la Story 41.2), participation « sur invitation », pied omis. */
+  readonly inline = input(false);
   /** Carte à jour renvoyée par le serveur (modification par l'hôte, inscription, désinscription) :
    *  l'onglet la met à jour tout de suite. */
   readonly saved = output<EventCardDto>();
@@ -147,28 +159,29 @@ export class EventDialog {
 
   protected readonly past = computed(() => isPastEvent(this.card(), this.todayKey()));
   protected readonly canEdit = computed(
-    () => isHostOf(this.card(), this.currentUserId()) && !this.past(),
+    () => !this.inline() && isHostOf(this.card(), this.currentUserId()) && !this.past(),
   );
   protected readonly badge = computed(() =>
     eventBadge(this.card(), this.todayKey(), this.theme.tone(), this.currentUserId()),
   );
-  protected readonly showSignUp = computed(() =>
-    canSignUp(this.card(), this.currentUserId(), this.todayKey()),
+  protected readonly showSignUp = computed(
+    () => !this.inline() && canSignUp(this.card(), this.currentUserId(), this.todayKey()),
   );
   /** « Complet », écrit, à la place de « S'inscrire » : seulement pour qui n'est pas inscrit. */
-  protected readonly showFull = computed(() =>
-    isFullForViewer(this.card(), this.currentUserId(), this.todayKey()),
+  protected readonly showFull = computed(
+    () => !this.inline() && isFullForViewer(this.card(), this.currentUserId(), this.todayKey()),
   );
-  protected readonly showUnsubscribe = computed(() =>
-    canUnsubscribe(this.card(), this.currentUserId(), this.todayKey()),
+  protected readonly showUnsubscribe = computed(
+    () => !this.inline() && canUnsubscribe(this.card(), this.currentUserId(), this.todayKey()),
   );
   /** Story 40.4 : « Accepter » / « Décliner » pour qui tient une place réservée. */
-  protected readonly showRespond = computed(() =>
-    canRespondToReservation(this.card(), this.todayKey()),
+  protected readonly showRespond = computed(
+    () => !this.inline() && canRespondToReservation(this.card(), this.todayKey()),
   );
   /** Story 40.4 : l'hôte gère les réservations (places limitées, pas passée). */
-  protected readonly canReserve = computed(() =>
-    canManageReservations(this.card(), this.currentUserId(), this.todayKey()),
+  protected readonly canReserve = computed(
+    () =>
+      !this.inline() && canManageReservations(this.card(), this.currentUserId(), this.todayKey()),
   );
   /** Membres à qui une place peut encore être réservée : ni l'hôte, ni quiconque a déjà une ligne
    *  (l'hôte voit toutes les lignes, réservées comprises, dans les participants). */
@@ -204,7 +217,9 @@ export class EventDialog {
   protected readonly dateLabel = computed(() => eventDateLabel(this.card(), this.theme.tone()));
   protected readonly situationText = computed(
     () =>
-      this.theme.tone()[eventSituationTextKey(this.card(), this.currentUserId(), this.todayKey())],
+      this.theme.tone()[
+        eventSituationTextKey(this.card(), this.currentUserId(), this.todayKey(), this.inline())
+      ],
   );
   protected readonly timeText = computed(() => {
     const time = this.card().seance?.heureRdv;
@@ -213,8 +228,13 @@ export class EventDialog {
       : null;
   });
   protected readonly participation = computed(() =>
-    participationLine(this.card(), this.theme.tone()),
+    this.inline()
+      ? this.theme.tone()['partie.ralliement_soiree_participation']
+      : participationLine(this.card(), this.theme.tone()),
   );
+  /** Le pied (« Modifier », « Refermer »…) n'existe que dans la fenêtre : en ligne, aucune action ne s'y
+   *  pose encore et « Refermer » n'a pas de sens. */
+  protected readonly hasFooter = computed(() => !this.inline());
   protected readonly windowTitle = computed(() =>
     this.editing() ? this.theme.tone()['partie.ralliement_event_edit_title'] : this.card().title,
   );

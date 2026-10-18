@@ -79,6 +79,7 @@ import { CharacterRolesService } from '../../../core/character-roles/character-r
 import { HommeDragonAventurePanel } from '../../homme-dragon/homme-dragon-aventure-panel/homme-dragon-aventure-panel';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
 import { ConjonctionsTab } from '../../events/conjonctions-tab/conjonctions-tab';
+import { SoireeTab } from '../../events/soiree-tab/soiree-tab';
 import { EventsApiService } from '../../events/events-api.service';
 
 /** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
@@ -121,6 +122,7 @@ const SEARCH_DEBOUNCE_MS = 500;
     IdentityLabel,
     StatusBadge,
     ConjonctionsTab,
+    SoireeTab,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
@@ -218,10 +220,27 @@ export class PartieDetail implements OnInit {
 
   /** Story 39.1 : un groupe (ralliement `CAMPAGNE_EPISODIQUE`) s'ouvre sur ses conjonctions. Dérivé
    *  de la famille et de la nature — jamais d'un id de système codé en dur. Une rencontre unique
-   *  (`ONE_SHOT`) garde « Détails » + « Missives » (sa page relève de l'epic 41). */
+   *  (`ONE_SHOT`) est une soirée isolée (`isSoiree`). */
   protected readonly isGroup = computed(
     () => this.isRalliement() && this.partie()?.kind === 'CAMPAGNE_EPISODIQUE',
   );
+
+  /** Story 41.1 : une soirée isolée (ralliement `ONE_SHOT`) s'ouvre sur le détail EN LIGNE de son
+   *  unique événement : pas de liste, pas d'onglet « Détails ». Même dérivation que `isGroup`
+   *  (famille + nature, jamais un id de système codé en dur). */
+  protected readonly isSoiree = computed(
+    () => this.isRalliement() && this.partie()?.kind === 'ONE_SHOT',
+  );
+
+  /** Libellé du second onglet d'un ralliement : « Missives » (thème) pour un groupe ; pour une soirée
+   *  isolée, « Invitations » côté hôte (administrateur) et « Invités » côté invité (Story 41.1). */
+  protected readonly membersTabLabel = computed(() => {
+    const tone = this.theme.tone();
+    if (!this.isSoiree()) return tone['partie.invitations_tab_label'];
+    return this.partie()?.role === 'admin'
+      ? tone['partie.ralliement_soiree_invitations_tab']
+      : tone['partie.ralliement_soiree_guests_tab'];
+  });
 
   /** Le MJ a accès à l'invitation et à la gestion des membres/liens. Jamais dans un ralliement :
    *  son créateur y est `admin` (rôle serveur), pas MJ — sa page et ses actions sont celles de sa famille (Story 38.4). */

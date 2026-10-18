@@ -921,6 +921,11 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_conjonctions_past',
     'partie.ralliement_conjonctions_upcoming_empty',
     'partie.ralliement_conjonctions_past_empty',
+    // Story 41.1 : seconds onglets et ligne de participation d’une soirée isolée, mots fonctionnels
+    // identiques (le premier onglet, au nom du thème, a sa voix et n’est pas listé ici)
+    'partie.ralliement_soiree_guests_tab',
+    'partie.ralliement_soiree_invitations_tab',
+    'partie.ralliement_soiree_participation',
     // Story 39.4 : badge, boutons et confirmation de nomination des administrateurs d’un groupe,
     // verbatim du contrat d’UI (identiques dans les trois thèmes) ; « Vous restez membre » prend le
     // tutoiement de la forêt, donc sa clé a une voix et n’est pas listée ici
@@ -1417,6 +1422,25 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     }
   });
 
+  // Story 41.1 : la page d'une rencontre isolée nomme son premier onglet au singulier avec les mots du
+  // thème ; « Invités » / « Invitations » et la ligne de participation sont communs aux trois thèmes.
+  it('Story 41.1 : les onglets d’une rencontre isolée ont une voix par thème, sans mot de JDR', () => {
+    const attendu: Record<Theme, string> = {
+      'grimoire-emeraude': 'Conjonction',
+      'foret-ancienne': 'Halte',
+      'atelier-cuivre': 'Réunion',
+    };
+    for (const theme of THEMES) {
+      const tone = TONE_MAP[theme];
+      expect(tone['partie.ralliement_soiree_tab'], theme).toBe(attendu[theme]);
+      expect(tone['partie.ralliement_soiree_guests_tab'], theme).toBe('Invités');
+      expect(tone['partie.ralliement_soiree_invitations_tab'], theme).toBe('Invitations');
+      expect(tone['partie.ralliement_soiree_participation'], theme).toBe(
+        'Sur invitation · pas de limite',
+      );
+    }
+  });
+
   // Story 40.1 : la rencontre d'un groupe porte le nom du thème (Conjonction / Halte / Réunion) sur
   // le bouton, le titre de la fenêtre, le libellé du nom et le bouton de création ; les mots du
   // contrat d'UI (« Renoncer », « Tous les membres », « Places limitées », chips) sont identiques.
@@ -1580,7 +1604,9 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
       }
     }
     for (const theme of THEMES) {
-      expect(TONE_MAP[theme]['partie.ralliement_event_reserve_chip_aria'], theme).toContain('{name}');
+      expect(TONE_MAP[theme]['partie.ralliement_event_reserve_chip_aria'], theme).toContain(
+        '{name}',
+      );
       expect(TONE_MAP[theme]['partie.ralliement_event_unreserve_aria'], theme).toContain('{name}');
       // Le texte de l’hôte reste lisible en toutes lettres : « <nom> — invité·e, n’a pas encore accepté ».
       expect(TONE_MAP[theme]['partie.ralliement_event_pending_text'], theme).toBe(
@@ -1728,7 +1754,9 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     for (const [key, attendu] of Object.entries(neutres)) {
       for (const theme of THEMES) expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(attendu);
     }
-    const erreurs = THEMES.map((theme) => TONE_MAP[theme]['partie.ralliement_event_fix_date_error']);
+    const erreurs = THEMES.map(
+      (theme) => TONE_MAP[theme]['partie.ralliement_event_fix_date_error'],
+    );
     expect(new Set(erreurs).size).toBe(THEMES.length);
     // « Renoncer » (annulation) et « Votre accord » (titre) existent déjà dans chaque thème.
     for (const theme of THEMES) {

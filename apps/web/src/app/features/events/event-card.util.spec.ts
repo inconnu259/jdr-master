@@ -212,6 +212,21 @@ describe('event-card.util (Story 40.1)', () => {
       );
     });
 
+    it('soirée isolée (Story 41.1) : tout membre non hôte « participe », sans ligne d’inscription', () => {
+      const futur = withPeople(8, 2);
+      const passe = card('p', '2026-10-01', { participants: futur.participants });
+      expect(eventSituationTextKey(futur, 'x', TODAY, true)).toBe(
+        'partie.ralliement_event_situation_registered',
+      );
+      expect(eventSituationTextKey(passe, 'x', TODAY, true)).toBe(
+        'partie.ralliement_event_situation_registered_past',
+      );
+      // L'hôte reste l'hôte.
+      expect(eventSituationTextKey(futur, 'hote', TODAY, true)).toBe(
+        'partie.ralliement_event_situation_host',
+      );
+    });
+
     it('participation : « 8 places · 5 inscrits · 3 libres » (l’hôte compte), accords du français, « Tous les membres »', () => {
       expect(participationLine(withPeople(8, 5), TONE)).toBe('8 places · 5 inscrits · 3 libres');
       expect(participationLine(withPeople(2, 1), TONE)).toBe('2 places · 1 inscrit · 1 libre');
@@ -393,12 +408,12 @@ describe('event-card.util (Story 40.1)', () => {
       expect(canRespondToReservation(held({ myInscription: 'RESERVED' }), TODAY)).toBe(true);
       expect(canRespondToReservation(held({ myInscription: 'CONFIRMED' }), TODAY)).toBe(false);
       expect(canRespondToReservation(held(), TODAY)).toBe(false);
-      expect(canRespondToReservation(held({ myInscription: 'RESERVED' }, '2026-10-01'), TODAY)).toBe(
-        false,
-      );
-      expect(canRespondToReservation(held({ myInscription: 'RESERVED', seance: null }), TODAY)).toBe(
-        false,
-      );
+      expect(
+        canRespondToReservation(held({ myInscription: 'RESERVED' }, '2026-10-01'), TODAY),
+      ).toBe(false);
+      expect(
+        canRespondToReservation(held({ myInscription: 'RESERVED', seance: null }), TODAY),
+      ).toBe(false);
     });
 
     it('gérer les réservations : l’hôte, places limitées, pas passée', () => {
@@ -451,7 +466,10 @@ describe('event-card.util (Story 40.1)', () => {
       expect(pollRangeLabel([])).toBe('');
       expect(pollSlotLabel({ date: '2026-10-24', slot: 'EVENING' })).toBe('sam. 24 oct. · soir');
       expect(
-        pollSummaryLabel([{ date: '2026-10-17' }, { date: '2026-10-25' }, { date: '2026-10-20' }], TONE),
+        pollSummaryLabel(
+          [{ date: '2026-10-17' }, { date: '2026-10-25' }, { date: '2026-10-20' }],
+          TONE,
+        ),
       ).toBe('3 créneaux · sam. 17 → dim. 25 oct.');
     });
 
@@ -484,7 +502,10 @@ describe('event-card.util (Story 40.1)', () => {
       const todo = eventBadge(pollCard(), TODAY, TONE, 'a');
       expect(todo).toMatchObject({ tone: 'todo', text: 'Vote en cours' });
       const voted = pollCard({ votes: [{ optionId: 'o1', userId: 'a', answer: 'YES' }] });
-      expect(eventBadge(voted, TODAY, TONE, 'a')).toMatchObject({ tone: 'live', text: 'Vote en cours' });
+      expect(eventBadge(voted, TODAY, TONE, 'a')).toMatchObject({
+        tone: 'live',
+        text: 'Vote en cours',
+      });
       expect(eventBadge(pollCard({ eligibleVoterIds: [HOST] }), TODAY, TONE, 'a')).toMatchObject({
         tone: 'live',
       });
@@ -593,9 +614,9 @@ describe('event-card.util (Story 40.1)', () => {
     });
 
     it('panneau d’un lecteur non éligible ; aucun panneau pour une conjonction datée', () => {
-      expect(
-        pollPanel(pollCard({ eligibleVoterIds: [HOST] }), 'a', TODAY, TONE, name)?.kind,
-      ).toBe('not-eligible');
+      expect(pollPanel(pollCard({ eligibleVoterIds: [HOST] }), 'a', TODAY, TONE, name)?.kind).toBe(
+        'not-eligible',
+      );
       expect(pollPanel(card('d', '2026-10-24'), 'a', TODAY, TONE, name)).toBeNull();
     });
 
@@ -663,7 +684,12 @@ describe('event-card.util (Story 40.1)', () => {
     });
 
     it('à égalité parfaite : le plus proche d’abord, le matin avant le soir d’un même jour ; sans réponse, ordre chronologique', () => {
-      expect(rankedPollSlots(pollCard([]), TODAY).map((r) => r.id)).toEqual(['o1', 'o2', 'o3', 'o4']);
+      expect(rankedPollSlots(pollCard([]), TODAY).map((r) => r.id)).toEqual([
+        'o1',
+        'o2',
+        'o3',
+        'o4',
+      ]);
       // Moins de « non » l’emporte sur la date.
       const fewerNo = rankedPollSlots(
         pollCard([answer('o4', HOST, 'YES'), answer('o1', HOST, 'YES'), answer('o1', 'a', 'NO')]),
@@ -674,7 +700,11 @@ describe('event-card.util (Story 40.1)', () => {
 
     it('seules les réponses des votants éligibles comptent (comme le meilleur créneau du panneau)', () => {
       const ranked = rankedPollSlots(
-        pollCard([answer('o4', 'parti', 'YES'), answer('o4', 'autre', 'YES'), answer('o1', 'a', 'YES')]),
+        pollCard([
+          answer('o4', 'parti', 'YES'),
+          answer('o4', 'autre', 'YES'),
+          answer('o1', 'a', 'YES'),
+        ]),
         TODAY,
       );
       expect(ranked[0]).toMatchObject({ id: 'o1', yes: 1 });
@@ -693,9 +723,9 @@ describe('event-card.util (Story 40.1)', () => {
     });
 
     it('décompte écrit : « n oui · n peut-être · n non »', () => {
-      expect(pollCountsLabel({ id: 'x', label: 'x', yes: 4, maybe: 0, no: 1, past: false }, TONE)).toBe(
-        '4 oui · 0 peut-être · 1 non',
-      );
+      expect(
+        pollCountsLabel({ id: 'x', label: 'x', yes: 4, maybe: 0, no: 1, past: false }, TONE),
+      ).toBe('4 oui · 0 peut-être · 1 non');
     });
 
     it('« Fixer la date… » : l’hôte seul, sondage ouvert (même échéance dépassée) avec au moins un créneau, séance sans date', () => {

@@ -3426,8 +3426,9 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
   afterEach(() => TestBed.resetTestingModule());
 
   const OTHER_ID = 'member-2';
-  // Story 39.1 : un groupe (CAMPAGNE_EPISODIQUE) s'ouvre désormais sur ses conjonctions (describe
-  // dédié plus bas) ; la rencontre isolée garde « Détails » + « Missives » tels que validés en 38.4.
+  // Story 39.1 : un groupe (CAMPAGNE_EPISODIQUE) s'ouvre sur ses conjonctions (describe dédié plus
+  // bas). Story 41.1 ⚠️ : la rencontre isolée (ONE_SHOT, fixture par défaut ci-dessous) perd « Détails »
+  // au profit du détail en ligne de son événement ; les cas qui parlent de « Détails » prennent un groupe.
   const ralliement = (over: Partial<PartieDto> = {}) =>
     makePartie({
       gameSystemId: 'ralliement',
@@ -3467,16 +3468,27 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
     ['admin', MJ_ID, 'admin'],
     ['membre', OTHER_ID, 'member'],
   ] as const)('%s : exactement deux onglets, Détails puis Missives', async (_nom, userId, role) => {
-    const { el } = await createFixture(ralliement({ role }), userId, { members });
+    // Story 41.1 ⚠️ : la soirée isolée (ONE_SHOT) a ses propres onglets (describe dédié plus bas) ;
+    // « Détails puis Missives » est ici celui d'un groupe, après ses Conjonctions.
+    const { el } = await createFixture(ralliement({ role, kind: 'CAMPAGNE_EPISODIQUE' }), userId, {
+      members,
+    });
     const tone = TONE_MAP['grimoire-emeraude'];
     expect(tabLabels(el)).toEqual([
+      tone['partie.ralliement_conjonctions_tab'],
       tone['parties.detail_tab_details'],
       tone['partie.invitations_tab_label'],
     ]);
   });
 
   it('Détails : la description seule, ni widget de séance, ni calendrier, ni vote, ni XP', async () => {
-    const { el } = await createFixture(ralliement(), MJ_ID, { members });
+    const { fixture, el } = await createFixture(
+      ralliement({ kind: 'CAMPAGNE_EPISODIQUE' }),
+      MJ_ID,
+      { members, noopAnimations: true },
+    );
+    el.querySelectorAll<HTMLElement>('div[role="tab"]')[1].click();
+    fixture.detectChanges();
     expect(
       el.querySelector('.details-zone--reference .zone-card--reference')?.textContent,
     ).toContain('Un soir de partage');
@@ -3624,8 +3636,8 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
     'thème %s : description vide, homonymie et clôture parlent le langage du ralliement',
     async (theme) => {
       const tone = TONE_MAP[theme];
-      const { el } = await createFixture(
-        ralliement({ description: null, status: 'TERMINEE' }),
+      const { fixture, el } = await createFixture(
+        ralliement({ description: null, status: 'TERMINEE', kind: 'CAMPAGNE_EPISODIQUE' }),
         MJ_ID,
         {
           members: [
@@ -3640,11 +3652,15 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
           ],
           theme,
           displayName: 'Test',
+          noopAnimations: true,
         },
       );
       expect(el.querySelector('.homonymy-warning')?.textContent).toContain(
         tone['identity.ralliement_homonymy_warning'],
       );
+      // Story 41.1 : la description se lit dans « Détails », second onglet d'un groupe.
+      el.querySelectorAll<HTMLElement>('div[role="tab"]')[1].click();
+      fixture.detectChanges();
       expect(el.textContent).toContain(tone['partie.ralliement_no_description']);
       expect(el.querySelector('.closed-banner')?.textContent).toContain(
         tone['partie.ralliement_status_closed_label'],
@@ -3889,12 +3905,13 @@ describe('PartieDetail — un groupe s’ouvre sur ses conjonctions (Story 39.1)
     expect(NON_JDR_BANNED_WORDS.test(el.textContent ?? '')).toBe(false);
   });
 
-  it('rencontre isolée : Détails (ouvert) puis Missives, comme avant, sans conjonctions', async () => {
+  it('rencontre isolée : le détail en ligne (ouvert) puis Invitations, sans Détails ni conjonctions', async () => {
+    // Story 41.1 ⚠️ : la rencontre isolée n'ouvre plus sur « Détails » + « Missives ».
     const { el } = await createFixture(groupe({ kind: 'ONE_SHOT' }), MJ_ID, { members });
     const tone = TONE_MAP['grimoire-emeraude'];
     expect(tabLabels(el)).toEqual([
-      tone['parties.detail_tab_details'],
-      tone['partie.invitations_tab_label'],
+      tone['partie.ralliement_soiree_tab'],
+      tone['partie.ralliement_soiree_invitations_tab'],
     ]);
     expect(tabs(el)[0].getAttribute('aria-selected')).toBe('true');
     expect(el.querySelector('.conjonctions')).toBeNull();
@@ -5784,15 +5801,19 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
     it('la personne réservée lit « Place réservée » (carte et fenêtre), « Accepter » / « Décliner », ni « S’inscrire » ni « Complet »', async () => {
       const { fixture, el } = await createFixture(groupe(), RESA_ID, {
         members: [],
-        events: [reservedView('a', 3, { seance: { ...card('a', 3).seance!, capacity: 4, placesTaken: 4 } })],
+        events: [
+          reservedView('a', 3, {
+            seance: { ...card('a', 3).seance!, capacity: 4, placesTaken: 4 },
+          }),
+        ],
       });
       const chip = cardEl(el, 'a').closest('article')!.querySelector('.event-card__chip')!;
       expect(chip.textContent?.trim()).toBe(tone['partie.ralliement_event_chip_reserved']);
       expect(chip.classList).not.toContain('event-card__chip--dotted');
       // La conjonction est pleine, mais cette place est la sienne : ni badge « Complet » ni bouton.
-      expect(cardEl(el, 'a').closest('article')!.querySelector('.status-badge')?.textContent?.trim()).toBe(
-        'Dans 3 jours',
-      );
+      expect(
+        cardEl(el, 'a').closest('article')!.querySelector('.status-badge')?.textContent?.trim(),
+      ).toBe('Dans 3 jours');
 
       await open(fixture, el, 'a');
       expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
@@ -5893,7 +5914,12 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
       await settle(fixture);
       expect(api().accepter).toHaveBeenCalledTimes(1);
 
-      reject({ status: 400, error: { message: 'Cette conjonction est passée : les inscriptions ne peuvent plus changer' } });
+      reject({
+        status: 400,
+        error: {
+          message: 'Cette conjonction est passée : les inscriptions ne peuvent plus changer',
+        },
+      });
       await settle(fixture);
       expect(q('.ed__error')?.textContent?.trim()).toBe(
         'Cette conjonction est passée : les inscriptions ne peuvent plus changer',
@@ -6034,7 +6060,11 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
         ],
       });
       await open(fixture, el, 'a');
-      expect(Array.from(document.body.querySelectorAll<HTMLButtonElement>('.ed__candidate')).every((b) => b.disabled)).toBe(true);
+      expect(
+        Array.from(document.body.querySelectorAll<HTMLButtonElement>('.ed__candidate')).every(
+          (b) => b.disabled,
+        ),
+      ).toBe(true);
       q<HTMLButtonElement>('.ed__close')!.click();
       await settle(fixture);
 
@@ -6059,9 +6089,9 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
         members: MEMBERS,
         events: [{ ...memberView, participants: base.participants.slice(0, 3) }],
       });
-      expect(cardEl(el, 'a').closest('article')!.querySelector('.status-badge')?.textContent?.trim()).toBe(
-        tone['partie.ralliement_event_badge_full'],
-      );
+      expect(
+        cardEl(el, 'a').closest('article')!.querySelector('.status-badge')?.textContent?.trim(),
+      ).toBe(tone['partie.ralliement_event_badge_full']);
       await open(fixture, el, 'a');
       expect(q('.ed__full')).not.toBeNull();
       expect(q('.ed__signup')).toBeNull();
@@ -6279,11 +6309,248 @@ describe('PartieDetail — du groupe vers son calendrier (Story 40.5b)', () => {
       members: [],
       events: [pollCard()],
     });
-    expect(NON_JDR_BANNED_WORDS.test(el.querySelector('.conjonctions__header')?.textContent ?? '')).toBe(
-      false,
-    );
+    expect(
+      NON_JDR_BANNED_WORDS.test(el.querySelector('.conjonctions__header')?.textContent ?? ''),
+    ).toBe(false);
     await open(fixture, el);
     expect(NON_JDR_BANNED_WORDS.test(q('app-event-dialog')?.textContent ?? '')).toBe(false);
     expect(tone['partie.ralliement_calendar_link']).toBe('Calendrier du groupe');
+  });
+});
+
+// ─── Une soirée isolée sur une seule page (Story 41.1) ──────────────────────────────────────
+
+describe('PartieDetail — une soirée isolée sur une seule page (Story 41.1)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const OTHER_ID = 'member-2';
+  const soiree = (over: Partial<PartieDto> = {}) =>
+    makePartie({
+      gameSystemId: 'ralliement',
+      kind: 'ONE_SHOT',
+      role: 'admin',
+      ownerId: MJ_ID,
+      ...over,
+    });
+  const members: PartieMemberDto[] = [
+    {
+      role: 'ADMIN',
+      userId: MJ_ID,
+      pseudo: 'createur',
+      displayName: 'Créateur',
+      joinedAt: '2026-10-01T00:00:00Z',
+    },
+    {
+      role: 'MEMBER',
+      userId: OTHER_ID,
+      pseudo: 'invite',
+      displayName: 'Invité Deux',
+      joinedAt: '2026-10-02T00:00:00Z',
+    },
+  ];
+  /** L'unique événement de la soirée : non daté par défaut (état à la création), hôte = le créateur. */
+  const event = (over: Partial<EventCardDto> = {}): EventCardDto => ({
+    id: 'e-1',
+    title: 'Marathon Pandémie',
+    hostId: MJ_ID,
+    hostDisplayName: 'Créateur',
+    seance: {
+      id: 's-1',
+      date: null,
+      slot: null,
+      lieu: null,
+      heureRdv: null,
+      notePratique: null,
+      capacity: null,
+      placesTaken: 1,
+    },
+    participants: [
+      { userId: MJ_ID, displayName: 'Créateur', isHost: true, isAdmin: true, status: 'CONFIRMED' },
+      {
+        userId: OTHER_ID,
+        displayName: 'Invité Deux',
+        isHost: false,
+        isAdmin: false,
+        status: 'CONFIRMED',
+      },
+    ],
+    myInscription: null,
+    poll: null,
+    ...over,
+  });
+  const tabs = (el: HTMLElement) => Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]'));
+  const tabLabels = (el: HTMLElement) => tabs(el).map((t) => (t.textContent ?? '').trim());
+  const settle = async (fixture: ComponentFixture<PartieDetail>) => {
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+  };
+  const api = () =>
+    TestBed.inject(EventsApiService) as unknown as { list: ReturnType<typeof vi.fn> };
+
+  it.each(THEMES)(
+    'thème %s : l’hôte voit le nom du thème au singulier puis Invitations, sans Détails',
+    async (theme) => {
+      const tone = TONE_MAP[theme];
+      const { el } = await createFixture(soiree(), MJ_ID, { members, theme, events: [event()] });
+      expect(tabLabels(el)).toEqual([
+        tone['partie.ralliement_soiree_tab'],
+        tone['partie.ralliement_soiree_invitations_tab'],
+      ]);
+      expect(tabLabels(el)).not.toContain(tone['parties.detail_tab_details']);
+      expect(tabs(el)[0].getAttribute('aria-selected')).toBe('true');
+    },
+  );
+
+  it('un invité voit le premier onglet puis Invités', async () => {
+    const { el } = await createFixture(soiree({ role: 'member' }), OTHER_ID, {
+      members,
+      events: [event()],
+    });
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(tabLabels(el)).toEqual([
+      tone['partie.ralliement_soiree_tab'],
+      tone['partie.ralliement_soiree_guests_tab'],
+    ]);
+  });
+
+  it('le détail de l’événement s’affiche en ligne : titre, badge, situation, fiche — sans carte ni fenêtre', async () => {
+    const { fixture, el } = await createFixture(soiree(), MJ_ID, { members, events: [event()] });
+    await settle(fixture);
+    const inline = el.querySelector('app-event-dialog .ed--inline');
+    expect(inline).not.toBeNull();
+    expect(inline?.querySelector('.ed__title')?.textContent?.trim()).toBe('Marathon Pandémie');
+    expect(inline?.querySelector('app-status-badge')).not.toBeNull();
+    expect(inline?.querySelector('.ed__situation')).not.toBeNull();
+    expect(inline?.querySelector('.ed__sheet')).not.toBeNull();
+    expect(el.querySelector('app-event-card')).toBeNull();
+    expect(el.querySelector('app-detail-surface')).toBeNull();
+    expect(el.querySelector('.conjonctions')).toBeNull();
+  });
+
+  it('la fiche dit « Sur invitation · pas de limite » et ne propose ni inscription, ni réservation, ni pied', async () => {
+    const { fixture, el } = await createFixture(soiree({ role: 'member' }), OTHER_ID, {
+      members,
+      events: [event({ participants: [] })],
+    });
+    await settle(fixture);
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(el.querySelector('.ed__row--participation')?.textContent).toContain(
+      tone['partie.ralliement_soiree_participation'],
+    );
+    for (const sel of [
+      '.ed__signup',
+      '.ed__full',
+      '.ed__respond',
+      '.ed__unsubscribe',
+      '.ed__reserve',
+      '.ed__edit',
+      '.ed__close',
+      '.ed__footer',
+    ]) {
+      expect(el.querySelector(sel), sel).toBeNull();
+    }
+  });
+
+  it('les participants sont absents du premier onglet et listés dans le second', async () => {
+    const { fixture, el } = await createFixture(soiree({ role: 'member' }), OTHER_ID, {
+      members,
+      events: [event()],
+      noopAnimations: true,
+    });
+    await settle(fixture);
+    expect(el.querySelector('.ed__participants')).toBeNull();
+    expect(el.querySelector('app-participant-chip')).toBeNull();
+
+    tabs(el)[1].click();
+    fixture.detectChanges();
+    const rows = Array.from(el.querySelectorAll('.ralliement-members .result-row')).map((r) =>
+      (r.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain('Créateur');
+    expect(rows[1]).toContain('Invité Deux');
+    // Pas d'outil d'invitation avant la Story 41.3 : ni recherche, ni lien.
+    expect(el.querySelector('.ralliement-members input')).toBeNull();
+  });
+
+  it('une date fixée, un lieu et une heure se lisent dans la fiche', async () => {
+    const dated = event({
+      seance: {
+        id: 's-1',
+        date: '2099-12-20',
+        slot: 'EVENING',
+        lieu: 'Chez Léa',
+        heureRdv: '19:30',
+        notePratique: 'Apporter un plat',
+        capacity: null,
+        placesTaken: 1,
+      },
+    });
+    const { fixture, el } = await createFixture(soiree(), MJ_ID, { members, events: [dated] });
+    await settle(fixture);
+    expect(el.querySelector('.ed__row--place')?.textContent).toContain('Chez Léa');
+    expect(el.querySelector('.ed__row--time')?.textContent).toContain('19:30');
+    expect(el.querySelector('.ed__row--note')?.textContent).toContain('Apporter un plat');
+    expect(el.querySelector('.ed__row--date')?.textContent).toContain('soir');
+  });
+
+  it('suit le temps réel : un signal relit l’événement et le détail se met à jour', async () => {
+    const { fixture, el } = await createFixture(soiree(), MJ_ID, { members, events: [event()] });
+    await settle(fixture);
+    expect(el.querySelector('.ed__title')?.textContent?.trim()).toBe('Marathon Pandémie');
+    expect(api().list).toHaveBeenCalledTimes(1);
+
+    api().list.mockResolvedValue([event({ title: 'Marathon Pandémie II' })]);
+    TestBed.inject(PartiesService).notifyChanged();
+    await settle(fixture);
+    expect(api().list).toHaveBeenCalledTimes(2);
+    expect(el.querySelector('.ed__title')?.textContent?.trim()).toBe('Marathon Pandémie II');
+  });
+
+  it('un échec de relecture garde le dernier état connu et écrit l’erreur', async () => {
+    const { fixture, el } = await createFixture(soiree(), MJ_ID, { members, events: [event()] });
+    await settle(fixture);
+    api().list.mockRejectedValue(new Error('réseau'));
+    TestBed.inject(PartiesService).notifyChanged();
+    await settle(fixture);
+    expect(el.querySelector('.ed__title')?.textContent?.trim()).toBe('Marathon Pandémie');
+    expect(el.querySelector('.soiree__error')?.textContent).toContain(
+      TONE_MAP['grimoire-emeraude']['partie.ralliement_event_list_error'],
+    );
+  });
+
+  it.each(THEMES)('thème %s : aucun mot de JDR dans la page d’une soirée isolée', async (theme) => {
+    const { fixture, el } = await createFixture(soiree(), MJ_ID, {
+      members,
+      theme,
+      events: [event()],
+      noopAnimations: true,
+    });
+    await settle(fixture);
+    expect(NON_JDR_BANNED_WORDS.test(el.textContent ?? '')).toBe(false);
+    tabs(el)[1].click();
+    fixture.detectChanges();
+    expect(NON_JDR_BANNED_WORDS.test(el.textContent ?? '')).toBe(false);
+  });
+
+  it('témoins : un groupe garde ses Conjonctions, une quête garde ses onglets', async () => {
+    const tone = TONE_MAP['grimoire-emeraude'];
+    const group = await createFixture(
+      makePartie({ gameSystemId: 'ralliement', kind: 'CAMPAGNE_EPISODIQUE', role: 'admin' }),
+      MJ_ID,
+      { members },
+    );
+    expect(tabLabels(group.el)[0]).toBe(tone['partie.ralliement_conjonctions_tab']);
+    expect(group.el.querySelector('app-soiree-tab')).toBeNull();
+    TestBed.resetTestingModule();
+
+    const quete = await createFixture(
+      makePartie({ gameSystemId: 'ryuutama', kind: 'ONE_SHOT', ownerId: MJ_ID }),
+      MJ_ID,
+    );
+    expect(tabLabels(quete.el)[0]).toBe(tone['parties.detail_tab_details']);
+    expect(quete.el.querySelector('app-soiree-tab')).toBeNull();
   });
 });

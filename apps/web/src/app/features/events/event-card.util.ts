@@ -255,11 +255,14 @@ export function eventSituationTextKey(
   card: EventCardDto,
   currentUserId: string | null | undefined,
   todayKey: string,
+  membersParticipate = false,
 ): string {
   const past = isPastEvent(card, todayKey);
+  // Story 41.1 : dans une soirée isolée, tout membre (hôte, puis invités acceptés) participe — la carte
+  // ne porte que des inscriptions, que la soirée n'a pas (« sur invitation »).
   const who = isHostOf(card, currentUserId)
     ? 'host'
-    : isParticipantOf(card, currentUserId)
+    : membersParticipate || isParticipantOf(card, currentUserId)
       ? 'registered'
       : hasReservedPlace(card)
         ? 'reserved'

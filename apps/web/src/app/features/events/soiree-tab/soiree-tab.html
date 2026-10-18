@@ -1,0 +1,18 @@
+<!-- Story 41.1 (⚠️ contrat UI) : la rencontre isolée n'a ni liste ni fenêtre — son événement unique est
+     le premier onglet, détail en ligne. -->
+<section class="soiree">
+  @if (loadError()) {
+    <p class="soiree__error" role="alert">
+      {{ theme.tone()['partie.ralliement_event_list_error'] }}
+    </p>
+  }
+  @if (card(); as c) {
+    <app-event-dialog
+      [inline]="true"
+      [partieId]="partieId()"
+      [card]="c"
+      [todayKey]="todayKey"
+      [currentUserId]="currentUserId()"
+    />
+  }
+</section>

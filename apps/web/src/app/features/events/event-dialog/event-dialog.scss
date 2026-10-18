@@ -269,3 +269,15 @@
 .ed__slot-available {
   color: var(--jdr-text-muted, var(--mat-sys-on-surface-variant));
 }
+
+/* Story 41.1 — rendu EN LIGNE (page d'une rencontre isolée) : mêmes blocs, sans la surface de la fenêtre.
+   Pas de bouton de fermeture à dégager dans l'en-tête ; la colonne reste lisible sur grand écran. */
+.ed--inline {
+  display: block;
+  max-width: 900px;
+
+  .ed__head {
+    padding-right: 0;
+    margin-bottom: 12px;
+  }
+}

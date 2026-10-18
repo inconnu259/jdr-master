@@ -468,3 +468,134 @@ describe('EventDialog — sondage de dates (Story 40.5)', () => {
     });
   });
 });
+
+@Component({
+  imports: [EventDialog],
+  template: `<app-event-dialog
+    partieId="g1"
+    [inline]="true"
+    [card]="card()"
+    todayKey="2026-10-17"
+    [currentUserId]="userId()"
+  />`,
+})
+class InlineHost {
+  card = signal<EventCardDto>(pollCard());
+  userId = signal<string | null>(HOST);
+}
+
+describe('EventDialog — rendu en ligne d’une soirée isolée (Story 41.1)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  /** Soirée non datée (état à la création), ou datée demain soir, avec ses deux participants. */
+  function soireeCard(over: Partial<EventCardDto> = {}): EventCardDto {
+    return {
+      id: 'e1',
+      title: 'Marathon Pandémie',
+      hostId: HOST,
+      hostDisplayName: 'Léa',
+      seance: {
+        id: 's1',
+        date: null,
+        slot: null,
+        lieu: null,
+        heureRdv: null,
+        notePratique: null,
+        capacity: null,
+        placesTaken: 1,
+      },
+      participants: [
+        { userId: HOST, displayName: 'Léa', isHost: true, isAdmin: true, status: 'CONFIRMED' },
+        { userId: ME, displayName: 'Moi', isHost: false, isAdmin: false, status: 'CONFIRMED' },
+      ],
+      myInscription: null,
+      poll: null,
+      ...over,
+    };
+  }
+
+  async function mount(card: EventCardDto, userId: string | null) {
+    await TestBed.configureTestingModule({
+      imports: [InlineHost],
+      providers: [
+        provideNoopAnimations(),
+        { provide: EventsApiService, useValue: {} },
+        { provide: PartiesService, useValue: { members: vi.fn().mockResolvedValue([]) } },
+        { provide: ThemeToneService, useValue: { tone: signal(TONE) } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(InlineHost);
+    fixture.componentInstance.card.set(card);
+    fixture.componentInstance.userId.set(userId);
+    fixture.detectChanges();
+    for (let i = 0; i < 6; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    const el = fixture.nativeElement as HTMLElement;
+    return { fixture, el, q: <T extends Element>(sel: string) => el.querySelector<T>(sel) };
+  }
+
+  it('rend titre, badge, situation et fiche dans la page, sans surface de fenêtre', async () => {
+    const { el, q } = await mount(soireeCard(), HOST);
+    expect(q('article.ed--inline')).not.toBeNull();
+    expect(el.querySelector('app-detail-surface')).toBeNull();
+    expect(document.body.querySelector('app-detail-surface')).toBeNull();
+    expect(q('.ed__title')?.textContent?.trim()).toBe('Marathon Pandémie');
+    expect(q('.ed__badge')).not.toBeNull();
+    expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+      TONE['partie.ralliement_event_situation_host'],
+    );
+    expect(q('.ed__big--date')?.textContent?.trim()).toBe(TONE['partie.ralliement_event_no_date']);
+    expect(q('.ed__row--host')?.textContent).toContain('Léa');
+  });
+
+  it('la participation dit « Sur invitation · pas de limite », même avec une capacité sur la carte', async () => {
+    const card = soireeCard();
+    card.seance!.capacity = 4;
+    const { q } = await mount(card, ME);
+    expect(q('.ed__row--participation dd')?.textContent?.trim()).toBe(
+      TONE['partie.ralliement_soiree_participation'],
+    );
+  });
+
+  it('un invité sans ligne d’inscription « participe » : la soirée est sur invitation', async () => {
+    const { q } = await mount(soireeCard({ participants: [] }), ME);
+    expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+      TONE['partie.ralliement_event_situation_registered'],
+    );
+  });
+
+  it('ni participants, ni inscription, ni réservation, ni modification, ni pied — même pour l’hôte', async () => {
+    for (const userId of [HOST, ME]) {
+      const { q } = await mount(soireeCard(), userId);
+      for (const sel of [
+        '.ed__participants',
+        'app-participant-chip',
+        '.ed__signup',
+        '.ed__full',
+        '.ed__respond',
+        '.ed__unsubscribe',
+        '.ed__reserve',
+        '.ed__edit',
+        '.ed__close',
+        '.ed__footer',
+        '.ed__actions',
+      ]) {
+        expect(q(sel), `${userId} ${sel}`).toBeNull();
+      }
+      TestBed.resetTestingModule();
+    }
+  });
+
+  it('une soirée passée est « Passé », avec la situation au passé', async () => {
+    const card = soireeCard();
+    card.seance!.date = '2026-10-10';
+    card.seance!.slot = 'EVENING';
+    const { q } = await mount(card, ME);
+    expect(q('.ed__badge')?.textContent?.trim()).toBe('Passé');
+    expect(q('.ed__situation-text')?.textContent?.trim()).toBe(
+      TONE['partie.ralliement_event_situation_registered_past'],
+    );
+  });
+});

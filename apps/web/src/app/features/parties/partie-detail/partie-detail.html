@@ -46,6 +46,14 @@
             <app-conjonctions-tab [partieId]="p.id" (countChange)="conjonctionCount.set($event)" />
           </mat-tab>
         }
+        @if (isSoiree()) {
+          <!-- Story 41.1 (⚠️ contrat UI) : une rencontre isolée n'a ni liste ni onglet « Détails » — son
+               premier onglet, au nom du thème au singulier, affiche en ligne le détail de son unique
+               événement (UX-DR10). -->
+          <mat-tab [label]="theme.tone()['partie.ralliement_soiree_tab']">
+            <app-soiree-tab [partieId]="p.id" />
+          </mat-tab>
+        } @else {
         <mat-tab [label]="theme.tone()['parties.detail_tab_details']">
             <!-- Story 32.2 : l'onglet Détails est regroupé en trois zones -- Action, Consultation,
                  Référence, dans cet ordre -- plutôt que juxtaposé sans hiérarchie. Chaque bloc garde
@@ -349,6 +357,7 @@
               }
             </section>
         </mat-tab>
+        }
 
         @if (!isMj() && !isRalliement()) {
           <mat-tab [label]="theme.tone()['character.party_sheets_tab_label']">
@@ -426,7 +435,7 @@
                créateur figure dans members() : on n'utilise donc pas otherMembers(), qui
                l'écarterait. Story 39.5 : « Retirer » dépend du rôle seul (canRemoveGroupMember) — le
                créateur redevenu simple membre se retire comme les autres. -->
-          <mat-tab [label]="theme.tone()['partie.invitations_tab_label']">
+          <mat-tab [label]="membersTabLabel()">
             <section class="invite ralliement-members">
               <h3>{{ theme.tone()['partie.members_title'] }}</h3>
               @for (m of members(); track m.userId) {

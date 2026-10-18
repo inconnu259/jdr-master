@@ -393,6 +393,11 @@ export const atelierCuivre: Record<ToneKey, string> = {
   'partie.ralliement_event_submit_btn': 'Créer la réunion',
   'partie.ralliement_event_create_error': 'Cette réunion n’a pu être consignée. Réessayez.',
   'partie.ralliement_event_list_error': 'Les réunions n’ont pu être chargées. Réessayez.',
+  /* — rencontre isolée (Story 41.1) : un seul événement, affiché en ligne ; le second onglet dit le rôle — */
+  'partie.ralliement_soiree_tab': 'Réunion',
+  'partie.ralliement_soiree_guests_tab': 'Invités',
+  'partie.ralliement_soiree_invitations_tab': 'Invitations',
+  'partie.ralliement_soiree_participation': 'Sur invitation · pas de limite',
   'partie.ralliement_event_host': 'Hôte : {name}',
   'partie.ralliement_event_situation': 'Ma situation',
   'partie.ralliement_event_chip_participating': 'Je participe',

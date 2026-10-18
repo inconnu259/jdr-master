@@ -398,3 +398,7 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-40-7-prolonger-le-vote-et-relancer-la-veille.md`
   summary: The vote reminder (#6) is sent by the first hourly pass of the eve (about 01:00–02:00 French time) and right after a poll is created or extended when its deadline is within 48 h; consider a daytime send hour or a minimum age.
   evidence: Window `expiresAt − 48 h ≤ now < expiresAt − 24 h` on an end-of-day UTC deadline, as specified; a product choice, not a defect of the spec as written.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-41-1-afficher-une-soiree-isolee-sur-une-seule-page.md`
+  summary: Decide where the description of an isolated evening is shown now that its page has no "Détails" tab.
+  evidence: The creation form still asks for a description (`partie.ralliement_no_description` exists), but the inline event detail only carries the event sheet; the text is now reachable only through the admin's "Modifier" form. A short line under the title of the inline detail, or in the sheet, would settle it.

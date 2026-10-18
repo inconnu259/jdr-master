@@ -395,6 +395,11 @@ export const grimoireEmeraude = {
   'partie.ralliement_event_submit_btn': 'Créer la conjonction',
   'partie.ralliement_event_create_error': 'Cette conjonction n’a pu être inscrite. Réessayez.',
   'partie.ralliement_event_list_error': 'Les conjonctions n’ont pu être lues. Réessayez.',
+  /* — rencontre isolée (Story 41.1) : un seul événement, affiché en ligne ; le second onglet dit le rôle — */
+  'partie.ralliement_soiree_tab': 'Conjonction',
+  'partie.ralliement_soiree_guests_tab': 'Invités',
+  'partie.ralliement_soiree_invitations_tab': 'Invitations',
+  'partie.ralliement_soiree_participation': 'Sur invitation · pas de limite',
   'partie.ralliement_event_host': 'Hôte : {name}',
   'partie.ralliement_event_situation': 'Ma situation',
   'partie.ralliement_event_chip_participating': 'Je participe',

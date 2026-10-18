@@ -1,19 +1,13 @@
-<app-detail-surface
-  [title]="windowTitle()"
-  [custom]="true"
-  [hasHeader]="true"
-  [hasFooter]="true"
-  [wide]="true"
-  [portal]="true"
-  [openToken]="1"
-  (closed)="closed.emit()"
->
-  <div detail-header class="ed__head">
-    <h2 class="ed__title" [id]="uid + '-title'">{{ windowTitle() }}</h2>
-    @if (!editing()) {
-      <app-status-badge class="ed__badge" [state]="badge()" />
-    }
-  </div>
+<!-- Story 41.1 : les trois blocs (titre + badge, corps, pied) sont rendus soit dans la fenêtre
+     (DetailSurface), soit EN LIGNE sur la page d'une rencontre isolée — une seule source. -->
+<ng-template #head>
+  <h2 class="ed__title" [id]="uid + '-title'">{{ windowTitle() }}</h2>
+  @if (!editing()) {
+    <app-status-badge class="ed__badge" [state]="badge()" />
+  }
+</ng-template>
+
+<ng-template #body>
 
   @if (editing()) {
     <app-event-form [prefill]="card()" (submitted)="save()" />
@@ -199,34 +193,36 @@
       </section>
     }
 
-    <section class="ed__participants" [attr.aria-labelledby]="uid + '-participants'">
-      <h3 class="ed__section-title" [id]="uid + '-participants'">
-        {{ theme.tone()['partie.ralliement_event_participants_heading'] }}
-      </h3>
-      @if (card().participants.length === 0) {
-        <p class="ed__empty">{{ theme.tone()['partie.ralliement_event_participants_empty'] }}</p>
-      } @else {
-        <ul class="ed__people">
-          @for (p of card().participants; track p.userId) {
-            <li class="ed__person">
-              <app-participant-chip [participant]="p" [self]="p.userId === currentUserId()" />
-              @if (canReserve() && isPending(p)) {
-                <button
-                  mat-stroked-button
-                  type="button"
-                  class="ed__unreserve"
-                  [disabled]="busy()"
-                  [attr.aria-label]="unreserveAria(p)"
-                  (click)="unreserve(p)"
-                >
-                  {{ theme.tone()['partie.ralliement_event_unreserve_btn'] }}
-                </button>
-              }
-            </li>
-          }
-        </ul>
-      }
-    </section>
+    @if (!inline()) {
+      <section class="ed__participants" [attr.aria-labelledby]="uid + '-participants'">
+        <h3 class="ed__section-title" [id]="uid + '-participants'">
+          {{ theme.tone()['partie.ralliement_event_participants_heading'] }}
+        </h3>
+        @if (card().participants.length === 0) {
+          <p class="ed__empty">{{ theme.tone()['partie.ralliement_event_participants_empty'] }}</p>
+        } @else {
+          <ul class="ed__people">
+            @for (p of card().participants; track p.userId) {
+              <li class="ed__person">
+                <app-participant-chip [participant]="p" [self]="p.userId === currentUserId()" />
+                @if (canReserve() && isPending(p)) {
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    class="ed__unreserve"
+                    [disabled]="busy()"
+                    [attr.aria-label]="unreserveAria(p)"
+                    (click)="unreserve(p)"
+                  >
+                    {{ theme.tone()['partie.ralliement_event_unreserve_btn'] }}
+                  </button>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    }
 
     @if (canReserve()) {
       <!-- Story 40.4 : l'hôte réserve des places à des membres, tant que la conjonction n'est pas passée. -->
@@ -257,8 +253,9 @@
       </section>
     }
   }
+</ng-template>
 
-  <div detail-footer class="ed__footer">
+<ng-template #foot>
     @if (error(); as message) {
       <p class="ed__error" role="alert">{{ message }}</p>
     }
@@ -300,5 +297,32 @@
         </button>
       }
     </div>
-  </div>
-</app-detail-surface>
+</ng-template>
+
+@if (inline()) {
+  <article class="ed ed--inline" [attr.aria-labelledby]="uid + '-title'">
+    <header class="ed__head">
+      <ng-container [ngTemplateOutlet]="head" />
+    </header>
+    <ng-container [ngTemplateOutlet]="body" />
+  </article>
+} @else {
+  <app-detail-surface
+    [title]="windowTitle()"
+    [custom]="true"
+    [hasHeader]="true"
+    [hasFooter]="hasFooter()"
+    [wide]="true"
+    [portal]="true"
+    [openToken]="1"
+    (closed)="closed.emit()"
+  >
+    <div detail-header class="ed__head">
+      <ng-container [ngTemplateOutlet]="head" />
+    </div>
+    <ng-container [ngTemplateOutlet]="body" />
+    <div detail-footer class="ed__footer">
+      <ng-container [ngTemplateOutlet]="foot" />
+    </div>
+  </app-detail-surface>
+}
