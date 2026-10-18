@@ -124,6 +124,25 @@ describe('EmailService', () => {
     });
   });
 
+  it('conjonction-relance : sujet neutre « Plus qu’un jour pour voter : « <titre> » » et bouton « Voter dans le calendrier » (Story 40.7)', async () => {
+    await service.sendMail('conjonction-relance', 'ami@example.com', {
+      eventTitle: 'Catane',
+      deadline: 'samedi 24 octobre',
+      link: 'https://x/parties/p1/guild-calendar',
+    });
+    expect(mailer.sendMail).toHaveBeenCalledWith({
+      to: 'ami@example.com',
+      subject: "Plus qu'un jour pour voter : « {{eventTitle}} »",
+      template: 'conjonction-relance',
+      context: {
+        eventTitle: 'Catane',
+        deadline: 'samedi 24 octobre',
+        link: 'https://x/parties/p1/guild-calendar',
+        actionLabel: 'Voter dans le calendrier',
+      },
+    });
+  });
+
   it('sujet correct par gabarit (session-reminder, password-reset)', async () => {
     await service.sendMail('session-reminder', 'joueur@example.com', {});
     expect(mailer.sendMail).toHaveBeenCalledWith(

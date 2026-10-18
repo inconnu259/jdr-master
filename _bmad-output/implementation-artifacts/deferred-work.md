@@ -395,3 +395,6 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-40-6-fixer-la-date-dune-conjonction.md`
   summary: `ConjonctionsTab` has no spec; the `(refreshRequested)="refresh()"` wiring after fixing the date is untested.
   evidence: Deleting the binding fails no test; only the live signal then refreshes the host's dialog.
+- source_spec: `_bmad-output/implementation-artifacts/spec-40-7-prolonger-le-vote-et-relancer-la-veille.md`
+  summary: The vote reminder (#6) is sent by the first hourly pass of the eve (about 01:00–02:00 French time) and right after a poll is created or extended when its deadline is within 48 h; consider a daytime send hour or a minimum age.
+  evidence: Window `expiresAt − 48 h ≤ now < expiresAt − 24 h` on an end-of-day UTC deadline, as specified; a product choice, not a defect of the spec as written.

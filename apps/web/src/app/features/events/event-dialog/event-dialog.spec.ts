@@ -403,4 +403,68 @@ describe('EventDialog — sondage de dates (Story 40.5)', () => {
       expect(q('.ed__slots')).toBeNull();
     });
   });
+
+  // Story 40.7 — « Prolonger le vote » : bouton du panneau de l'hôte, confirmation « Votre accord ».
+  describe('prolonger le vote (Story 40.7)', () => {
+    const openDialog = (extended: boolean) =>
+      vi.fn().mockReturnValue({ afterClosed: () => of(extended) });
+
+    it('l’hôte voit « Prolonger le vote » actif ; un membre n’en voit pas', async () => {
+      const host = await mount(pollCard(), HOST);
+      const button = host.q<HTMLButtonElement>('.ed__poll-extend');
+      expect(button?.textContent?.trim()).toBe('Prolonger le vote');
+      expect(button?.disabled).toBe(false);
+      TestBed.resetTestingModule();
+      document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
+
+      const member = await mount(pollCard(), ME);
+      expect(member.q('.ed__poll-extend')).toBeNull();
+    });
+
+    it('le vote terminé (échéance dépassée) ne bloque pas l’hôte : le bouton reste actif', async () => {
+      const { q } = await mount(pollCard({ expiresAt: '2026-10-16T23:59:59.999Z' }), HOST);
+      expect(q<HTMLButtonElement>('.ed__poll-extend')?.disabled).toBe(false);
+    });
+
+    it('ouvre la confirmation avec le nom, l’échéance actuelle et le jour minimal ; au succès, demande la relecture de la liste', async () => {
+      const open = openDialog(true);
+      const extend = vi.fn().mockResolvedValue(undefined);
+      const { fixture, q } = await mount(pollCard(), HOST, { api: { extend }, dialog: { open } });
+
+      q<HTMLButtonElement>('.ed__poll-extend')!.click();
+
+      expect(open).toHaveBeenCalledTimes(1);
+      const data = open.mock.calls[0][1].data;
+      expect(data.title).toBe('Sondage plateaux');
+      expect(data.deadlineKey).toBe('2026-10-20');
+      // Le lendemain de l'échéance actuelle (jamais avant aujourd'hui).
+      expect(data.minKey).toBe('2026-10-21');
+      // La confirmation écrit la nouvelle échéance avec le sondage de la carte.
+      await data.confirm('2026-11-02');
+      expect(extend).toHaveBeenCalledWith('g1', 'p1', '2026-11-02');
+      expect(fixture.componentInstance.refreshRequests).toBe(1);
+    });
+
+    it('« Renoncer » (fermeture sans valider) ne demande aucune relecture', async () => {
+      const open = openDialog(false);
+      const { fixture, q } = await mount(pollCard(), HOST, { dialog: { open } });
+      q<HTMLButtonElement>('.ed__poll-extend')!.click();
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(fixture.componentInstance.refreshRequests).toBe(0);
+    });
+
+    it('la carte vivante prolongée met l’échéance à jour dans le panneau ; datée, le bouton disparaît avec le panneau', async () => {
+      const { fixture, settle, q } = await mount(pollCard(), HOST);
+      expect(q('.ed__poll-extend')).not.toBeNull();
+
+      fixture.componentInstance.card.set({
+        ...pollCard(),
+        poll: null,
+        seance: { ...pollCard().seance!, date: '2026-10-25', slot: 'MORNING' },
+      });
+      await settle();
+
+      expect(q('.ed__poll-extend')).toBeNull();
+    });
+  });
 });

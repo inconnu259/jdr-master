@@ -261,4 +261,116 @@ describe('NotificationsService (intégration réelle via Postgres)', () => {
     await service.sendDueReminders();
     expect(fakeEmail.calls.filter((c) => c.data.eventTitle === `Catane-${suffix}`)).toEqual([]);
   });
+
+  it('relance de vote (Story 40.7) : la veille de l’échéance, aux seuls éligibles sans réponse, une fois ; ni hors fenêtre, ni date fixée, ni sondage fermé', async () => {
+    const [admin, host, inscrit, absent] = await Promise.all(
+      ['rel-admin', 'rel-host', 'rel-inscrit', 'rel-absent'].map((label) =>
+        prisma.user.create({
+          data: {
+            email: `${label}-${suffix}@test.local`,
+            pseudo: `${label}-${suffix}`,
+            displayName: `${label}-${suffix}`,
+            passwordHash: 'x',
+          },
+        }),
+      ),
+    );
+    userIds.push(admin.id, host.id, inscrit.id, absent.id);
+    const groupe = await prisma.partie.create({
+      data: {
+        name: `Relance-${suffix}`,
+        kind: 'CAMPAGNE_EPISODIQUE',
+        gameSystemId: 'ralliement',
+        ownerId: admin.id,
+      },
+    });
+    partieIds.push(groupe.id);
+    for (const u of [admin, host, inscrit, absent]) {
+      await prisma.membership.create({
+        data: { userId: u.id, partieId: groupe.id, role: u.id === admin.id ? 'ADMIN' : 'MEMBER' },
+      });
+    }
+    const day = new Date(Date.now() + 5 * 86_400_000);
+    // Une conjonction à sondage : `expiresAt` en heures à partir de maintenant, séance datée ou non.
+    const conjonction = async (
+      title: string,
+      expiresInHours: number,
+      over: { dated?: boolean; status?: 'OPEN' | 'CLOSED' } = {},
+    ) => {
+      const poll = await prisma.sessionPoll.create({
+        data: {
+          partieId: groupe.id,
+          createdById: host.id,
+          status: over.status ?? 'OPEN',
+          expiresAt: new Date(Date.now() + expiresInHours * 3_600_000),
+          options: { create: [{ date: day, slot: 'EVENING' }] },
+        },
+        include: { options: true },
+      });
+      const event = await prisma.event.create({
+        data: { partieId: groupe.id, title, ownerId: host.id },
+      });
+      await prisma.seance.create({
+        data: {
+          eventId: event.id,
+          pollId: poll.id,
+          startDate: over.dated ? day : null,
+          startSlot: over.dated ? 'EVENING' : null,
+        },
+      });
+      return poll;
+    };
+    const due = await conjonction(`Veille-${suffix}`, 36);
+    const tropTot = await conjonction(`TropTot-${suffix}`, 72);
+    const tropTard = await conjonction(`TropTard-${suffix}`, 12);
+    const datee = await conjonction(`Datee-${suffix}`, 36, { dated: true });
+    const fermee = await conjonction(`Fermee-${suffix}`, 36, { status: 'CLOSED' });
+    // L'administrateur et l'hôte ont déjà répondu à la conjonction due.
+    for (const voter of [admin, host]) {
+      await prisma.pollVote.create({
+        data: { pollId: due.id, optionId: due.options[0].id, userId: voter.id, answer: 'YES' },
+      });
+    }
+
+    fakeEmail.calls = [];
+    await service.sendDueReminders();
+
+    const sent = fakeEmail.calls.filter((c) => c.template === 'conjonction-relance');
+    const forTitle = (title: string) => sent.filter((c) => c.data.eventTitle === title);
+    expect(
+      forTitle(`Veille-${suffix}`)
+        .map((c) => c.to)
+        .sort(),
+    ).toEqual([inscrit.email, absent.email].sort());
+    expect(String(forTitle(`Veille-${suffix}`)[0].data.link)).toMatch(
+      new RegExp(`/parties/${groupe.id}/guild-calendar$`),
+    );
+    for (const title of ['TropTot', 'TropTard', 'Datee', 'Fermee']) {
+      expect(forTitle(`${title}-${suffix}`)).toEqual([]);
+    }
+    const marked = async (id: string) =>
+      (await prisma.sessionPoll.findUniqueOrThrow({ where: { id } })).relanceSentAt;
+    expect(await marked(due.id)).not.toBeNull();
+    for (const p of [tropTot, tropTard, datee, fermee]) expect(await marked(p.id)).toBeNull();
+
+    // Une seconde passe ne renvoie rien : la relance est « une fois ».
+    fakeEmail.calls = [];
+    await service.sendDueReminders();
+    expect(fakeEmail.calls.filter((c) => c.template === 'conjonction-relance')).toEqual([]);
+
+    // Prolonger le vote remet la marque à vide (PollService) : la veille de la nouvelle échéance, on relance.
+    await prisma.sessionPoll.update({
+      where: { id: due.id },
+      data: { expiresAt: new Date(Date.now() + 40 * 3_600_000), relanceSentAt: null },
+    });
+    await service.sendDueReminders();
+    expect(
+      fakeEmail.calls
+        .filter(
+          (c) => c.template === 'conjonction-relance' && c.data.eventTitle === `Veille-${suffix}`,
+        )
+        .map((c) => c.to)
+        .sort(),
+    ).toEqual([inscrit.email, absent.email].sort());
+  });
 });

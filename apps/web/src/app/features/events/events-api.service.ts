@@ -1,7 +1,12 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import type { CreateEventDto, EventCardDto, UpdateEventDto } from '@master-jdr/shared';
+import type {
+  CreateEventDto,
+  EventCardDto,
+  ExtendPollDto,
+  UpdateEventDto,
+} from '@master-jdr/shared';
 import { API_BASE } from '../../core/api-base';
 
 /**
@@ -103,6 +108,18 @@ export class EventsApiService {
         { optionId },
         { withCredentials: true },
       ),
+    );
+  }
+
+  /** Story 40.7 : l'hôte prolonge le vote de sa conjonction (`PATCH /parties/:id/poll/:pollId/extend`,
+   *  `expiresAt` = clé `YYYY-MM-DD` du nouveau jour d'échéance). Rien n'est renvoyé : la carte à jour arrive
+   *  par la relecture de la liste. Refus en français (pas l'hôte 403, jour non postérieur 400…). */
+  extend(partieId: string, pollId: string, expiresAt: string): Promise<void> {
+    const dto: ExtendPollDto = { expiresAt };
+    return firstValueFrom(
+      this.http.patch<void>(`${API_BASE}/parties/${partieId}/poll/${pollId}/extend`, dto, {
+        withCredentials: true,
+      }),
     );
   }
 

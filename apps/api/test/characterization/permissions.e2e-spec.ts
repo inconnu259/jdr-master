@@ -481,6 +481,70 @@ describe('Droits sur une partie et ses événements (Story 37.6)', () => {
     expect((await openPollA()).id).toBe(pollA);
   });
 
+  // Story 40.7 : prolonger le vote n'existe pas en JDR (cellule fermée), et ne s'ouvre qu'à l'hôte d'une
+  // conjonction ; le sondage d'une famille ne s'atteint pas par la route de l'autre.
+  it('prolonger le vote : le MJ du JDR lui-même est refusé (403), le joueur et l’étranger aussi, l’administrateur du groupe n’a aucun rôle dans le JDR (403), sondage croisé 400, sans écriture', async () => {
+    const { id: groupe } = await h.createPartie(
+      mjB,
+      'CAMPAGNE_EPISODIQUE',
+      'droits groupe 40-7',
+      'ralliement',
+    );
+    const created = await mjB.agent
+      .post(`/parties/${groupe}/events`)
+      .send({
+        title: 'Une conjonction à prolonger',
+        pollOptions: [
+          { date: isoDay(10), slot: 'EVENING' },
+          { date: isoDay(11), slot: 'MORNING' },
+        ],
+        pollDeadline: isoDay(5),
+      })
+      .expect(201);
+    const groupPoll = body<{ poll: { id: string } }>(created).poll;
+    const extendUrl = (partieId: string, pollId: string) =>
+      `/parties/${partieId}/poll/${pollId}/extend`;
+    const newDay = isoDay(20);
+    const jdrBefore = await h.prisma.sessionPoll.findUniqueOrThrow({ where: { id: pollA } });
+    const groupBefore = await h.prisma.sessionPoll.findUniqueOrThrow({
+      where: { id: groupPoll.id },
+    });
+
+    // La capacité est absente du JDR : le MJ lui-même est refusé, le joueur aussi.
+    for (const who of [mjA, joueurA]) {
+      await who.agent.patch(extendUrl(partieA, pollA)).send({ expiresAt: newDay }).expect(403);
+    }
+    // Un étranger au JDR et au groupe n'a aucun rôle nulle part.
+    for (const url of [extendUrl(partieA, pollA), extendUrl(groupe, groupPoll.id)]) {
+      const res = await etranger.agent.patch(url).send({ expiresAt: newDay }).expect(403);
+      expect(body<ErrorLike>(res).message).toBe(NO_ACCESS_MESSAGE);
+    }
+    // Le MJ et le joueur du JDR n'ont aucun rôle dans le groupe.
+    for (const who of [mjA, joueurA]) {
+      const res = await who.agent
+        .patch(extendUrl(groupe, groupPoll.id))
+        .send({ expiresAt: newDay })
+        .expect(403);
+      expect(body<ErrorLike>(res).message).toBe(NO_ACCESS_MESSAGE);
+    }
+    // L'administrateur du groupe n'a aucun rôle dans la partie de JDR.
+    const asGroupAdmin = await mjB.agent
+      .patch(extendUrl(partieA, pollA))
+      .send({ expiresAt: newDay })
+      .expect(403);
+    expect(body<ErrorLike>(asGroupAdmin).message).toBe(NO_ACCESS_MESSAGE);
+    // Par la route de SON groupe, le sondage du JDR n'est pas celui d'une conjonction (400).
+    await mjB.agent.patch(extendUrl(groupe, pollA)).send({ expiresAt: newDay }).expect(400);
+
+    const groupAfter = await h.prisma.sessionPoll.findUniqueOrThrow({
+      where: { id: groupPoll.id },
+    });
+    expect(groupAfter.expiresAt).toEqual(groupBefore.expiresAt);
+    const jdrAfter = await h.prisma.sessionPoll.findUniqueOrThrow({ where: { id: pollA } });
+    expect(jdrAfter.expiresAt).toEqual(jdrBefore.expiresAt);
+    expect(jdrAfter.relanceSentAt).toBeNull();
+  });
+
   describe('capacités JDR, invitations et favoris (Story 37.7)', () => {
     let joueurB: TestUser;
     let ami: TestUser;

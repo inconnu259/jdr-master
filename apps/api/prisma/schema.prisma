@@ -314,19 +314,22 @@ model AvailabilityDeclaration {
 
 /// Vote de date lancé par le MJ pour déterminer la prochaine séance.
 model SessionPoll {
-  id          String       @id @default(uuid())
-  partieId    String
-  partie      Partie       @relation(fields: [partieId], references: [id], onDelete: Cascade)
-  createdById String
-  scenarioRef String?
-  status      PollStatus   @default(OPEN)
-  expiresAt   DateTime?
-  chosenDate  DateTime?
-  chosenSlot  DaySlot?
-  createdAt   DateTime     @default(now())
-  options     PollOption[]
-  votes       PollVote[]
-  seance      Seance?
+  id            String       @id @default(uuid())
+  partieId      String
+  partie        Partie       @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  createdById   String
+  scenarioRef   String?
+  status        PollStatus   @default(OPEN)
+  expiresAt     DateTime?
+  chosenDate    DateTime?
+  chosenSlot    DaySlot?
+  /// Story 40.7 : instant d'envoi de l'unique relance de la veille de l'échéance (conjonction d'un groupe) ;
+  /// remis à null quand l'hôte prolonge le vote.
+  relanceSentAt DateTime?
+  createdAt     DateTime     @default(now())
+  options       PollOption[]
+  votes         PollVote[]
+  seance        Seance?
 
   @@index([partieId, status])
 }

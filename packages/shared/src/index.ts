@@ -300,6 +300,9 @@ export type PermissionAction =
   | 'POLL_READ'
   | 'POLL_VOTE'
   | 'POLL_CHOOSE'
+  // Story 40.7 : prolonger le vote d'une conjonction — l'hôte seul (règle décidée dans `PermissionService`),
+  // groupe de ralliement seulement ; absente du JDR (son échéance par défaut reste de 14 jours).
+  | 'POLL_EXTEND'
   | 'POLL_OPTIONS_SET'
   | 'POLL_CLOSE'
   // Capacités JDR (Story 37.7, couche 3) : les actions d'ÉCRITURE sont aussi conditionnées à une
@@ -736,6 +739,13 @@ export interface CreateEventDto {
   /** Story 40.4 : membres à qui l'hôte réserve une place d'emblée (distincts, jamais l'hôte, places
    *  limitées seulement, au plus `capacity − 1`). Ignoré par la modification. */
   reservedUserIds?: string[];
+}
+
+/** Payload de prolongation du vote d'une conjonction (PATCH /parties/:id/poll/:pollId/extend, Story 40.7) :
+ *  `expiresAt` est la clé `YYYY-MM-DD` du NOUVEAU jour d'échéance (le vote se termine à la fin de ce jour,
+ *  UTC) ; strictement après le jour d'échéance actuel, jamais avant aujourd'hui. */
+export interface ExtendPollDto {
+  expiresAt: string;
 }
 
 /** Payload de réservation d'une place (POST /scenarios/seances/:id/reservations, Story 40.4). */

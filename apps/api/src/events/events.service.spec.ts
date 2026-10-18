@@ -1552,6 +1552,71 @@ describe('EventsService (Story 37.3)', () => {
     });
   });
 
+  describe('voteReminderRecipients() (Story 40.7)', () => {
+    const u = (id: string) => ({ id, email: `${id}@example.com` });
+    const poll = (over: {
+      votes?: string[];
+      inscriptionMax?: number | null;
+      inscriptions?: { status: 'RESERVED' | 'CONFIRMED'; user: { id: string; email: string } }[];
+      owner?: { id: string; email: string } | null;
+    }) => ({
+      votes: (over.votes ?? []).map((userId) => ({ userId })),
+      seance: {
+        inscriptionMax: over.inscriptionMax ?? null,
+        inscriptions: over.inscriptions ?? [],
+        event: {
+          owner: over.owner === undefined ? u('hote') : over.owner,
+          // Un compte supprimé n'a plus de ligne de membre : l'hôte disparu n'est plus dans la liste.
+          partie: {
+            memberships: (over.owner === null ? ['a', 'b', 'c'] : ['hote', 'a', 'b', 'c']).map(
+              (id) => ({
+                user: u(id),
+              }),
+            ),
+          },
+        },
+      },
+    });
+    const ids = (list: { id: string }[]) => list.map((r) => r.id);
+
+    it('« Tous les membres » : les membres qui n’ont aucune réponse — l’hôte d’abord, les votants exclus', () => {
+      expect(ids(service.voteReminderRecipients(poll({ votes: ['a'] })))).toEqual([
+        'hote',
+        'b',
+        'c',
+      ]);
+    });
+
+    it('places limitées : l’hôte et les inscrits CONFIRMÉS sans réponse — jamais une place réservée ni un autre membre', () => {
+      const recipients = service.voteReminderRecipients(
+        poll({
+          inscriptionMax: 4,
+          votes: ['hote'],
+          inscriptions: [
+            { status: 'CONFIRMED', user: u('a') },
+            { status: 'RESERVED', user: u('b') },
+          ],
+        }),
+      );
+
+      expect(ids(recipients)).toEqual(['a']);
+    });
+
+    it('tout le monde a voté → aucun destinataire', () => {
+      expect(ids(service.voteReminderRecipients(poll({ votes: ['hote', 'a', 'b', 'c'] })))).toEqual(
+        [],
+      );
+    });
+
+    it('hôte disparu : les membres restent, sans plantage ; un inscrit aussi membre n’est listé qu’une fois', () => {
+      const recipients = service.voteReminderRecipients(
+        poll({ owner: null, inscriptions: [{ status: 'CONFIRMED', user: u('a') }] }),
+      );
+
+      expect(ids(recipients)).toEqual(['a', 'b', 'c']);
+    });
+  });
+
   describe('reminderRecipients() (Story 40.3)', () => {
     const u = (id: string) => ({ id, email: `${id}@example.com` });
     const partie = (over: Record<string, unknown> = {}) => ({

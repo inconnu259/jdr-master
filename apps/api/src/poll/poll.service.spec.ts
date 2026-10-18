@@ -2,12 +2,15 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { Test } from '@nestjs/testing';
 import {
   DATE_ALREADY_FIXED_MESSAGE,
+  EXTEND_INVALID_DAY_MESSAGE,
+  EXTEND_NOT_LATER_MESSAGE,
   GROUP_POLL_OPTION_BOUNDS,
   PAST_OPTION_MESSAGE,
   POLL_DEADLINE_PAST_MESSAGE,
   PollService,
 } from './poll.service';
 import { GROUP_POLL_CHOOSE_PORT } from './ports/group-poll-choose.port';
+import { GROUP_POLL_EXTEND_PORT } from './ports/group-poll-extend.port';
 import { GROUP_POLL_VOTE_PORT } from './ports/group-poll-vote.port';
 import { PARTIE_SIGNALS_PORT } from './ports/partie-signals.port';
 import { SEANCE_DATE_PORT } from './ports/seance-date.port';
@@ -120,6 +123,7 @@ describe('PollService', () => {
   let seanceDate: ReturnType<typeof makeSeanceDate>;
   let groupVotes: { assertCanVote: jest.Mock; lockConjonction: jest.Mock };
   let groupChoice: { assertCanChoose: jest.Mock; notifyDateFixed: jest.Mock };
+  let groupExtension: { assertCanExtend: jest.Mock };
 
   beforeEach(async () => {
     prisma = makePrisma();
@@ -136,6 +140,7 @@ describe('PollService', () => {
       assertCanChoose: jest.fn().mockResolvedValue(undefined),
       notifyDateFixed: jest.fn().mockResolvedValue(undefined),
     };
+    groupExtension = { assertCanExtend: jest.fn().mockResolvedValue(undefined) };
     const module = await Test.createTestingModule({
       providers: [
         PollService,
@@ -146,6 +151,7 @@ describe('PollService', () => {
         { provide: SEANCE_DATE_PORT, useValue: seanceDate },
         { provide: GROUP_POLL_VOTE_PORT, useValue: groupVotes },
         { provide: GROUP_POLL_CHOOSE_PORT, useValue: groupChoice },
+        { provide: GROUP_POLL_EXTEND_PORT, useValue: groupExtension },
       ],
     }).compile();
     service = module.get(PollService);
@@ -1023,7 +1029,8 @@ describe('PollService', () => {
       await service.updateInTx(tx as never, 'poll1', input(keep, later));
       expect(tx.sessionPoll.update).toHaveBeenCalledWith({
         where: { id: 'poll1' },
-        data: { expiresAt: later },
+        // Story 40.7 : une nouvelle échéance ré-arme la relance de la veille.
+        data: { expiresAt: later, relanceSentAt: null },
       });
     });
 
@@ -1371,6 +1378,157 @@ describe('PollService', () => {
       expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
       expect(groupVotes.lockConjonction).not.toHaveBeenCalled();
       expect(seanceDate.chooseDate).toHaveBeenCalledWith(anyOf(Object), 'poll1', d, 'EVENING');
+    });
+  });
+
+  describe('extend() — prolonger le vote d’une conjonction (Story 40.7)', () => {
+    const GROUPE = { id: 'g1', kind: 'CAMPAGNE_EPISODIQUE', gameSystemId: 'ralliement' };
+    const dayKey = (offset: number) =>
+      new Date(Date.now() + offset * 86_400_000).toISOString().substring(0, 10);
+    const endOfDay = (key: string) => new Date(`${key}T23:59:59.999Z`);
+    // Échéance actuelle : dans 3 jours (fin de journée UTC).
+    const poll = {
+      id: 'poll1',
+      partieId: 'g1',
+      status: 'OPEN',
+      expiresAt: endOfDay(dayKey(3)),
+    };
+    beforeEach(() => {
+      permissions.assert.mockResolvedValue(testGrant(GROUPE, 'member'));
+      prisma.sessionPoll.findUnique.mockResolvedValue(poll);
+      prisma.sessionPoll.update.mockResolvedValue({});
+    });
+
+    it('cellule de rôle, droit d’hôte par le port, puis verrou, relecture et écriture dans UNE transaction', async () => {
+      const order: string[] = [];
+      groupExtension.assertCanExtend.mockImplementation(() => {
+        order.push('droit');
+        return Promise.resolve();
+      });
+      groupVotes.lockConjonction.mockImplementation(() => {
+        order.push('verrou');
+        return Promise.resolve({ dated: false });
+      });
+      prisma.sessionPoll.update.mockImplementation(() => {
+        order.push('prolonge');
+        return Promise.resolve({});
+      });
+
+      await service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(10) });
+
+      expect(permissions.assert).toHaveBeenCalledWith('hote', 'POLL_EXTEND', { partieId: 'g1' });
+      expect(groupExtension.assertCanExtend).toHaveBeenCalledWith(
+        { id: 'poll1', partieId: 'g1' },
+        GROUPE,
+        'hote',
+      );
+      // Fin du jour choisi (UTC), comme à la création ; la relance est ré-armée.
+      expect(prisma.sessionPoll.update).toHaveBeenCalledWith({
+        where: { id: 'poll1' },
+        data: { expiresAt: endOfDay(dayKey(10)), relanceSentAt: null },
+      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(['droit', 'verrou', 'prolonge']);
+    });
+
+    it('après le commit : partie:{id} puis les signaux de l’accueil', async () => {
+      const order: string[] = [];
+      realtimeEvents.emit.mockImplementation(() => order.push('emit'));
+      partieSignals.notifyChanged.mockImplementation(() => {
+        order.push('signaux');
+        return Promise.resolve();
+      });
+
+      await service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(10) });
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('g1'));
+      expect(order).toEqual(['emit', 'signaux']);
+    });
+
+    it('échéance déjà dépassée mais sondage ouvert : accepté (le vote se rouvre)', async () => {
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        ...poll,
+        expiresAt: endOfDay(dayKey(-5)),
+      });
+
+      await expect(
+        service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(0) }),
+      ).resolves.toBeUndefined();
+      expect(prisma.sessionPoll.update).toHaveBeenCalledWith({
+        where: { id: 'poll1' },
+        data: { expiresAt: endOfDay(dayKey(0)), relanceSentAt: null },
+      });
+    });
+
+    it('même jour ou jour antérieur à l’échéance actuelle → 400, rien n’est écrit ni émis', async () => {
+      for (const offset of [3, 2]) {
+        const refusal = service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(offset) });
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(EXTEND_NOT_LATER_MESSAGE);
+      }
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+      expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
+    });
+
+    it('jour passé → 400 avant toute transaction', async () => {
+      const refusal = service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(-1) });
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(POLL_DEADLINE_PAST_MESSAGE);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+    });
+
+    it('jour qui n’existe pas au calendrier → 400 français', async () => {
+      const refusal = service.extend('g1', 'poll1', 'hote', { expiresAt: '2099-02-30' });
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(EXTEND_INVALID_DAY_MESSAGE);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('date déjà fixée (sous le verrou) → 400, rien n’est écrit', async () => {
+      groupVotes.lockConjonction.mockResolvedValue({ dated: true });
+
+      const refusal = service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(10) });
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(DATE_ALREADY_FIXED_MESSAGE);
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('sondage fermé (relu sous le verrou) → 400 ; sondage d’une AUTRE partie → 404', async () => {
+      prisma.sessionPoll.findUnique.mockResolvedValue({ ...poll, status: 'CLOSED' });
+      await expect(
+        service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(10) }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      prisma.sessionPoll.findUnique.mockResolvedValue({ ...poll, partieId: 'autre' });
+      await expect(
+        service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(10) }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+    });
+
+    it('droit refusé par le port (non-hôte, rencontre isolée, sondage inconnu) : rien n’est écrit ni émis', async () => {
+      groupExtension.assertCanExtend.mockRejectedValue(new ForbiddenException('hôte seul'));
+
+      await expect(
+        service.extend('g1', 'poll1', 'autre', { expiresAt: dayKey(10) }),
+      ).rejects.toThrow('hôte seul');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+      expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
+    });
+
+    it('cellule de rôle refusée (JDR, étranger) : le port n’est jamais consulté', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException('non'));
+
+      await expect(
+        service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(10) }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(groupExtension.assertCanExtend).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 });

@@ -1025,6 +1025,14 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_event_fix_counts',
     'partie.ralliement_event_fix_past',
     'partie.ralliement_event_fix_warning',
+    // Story 40.7 : prolonger le vote — libellés, phrase d’introduction et avertissement verbatim du contrat
+    // d’UI (« Prolonger le vote », « Nouvelle échéance », « Les personnes qui n’ont pas encore voté… ») ;
+    // seul le repli d’erreur a une voix
+    'partie.ralliement_event_extend_btn',
+    'partie.ralliement_event_extend_confirm_btn',
+    'partie.ralliement_event_extend_heading',
+    'partie.ralliement_event_extend_field',
+    'partie.ralliement_event_extend_warning',
     // Story 40.5b : calendrier du groupe — liens et boutons verbatim du contrat d’UI (« Calendrier du
     // groupe », « Choisir les créneaux dans le calendrier », « Voter dans le calendrier », « Composer
     // les créneaux »), titre du panneau des votes et unités de l’avertissement de retrait de créneaux
@@ -1729,6 +1737,37 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     }
     for (const key of Object.keys(TONE_MAP['grimoire-emeraude']).filter((k) =>
       k.startsWith('partie.ralliement_event_fix_'),
+    )) {
+      for (const theme of THEMES) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).not.toMatch(NON_JDR_BANNED_WORDS);
+      }
+    }
+  });
+
+  // Story 40.7 : prolonger le vote d'une conjonction. Les mots du contrat d'UI (« Prolonger le vote », « Nouvelle
+  // échéance », l'avertissement de relance) sont identiques dans les trois thèmes ; le repli d'erreur nomme la
+  // rencontre à la manière du thème. Aucun mot de JDR.
+  it('Story 40.7 : « Prolonger le vote » garde les mots du contrat et prend la voix du thème pour l’erreur, sans mot de JDR', () => {
+    const neutres: Record<string, string> = {
+      'partie.ralliement_event_extend_btn': 'Prolonger le vote',
+      'partie.ralliement_event_extend_confirm_btn': 'Prolonger',
+      'partie.ralliement_event_extend_heading': '« {title} » — le vote se termine le {date}.',
+      'partie.ralliement_event_extend_field': 'Nouvelle échéance',
+      'partie.ralliement_event_extend_warning':
+        'Les personnes qui n’ont pas encore voté seront relancées la veille de la nouvelle échéance.',
+    };
+    for (const [key, attendu] of Object.entries(neutres)) {
+      for (const theme of THEMES) expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(attendu);
+    }
+    const erreurs = THEMES.map((theme) => TONE_MAP[theme]['partie.ralliement_event_extend_error']);
+    expect(new Set(erreurs).size).toBe(THEMES.length);
+    // « Renoncer » (annulation) et « Votre accord » (titre) existent déjà dans chaque thème.
+    for (const theme of THEMES) {
+      expect(TONE_MAP[theme]['partie.ralliement_event_cancel_btn'], theme).toBe('Renoncer');
+      expect(TONE_MAP[theme]['parties.confirm_title'], theme).toBeTruthy();
+    }
+    for (const key of Object.keys(TONE_MAP['grimoire-emeraude']).filter((k) =>
+      k.startsWith('partie.ralliement_event_extend_'),
     )) {
       for (const theme of THEMES) {
         expect(TONE_MAP[theme][key], `${theme} / ${key}`).not.toMatch(NON_JDR_BANNED_WORDS);

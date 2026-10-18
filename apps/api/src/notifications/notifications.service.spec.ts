@@ -10,6 +10,7 @@ describe('NotificationsService', () => {
   let service: NotificationsService;
   let prisma: {
     seance: { findMany: jest.Mock; updateMany: jest.Mock };
+    sessionPoll: { findMany: jest.Mock; updateMany: jest.Mock };
   };
   let email: { sendMail: jest.Mock };
 
@@ -35,6 +36,8 @@ describe('NotificationsService', () => {
   beforeEach(() => {
     prisma = {
       seance: { findMany: jest.fn(), updateMany: jest.fn() },
+      // Story 40.7 : la relance de vote — aucun sondage dû par défaut.
+      sessionPoll: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn() },
     };
     email = { sendMail: jest.fn().mockResolvedValue({ ok: true }) };
     // Story 40.3 : l'EventsService réel — `reminderRecipients` est pur (aucune lecture en base).
@@ -255,6 +258,193 @@ describe('NotificationsService', () => {
       for (const [template] of email.sendMail.mock.calls as [string][]) {
         expect(template).toBe('session-reminder');
       }
+    });
+  });
+
+  describe('relance de vote de la veille de l’échéance (Story 40.7)', () => {
+    const u = (id: string) => ({ id, email: `${id}@example.com` });
+    const expiresAt = new Date('2026-11-20T23:59:59.999Z');
+    const votePoll = (
+      over: Record<string, unknown> = {},
+      seanceOver: Record<string, unknown> = {},
+    ) => ({
+      id: 'poll1',
+      expiresAt,
+      votes: [{ userId: 'a' }],
+      seance: {
+        inscriptionMax: null,
+        inscriptions: [],
+        event: {
+          title: 'Catane',
+          owner: u('a'),
+          partie: {
+            id: 'g1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+            gameSystemId: 'ralliement',
+            memberships: ['a', 'b', 'c'].map((id) => ({ user: u(id) })),
+          },
+        },
+        ...seanceOver,
+      },
+      ...over,
+    });
+    const recipients = () => (email.sendMail.mock.calls as [string, string][]).map(([, to]) => to);
+    beforeEach(() => {
+      // Aucune séance due : seule la relance de vote est exercée.
+      prisma.seance.findMany.mockResolvedValue([]);
+    });
+
+    it('interroge les sondages OUVERTS d’un groupe, sans date, jamais relancés, dont l’échéance tombe entre 24 h et 48 h', async () => {
+      const avant = Date.now();
+      await service.sendDueReminders();
+      const apres = Date.now();
+
+      expect(prisma.sessionPoll.findMany).toHaveBeenCalledTimes(1);
+      const [args] = prisma.sessionPoll.findMany.mock.calls[0] as [
+        {
+          where: {
+            status: string;
+            relanceSentAt: null;
+            expiresAt: { gt: Date; lte: Date };
+            seance: { is: { startDate: null; event: { partie: { kind: string } } } };
+          };
+        },
+      ];
+      expect(args.where.status).toBe('OPEN');
+      expect(args.where.relanceSentAt).toBeNull();
+      expect(args.where.seance.is.startDate).toBeNull();
+      expect(args.where.seance.is.event.partie.kind).toBe('CAMPAGNE_EPISODIQUE');
+      // expiresAt − 48 h ≤ maintenant < expiresAt − 24 h  ⇔  maintenant + 24 h < expiresAt ≤ maintenant + 48 h.
+      const { gt, lte } = args.where.expiresAt;
+      expect(gt.getTime()).toBeGreaterThanOrEqual(avant + 24 * 3_600_000);
+      expect(gt.getTime()).toBeLessThanOrEqual(apres + 24 * 3_600_000);
+      expect(lte.getTime()).toBeGreaterThanOrEqual(avant + 48 * 3_600_000);
+      expect(lte.getTime()).toBeLessThanOrEqual(apres + 48 * 3_600_000);
+    });
+
+    it('la fenêtre épouse le jour qui précède le jour d’échéance (fin de journée UTC)', () => {
+      // Échéance = fin du jour D (D 23:59:59.999). La relance part quand maintenant ∈ [D−2 23:59:59.999, D−1 23:59:59.999[.
+      const fin = new Date('2026-11-20T23:59:59.999Z').getTime();
+      const dansLaFenetre = (iso: string) => {
+        const now = new Date(iso).getTime();
+        return fin - 48 * 3_600_000 <= now && now < fin - 24 * 3_600_000;
+      };
+      expect(dansLaFenetre('2026-11-19T00:00:00.000Z')).toBe(true); // premier passage horaire du jour D−1
+      expect(dansLaFenetre('2026-11-19T23:00:00.000Z')).toBe(true); // dernier passage horaire du jour D−1
+      expect(dansLaFenetre('2026-11-18T23:00:00.000Z')).toBe(false); // l’avant-veille
+      expect(dansLaFenetre('2026-11-20T00:00:00.000Z')).toBe(false); // le jour d’échéance lui-même
+    });
+
+    it('relance les éligibles qui n’ont pas voté, une fois chacun, par l’e-mail neutre — puis marque le sondage', async () => {
+      prisma.sessionPoll.findMany.mockResolvedValue([votePoll()]);
+
+      await service.sendDueReminders();
+
+      expect(recipients()).toEqual(['b@example.com', 'c@example.com']);
+      const [template, , data] = email.sendMail.mock.calls[0] as [
+        string,
+        string,
+        Record<string, unknown>,
+      ];
+      expect(template).toBe('conjonction-relance');
+      expect(data.eventTitle).toBe('Catane');
+      // Jour d'échéance en toutes lettres (jour UTC de `expiresAt`, sans créneau).
+      expect(data.deadline).toBe('vendredi 20 novembre');
+      expect(String(data.link)).toMatch(/\/parties\/g1\/guild-calendar$/);
+      expect(prisma.sessionPoll.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.sessionPoll.updateMany).toHaveBeenCalledWith({
+        where: { id: 'poll1', status: 'OPEN', relanceSentAt: null, expiresAt },
+        data: { relanceSentAt: anyOf(Date) },
+      });
+    });
+
+    it('tout le monde a voté : aucun e-mail, mais le sondage est marqué (une seule fois)', async () => {
+      prisma.sessionPoll.findMany.mockResolvedValue([
+        votePoll({ votes: [{ userId: 'a' }, { userId: 'b' }, { userId: 'c' }] }),
+      ]);
+
+      await service.sendDueReminders();
+
+      expect(email.sendMail).not.toHaveBeenCalled();
+      expect(prisma.sessionPoll.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('places limitées : l’hôte et les inscrits confirmés sans réponse ; une place réservée n’est pas relancée', async () => {
+      prisma.sessionPoll.findMany.mockResolvedValue([
+        votePoll(
+          { votes: [] },
+          {
+            inscriptionMax: 4,
+            inscriptions: [
+              { status: 'CONFIRMED', user: u('b') },
+              { status: 'RESERVED', user: u('c') },
+            ],
+          },
+        ),
+      ]);
+
+      await service.sendDueReminders();
+
+      expect(recipients()).toEqual(['a@example.com', 'b@example.com']);
+    });
+
+    it('un sondage de JDR ou de rencontre isolée trouvé malgré le filtre : rien envoyé, rien marqué', async () => {
+      const jdr = votePoll();
+      jdr.seance.event.partie.gameSystemId = 'ryuutama';
+      const isolee = votePoll({ id: 'poll2' });
+      isolee.seance.event.partie.kind = 'ONE_SHOT';
+      prisma.sessionPoll.findMany.mockResolvedValue([jdr, isolee]);
+
+      await service.sendDueReminders();
+
+      expect(email.sendMail).not.toHaveBeenCalled();
+      expect(prisma.sessionPoll.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('un échec d’envoi est loggé, ne lève jamais, et le sondage est quand même marqué', async () => {
+      prisma.sessionPoll.findMany.mockResolvedValue([votePoll()]);
+      email.sendMail.mockResolvedValue({ ok: false });
+      const errorLog = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      await expect(service.sendDueReminders()).resolves.toBeUndefined();
+
+      expect(errorLog).toHaveBeenCalledTimes(2);
+      expect(prisma.sessionPoll.updateMany).toHaveBeenCalledTimes(1);
+      errorLog.mockRestore();
+    });
+
+    it('un sondage en échec n’empêche pas le suivant ; une lecture en échec ne lève jamais', async () => {
+      prisma.sessionPoll.findMany.mockResolvedValue([votePoll(), votePoll({ id: 'poll2' })]);
+      prisma.sessionPoll.updateMany.mockRejectedValueOnce(new Error('boom'));
+      const errorLog = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      await expect(service.sendDueReminders()).resolves.toBeUndefined();
+      expect(prisma.sessionPoll.updateMany).toHaveBeenCalledTimes(2);
+      expect(errorLog).toHaveBeenCalledWith(expect.stringContaining('poll1'), anyOf(String));
+
+      prisma.sessionPoll.findMany.mockRejectedValue(new Error('db'));
+      await expect(service.sendDueReminders()).resolves.toBeUndefined();
+      errorLog.mockRestore();
+    });
+
+    it('la lecture des séances en échec n’empêche pas la relance de vote (qui part avant que l’erreur ne remonte)', async () => {
+      prisma.seance.findMany.mockRejectedValue(new Error('db'));
+      prisma.sessionPoll.findMany.mockResolvedValue([votePoll()]);
+
+      await expect(service.sendDueReminders()).rejects.toThrow('db');
+
+      expect(recipients()).toEqual(['b@example.com', 'c@example.com']);
+    });
+
+    it('les rappels de séance et la relance de vote sont indépendants : une séance due n’empêche pas la relance', async () => {
+      prisma.seance.findMany.mockResolvedValue([makeSeance()]);
+      prisma.sessionPoll.findMany.mockResolvedValue([votePoll()]);
+
+      await service.sendDueReminders();
+
+      const templates = (email.sendMail.mock.calls as [string][]).map(([t]) => t);
+      expect(templates.filter((t) => t === 'session-reminder')).toHaveLength(2);
+      expect(templates.filter((t) => t === 'conjonction-relance')).toHaveLength(2);
     });
   });
 

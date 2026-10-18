@@ -10,6 +10,7 @@ function makePollService() {
     castVote: jest.fn(),
     withdrawVote: jest.fn(),
     choose: jest.fn(),
+    extend: jest.fn(),
     close: jest.fn(),
     setOptions: jest.fn(),
   };
@@ -44,6 +45,11 @@ describe('PollController', () => {
     await expect(controller.choose('p1', 'poll1', user, { optionId: 'opt1' })).rejects.toThrow(
       'poll fermé',
     );
+  });
+
+  it('extend() route vers PollService.extend() (Story 40.7)', async () => {
+    await controller.extend('p1', 'poll1', user, { expiresAt: '2026-11-20' });
+    expect(poll.extend).toHaveBeenCalledWith('p1', 'poll1', 'mj1', { expiresAt: '2026-11-20' });
   });
 
   it('findOpen() route vers PollService.findOpen()', async () => {

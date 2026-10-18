@@ -25,9 +25,11 @@ import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.
 import { CastVoteDto } from './dto/cast-vote.dto';
 import { ChooseDateDto } from './dto/choose-date.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
+import { ExtendPollDto } from './dto/extend-poll.dto';
 import { Prisma } from '@prisma/client';
 import { SetPollOptionsDto } from './dto/set-poll-options.dto';
 import { GROUP_POLL_CHOOSE_PORT, type GroupPollChoosePort } from './ports/group-poll-choose.port';
+import { GROUP_POLL_EXTEND_PORT, type GroupPollExtendPort } from './ports/group-poll-extend.port';
 import { GROUP_POLL_VOTE_PORT, type GroupPollVotePort } from './ports/group-poll-vote.port';
 import { PARTIE_SIGNALS_PORT, type PartieSignalsPort } from './ports/partie-signals.port';
 import { SEANCE_DATE_PORT, type SeanceDatePort } from './ports/seance-date.port';
@@ -39,6 +41,13 @@ export const DATE_ALREADY_FIXED_MESSAGE = 'La date de cette conjonction est déj
 
 /** Refus de fixer la date d'une conjonction sur un créneau dont le jour est déjà passé (Story 40.6). */
 export const PAST_OPTION_MESSAGE = 'Ce créneau est déjà passé : choisissez un jour à venir';
+
+/** Refus de prolonger un vote dont la nouvelle échéance n'est pas un jour calendaire valide (Story 40.7). */
+export const EXTEND_INVALID_DAY_MESSAGE = "La nouvelle échéance n'est pas un jour valide";
+
+/** Refus de prolonger un vote vers un jour qui n'est pas strictement après l'échéance actuelle (Story 40.7). */
+export const EXTEND_NOT_LATER_MESSAGE =
+  "La nouvelle échéance doit être postérieure à l'échéance actuelle";
 
 /** Bornes d'un sondage du JDR (Story 36.10) : de 2 à 40 créneaux. */
 export const JDR_POLL_OPTION_BOUNDS = { min: 2, max: 40 } as const;
@@ -93,6 +102,9 @@ export class PollService {
     // Story 40.6 : fixer la date d'une conjonction — le droit d'hôte et l'e-mail « C'est fixé » sont ceux
     // de `events/`, derrière ce port ; `poll/` garde l'écriture du sondage.
     @Inject(GROUP_POLL_CHOOSE_PORT) private readonly groupChoice: GroupPollChoosePort,
+    // Story 40.7 : prolonger le vote d'une conjonction — le droit d'hôte est celui de `events/`, derrière
+    // ce port ; `poll/` garde l'écriture du sondage.
+    @Inject(GROUP_POLL_EXTEND_PORT) private readonly groupExtension: GroupPollExtendPort,
   ) {}
 
   /** Crée un vote de date sur la partie de l'autorisation. Seul appelant :
@@ -200,7 +212,11 @@ export class PollService {
       });
     }
     if (deadlineChanged) {
-      await tx.sessionPoll.update({ where: { id: pollId }, data: { expiresAt: input.expiresAt } });
+      // Story 40.7 : une nouvelle échéance ré-arme la relance de la veille (comme « Prolonger le vote »).
+      await tx.sessionPoll.update({
+        where: { id: pollId },
+        data: { expiresAt: input.expiresAt, relanceSentAt: null },
+      });
     }
   }
 
@@ -457,6 +473,55 @@ export class PollService {
   }
 
   /**
+   * Story 40.7 — l'hôte prolonge le vote de sa conjonction (UX-DR12). Le droit « hôte » est décidé par
+   * `events/` derrière le port, sur l'événement du sondage (403 pour tout autre membre, administrateur
+   * compris, et pour la rencontre isolée) ; la route n'existe pas en JDR (cellule `POLL_EXTEND` fermée).
+   * Puis UNE transaction sous le verrou de la conjonction (partie puis événement, comme la fixation de
+   * la date) : le sondage doit être ouvert et la date non fixée, le nouveau jour strictement après le jour
+   * d'échéance actuel et pas avant aujourd'hui (400 sinon, rien n'est écrit). L'échéance déjà dépassée
+   * ne bloque pas : tant que le sondage est ouvert et sans date, la prolonger rouvre le vote (`expiresAt`
+   * est sa seule porte). La nouvelle échéance est la fin du jour choisi (UTC), comme à la création, et la
+   * relance de la veille est ré-armée (`relanceSentAt` remis à vide). Après le commit : `partie:{id}` puis
+   * les signaux de l'accueil.
+   */
+  async extend(
+    partieId: string,
+    pollId: string,
+    userId: string,
+    dto: ExtendPollDto,
+  ): Promise<void> {
+    const { partie } = await this.permissions.assert(userId, 'POLL_EXTEND', { partieId });
+    // Le port refuse d'abord la rencontre isolée (403), puis un sondage qui n'est pas celui d'une conjonction
+    // de cette partie (400), puis tout membre qui n'est pas l'hôte (403) — avant toute écriture.
+    await this.groupExtension.assertCanExtend({ id: pollId, partieId }, partie, userId);
+    const newDay = dto.expiresAt;
+    const newDeadline = endOfDayUtc(newDay);
+    if (!newDeadline) throw new BadRequestException(EXTEND_INVALID_DAY_MESSAGE);
+    if (newDay < dayKeyUtc(new Date())) throw new BadRequestException(POLL_DEADLINE_PAST_MESSAGE);
+    await this.prisma.$transaction(async (tx) => {
+      const { dated } = await this.groupVotes.lockConjonction(tx, { id: pollId, partieId });
+      if (dated) throw new BadRequestException(DATE_ALREADY_FIXED_MESSAGE);
+      const poll = await tx.sessionPoll.findUnique({
+        where: { id: pollId },
+        select: { partieId: true, status: true, expiresAt: true },
+      });
+      if (!poll || poll.partieId !== partieId) throw new NotFoundException('Poll introuvable');
+      if (poll.status !== 'OPEN') throw new BadRequestException('Le poll est déjà fermé');
+      if (poll.expiresAt && newDay <= dayKeyUtc(poll.expiresAt)) {
+        throw new BadRequestException(EXTEND_NOT_LATER_MESSAGE);
+      }
+      await tx.sessionPoll.update({
+        where: { id: pollId },
+        data: { expiresAt: newDeadline, relanceSentAt: null },
+      });
+    });
+    this.realtimeEvents.emit(partieTopic(partieId));
+    // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : un vote rouvert fait réapparaître ce signal pour
+    // ceux qui n'avaient plus de raison de voter — en plus de partieTopic ci-dessus, jamais en remplacement.
+    await this.partieSignals.notifyChanged(partieId);
+  }
+
+  /**
    * Story 36.10 (dérogation D-16) — remplace le jeu d'options d'un vote **OUVERT** par celui que
    * le MJ vient de composer sur la grille. MJ seul (`POLL_OPTIONS_SET`).
    *
@@ -542,6 +607,20 @@ export class PollService {
     // ci-dessus, jamais en remplacement.
     await this.partieSignals.notifyChanged(partieId);
   }
+}
+
+/** Clé de jour `YYYY-MM-DD` (UTC) d'un instant — la convention des conjonctions (40.1 à 40.7). */
+function dayKeyUtc(date: Date): string {
+  return date.toISOString().substring(0, 10);
+}
+
+/** Fin du jour `dayKey` (UTC, dernière milliseconde) — l'échéance d'un vote de groupe, comme à sa
+ *  création (Story 40.5) — ou `null` si la clé ne désigne pas un vrai jour du calendrier. */
+function endOfDayUtc(dayKey: string): Date | null {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  const start = new Date(Date.UTC(y, m - 1, d));
+  if (Number.isNaN(start.getTime()) || dayKeyUtc(start) !== dayKey) return null;
+  return new Date(start.getTime() + 86_400_000 - 1);
 }
 
 /** Story 36.10 (revue de code) — clé métier d'une option : `date|slot`, normalisée. Point UNIQUE

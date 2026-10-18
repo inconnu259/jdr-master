@@ -182,6 +182,8 @@ const JDR_NOBODY: PermissionAction[] = [
   'EVENT_UPDATE',
   // Story 40.4 : réserver une place à un membre — n'existe pas en JDR.
   'SEANCE_RESERVE',
+  // Story 40.7 : prolonger le vote d'une conjonction — n'existe pas en JDR.
+  'POLL_EXTEND',
 ];
 
 describe('PermissionService', () => {
@@ -507,6 +509,8 @@ describe('PermissionService', () => {
       'SEANCE_RESERVE',
       // Story 40.6 : fixer la date d'une conjonction (testé à part, sur la cible `{ eventId }`).
       'POLL_CHOOSE',
+      // Story 40.7 : prolonger le vote d'une conjonction (testé à part, sur la cible `{ eventId }`).
+      'POLL_EXTEND',
     ];
     /** Modifier la partie, la clore, la rouvrir, la brûler (Story 39.1), inviter et retirer un
      *  membre (Story 39.3) : admin seul. */
@@ -808,6 +812,78 @@ describe('PermissionService', () => {
         });
         await expect(service.assert(MJ, 'POLL_CHOOSE', { eventId: 'ev-1' })).resolves.toEqual(
           objectLike({ partieId: 'A', role: 'mj' }),
+        );
+      });
+    });
+
+    // Story 40.7 — POLL_EXTEND : cellule de rôle ouverte aux membres, règle « hôte » décidée dans assert()
+    // sur la cible `{ eventId }` (l'événement du sondage). Cible `{ partieId }` : cellule seule.
+    describe('POLL_EXTEND — hôte de la conjonction seul, cible événement', () => {
+      const event = (ownerId: string | null) => ({ id: 'ev-1', ownerId, partie: RALLIEMENT });
+
+      it('accordé à l’hôte, qu’il soit membre ou administrateur', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(MEMBRE));
+        await expect(service.assert(MEMBRE, 'POLL_EXTEND', { eventId: 'ev-1' })).resolves.toEqual(
+          objectLike({ partieId: 'R', role: 'member' }),
+        );
+        prisma.event.findUnique.mockResolvedValue(event(ADMIN));
+        await expect(service.assert(ADMIN, 'POLL_EXTEND', { eventId: 'ev-1' })).resolves.toEqual(
+          objectLike({ partieId: 'R', role: 'admin' }),
+        );
+      });
+
+      it('refusé à un autre membre — 403 « réservée à l’hôte »', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(ADMIN));
+        const refusal = service.assert(MEMBRE, 'POLL_EXTEND', { eventId: 'ev-1' });
+        await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(refusal).rejects.toThrow(HOST_ONLY_MESSAGE);
+      });
+
+      it('refusé à un administrateur qui n’est pas l’hôte — 403 « réservée à l’hôte »', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(MEMBRE));
+        await expect(service.assert(ADMIN, 'POLL_EXTEND', { eventId: 'ev-1' })).rejects.toThrow(
+          HOST_ONLY_MESSAGE,
+        );
+      });
+
+      it('refusé à tous quand l’hôte a disparu (ownerId null)', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(null));
+        await expect(service.assert(ADMIN, 'POLL_EXTEND', { eventId: 'ev-1' })).rejects.toThrow(
+          HOST_ONLY_MESSAGE,
+        );
+      });
+
+      it('refusé à un étranger — 403 « pas accès » (avant la règle hôte)', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(MEMBRE));
+        await expect(service.assert(STRANGER, 'POLL_EXTEND', { eventId: 'ev-1' })).rejects.toThrow(
+          NO_ACCESS_MESSAGE,
+        );
+      });
+
+      it('événement inconnu → 404', async () => {
+        prisma.event.findUnique.mockResolvedValue(null);
+        await expect(
+          service.assert(ADMIN, 'POLL_EXTEND', { eventId: 'zzz' }),
+        ).rejects.toBeInstanceOf(NotFoundException);
+      });
+
+      it('cible { partieId } : cellule de rôle seule (premier contrôle de la route partagée), étranger refusé', async () => {
+        await expect(service.assert(MEMBRE, 'POLL_EXTEND', { partieId: 'R' })).resolves.toEqual(
+          objectLike({ partieId: 'R', role: 'member' }),
+        );
+        await expect(service.assert(STRANGER, 'POLL_EXTEND', { partieId: 'R' })).rejects.toThrow(
+          NO_ACCESS_MESSAGE,
+        );
+      });
+
+      it('JDR : la cellule est fermée, même au propriétaire (MJ) — la capacité n’existe pas', async () => {
+        prisma.event.findUnique.mockResolvedValue({
+          id: 'ev-1',
+          ownerId: 'quelquun-d-autre',
+          partie: PARTIE_A,
+        });
+        await expect(service.assert(MJ, 'POLL_EXTEND', { eventId: 'ev-1' })).rejects.toBeInstanceOf(
+          ForbiddenException,
         );
       });
     });

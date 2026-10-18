@@ -118,6 +118,18 @@
             {{ theme.tone()['partie.ralliement_event_fix_date_btn'] }}
           </button>
         }
+        <!-- Story 40.7 : l'hôte repousse l'échéance (confirmation « Votre accord »). -->
+        @if (p.kind === 'host') {
+          <button
+            mat-stroked-button
+            type="button"
+            class="ed__poll-extend"
+            [disabled]="!canExtend() || busy()"
+            (click)="openExtendVote()"
+          >
+            {{ theme.tone()['partie.ralliement_event_extend_btn'] }}
+          </button>
+        }
         @if (showComposeInCalendar()) {
           <button
             mat-stroked-button

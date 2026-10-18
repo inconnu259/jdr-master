@@ -6,6 +6,7 @@ import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { GroupEventsService } from './group-events.service';
 import { GroupPollChoiceService } from './group-poll-choice.service';
+import { GroupPollExtensionService } from './group-poll-extension.service';
 
 /**
  * Événement de base, séances et inscriptions (Story 37.3, couche 2 « rassemblement »).
@@ -26,13 +27,16 @@ import { GroupPollChoiceService } from './group-poll-choice.service';
  * Story 40.6 : `GroupPollChoiceService` (fixer la date d'une conjonction) est exporté pour `PortsModule`,
  * qui le lie à `GroupPollChoosePort` — il dépend de `PermissionsModule` et `EmailModule`, jamais de `poll/`.
  *
+ * Story 40.7 : `GroupPollExtensionService` (prolonger le vote) est exporté pour `PortsModule`, qui le lie à
+ * `GroupPollExtendPort` — il ne dépend que de `PermissionsModule`, jamais de `poll/`.
+ *
  * Story 40.3 : `GroupEventsService` est exporté — les routes d'inscription partagées avec le JDR
  * (`scenarios/seances/:id/inscription`) y délèguent la branche « groupe ».
  */
 @Module({
   imports: [PermissionsModule, EmailModule, PollModule],
   controllers: [EventsController],
-  providers: [EventsService, GroupEventsService, GroupPollChoiceService],
-  exports: [EventsService, GroupEventsService, GroupPollChoiceService],
+  providers: [EventsService, GroupEventsService, GroupPollChoiceService, GroupPollExtensionService],
+  exports: [EventsService, GroupEventsService, GroupPollChoiceService, GroupPollExtensionService],
 })
 export class EventsModule {}

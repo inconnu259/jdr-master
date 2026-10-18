@@ -2,6 +2,7 @@ import type { EventCardDto } from '@master-jdr/shared';
 import { TONE_MAP } from '../../core/theme/tones';
 import {
   answeredSlotCount,
+  canExtendVote,
   canFixDate,
   canManageReservations,
   canRespondToReservation,
@@ -11,6 +12,7 @@ import {
   eventDateLabel,
   eventSituation,
   eventSituationTextKey,
+  extendMinKey,
   frUnit,
   initialsOf,
   isFull,
@@ -25,6 +27,7 @@ import {
   isPollEnded,
   isPollOpen,
   needsVote,
+  nextDayKey,
   pollBestSlot,
   pollCountsLabel,
   pollPanel,
@@ -704,6 +707,53 @@ describe('event-card.util (Story 40.1)', () => {
       expect(canFixDate(pollCard([], { status: 'CLOSED' }), HOST)).toBe(false);
       expect(canFixDate(pollCard([], { options: [] }), HOST)).toBe(false);
       expect(canFixDate(card('d', '2026-10-24'), HOST)).toBe(false);
+    });
+  });
+
+  // Story 40.7 — prolonger le vote : droit côté écran (le serveur reste juge) et jour minimal proposable.
+  describe('prolonger le vote (Story 40.7)', () => {
+    const HOST = 'hote';
+    const pollCard = (
+      pollOver: Partial<NonNullable<EventCardDto['poll']>> = {},
+      over: Partial<EventCardDto> = {},
+    ): EventCardDto =>
+      card('p', null, {
+        poll: {
+          id: 'poll-1',
+          expiresAt: '2026-10-24T23:59:59.999Z',
+          status: 'OPEN',
+          eligibleVoterIds: [HOST, 'a'],
+          options: [{ id: 'o1', date: '2026-10-28', slot: 'EVENING', availableCount: 1 }],
+          votes: [],
+          ...pollOver,
+        },
+        ...over,
+      });
+
+    it('« Prolonger le vote » : l’hôte seul, sondage ouvert sans date — l’échéance dépassée ne le bloque pas', () => {
+      expect(canExtendVote(pollCard(), HOST)).toBe(true);
+      expect(canExtendVote(pollCard({ expiresAt: '2026-10-01T23:59:59.999Z' }), HOST)).toBe(true);
+      expect(canExtendVote(pollCard(), 'a')).toBe(false);
+      expect(canExtendVote(pollCard(), null)).toBe(false);
+      expect(canExtendVote(pollCard({ status: 'CLOSED' }), HOST)).toBe(false);
+      expect(canExtendVote(card('d', '2026-10-24'), HOST)).toBe(false);
+    });
+
+    it('nextDayKey : le lendemain, passages de mois et d’année compris', () => {
+      expect(nextDayKey('2026-10-25')).toBe('2026-10-26');
+      expect(nextDayKey('2026-10-31')).toBe('2026-11-01');
+      expect(nextDayKey('2026-12-31')).toBe('2027-01-01');
+    });
+
+    it('extendMinKey : le lendemain de l’échéance actuelle, jamais avant aujourd’hui', () => {
+      // Échéance le 2026-10-24 (pollCard) : au plus tôt le 25.
+      expect(extendMinKey(pollCard(), TODAY)).toBe('2026-10-25');
+      // Échéance dépassée depuis longtemps : le jour d'aujourd'hui (le serveur refuse un jour passé).
+      expect(extendMinKey(pollCard({ expiresAt: '2026-10-01T23:59:59.999Z' }), TODAY)).toBe(TODAY);
+      // Échéance aujourd'hui : demain.
+      expect(extendMinKey(pollCard({ expiresAt: '2026-10-17T23:59:59.999Z' }), TODAY)).toBe(
+        '2026-10-18',
+      );
     });
   });
 });

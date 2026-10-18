@@ -632,3 +632,30 @@ export function canFixDate(card: EventCardDto, userId: string | null | undefined
     card.poll.options.length > 0
   );
 }
+
+// ─── Prolonger le vote (Story 40.7) ───────────────────────────────────────────────────────────────
+
+/** Le jour qui suit la clé `YYYY-MM-DD` (jour UTC). */
+export function nextDayKey(key: string): string {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().substring(0, 10);
+}
+
+/** L'hôte peut prolonger le vote : il est l'hôte, le sondage est OUVERT et sans date posée. L'échéance
+ *  déjà dépassée ne le bloque pas (prolonger rouvre le vote). Le serveur reste juge. */
+export function canExtendVote(card: EventCardDto, userId: string | null | undefined): boolean {
+  return (
+    isHostOf(card, userId) &&
+    card.poll !== null &&
+    card.poll.status === 'OPEN' &&
+    !card.seance?.date
+  );
+}
+
+/** Plus petite « Nouvelle échéance » proposable : le lendemain de l'échéance actuelle — jamais avant
+ *  aujourd'hui (le serveur refuse un jour passé, une échéance déjà dépassée comprise). */
+export function extendMinKey(card: EventCardDto, todayKey: string): string {
+  const deadline = pollDeadlineKey(card);
+  const afterDeadline = deadline === null ? todayKey : nextDayKey(deadline);
+  return afterDeadline > todayKey ? afterDeadline : todayKey;
+}

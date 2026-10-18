@@ -169,6 +169,8 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
   POLL_READ: OWNER_AND_MEMBERS,
   POLL_VOTE: OWNER_AND_MEMBERS,
   POLL_CHOOSE: OWNER_ONLY,
+  // Story 40.7 : prolonger le vote n'existe pas en JDR (échéance par défaut de 14 jours, inchangée).
+  POLL_EXTEND: NOBODY,
   POLL_OPTIONS_SET: OWNER_ONLY,
   POLL_CLOSE: OWNER_ONLY,
   // Personnage (Story 37.7) : tout participant lit ; l'édition de l'XP et de la fiche, l'historique
@@ -217,7 +219,7 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
  * Depuis la Story 39.5, « quitter le groupe » est ouvert à l'administrateur et aux membres, et depuis
  * la Story 40.1, « proposer une conjonction / lister celles du groupe » et, depuis la Story 40.3,
  * « s'inscrire à une conjonction / s'en désinscrire », puis, Story 40.4, « réserver une place » et,
- * Story 40.6, « fixer la date » (l'hôte seul, décidé dans `assert()`).
+ * Story 40.6, « fixer la date » et, Story 40.7, « prolonger le vote » (l'hôte seul, décidé dans `assert()`).
  * TOUTE autre action est refusée
  * à tous les rôles — le ralliement n'a ni scénario, ni personnage, ni XP. Table COMPLÈTE par
  * construction (`Record` sur l'union fermée) : une action ajoutée sans sa ligne ne compile pas.
@@ -280,6 +282,10 @@ export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly Parti
   // Tout membre passe la cellule ; la règle « hôte de l'événement » est décidée plus bas, dans
   // `assert()` (HOST_ONLY_WHEN_EVENT_TARGETED), sur la cible `{ eventId }`.
   POLL_CHOOSE: ADMIN_AND_MEMBERS,
+  // Story 40.7 : prolonger le vote d'une conjonction. Tout membre passe la cellule ; la règle « hôte de
+  // l'événement » est décidée plus bas, dans `assert()` (HOST_ONLY_WHEN_EVENT_TARGETED), sur la cible
+  // `{ eventId }` — comme `POLL_CHOOSE`.
+  POLL_EXTEND: ADMIN_AND_MEMBERS,
   POLL_OPTIONS_SET: NOBODY,
   POLL_CLOSE: NOBODY,
   // Capacités JDR
@@ -361,6 +367,9 @@ const HOST_ONLY_ACTIONS: ReadonlySet<PermissionAction> = new Set<PermissionActio
  *  famille `jdr`, la cellule du MJ suffit, comme avant. */
 const HOST_ONLY_WHEN_EVENT_TARGETED: ReadonlySet<PermissionAction> = new Set<PermissionAction>([
   'POLL_CHOOSE',
+  // Story 40.7 : prolonger le vote — même route-cellule `{ partieId }` puis re-décision sur l'événement du
+  // sondage, par `PollService`.
+  'POLL_EXTEND',
 ]);
 
 /** Politique applicable à une famille. Un système inconnu du registre retombe sur la politique

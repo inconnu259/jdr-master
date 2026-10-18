@@ -15,6 +15,7 @@ import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import { CastVoteDto } from './dto/cast-vote.dto';
 import { ChooseDateDto } from './dto/choose-date.dto';
+import { ExtendPollDto } from './dto/extend-poll.dto';
 import { PollService } from './poll.service';
 import { SetPollOptionsDto } from './dto/set-poll-options.dto';
 
@@ -68,6 +69,21 @@ export class PollController {
     // `Partie.nextSessionDate/Slot` dans une seule transaction (via `SeanceDatePort`) — plus
     // d'appel best-effort vers `scenarios/` après coup.
     return this.poll.choose(partieId, pollId, user.id, dto);
+  }
+
+  /**
+   * Story 40.7 — l'hôte d'une conjonction prolonge son vote (nouvelle échéance `YYYY-MM-DD`). Route
+   * propre au groupe de ralliement : la cellule `POLL_EXTEND` est fermée en JDR. Distincte de
+   * `:pollId/choose` (qui scelle la date) : prolonger ne ferme jamais le sondage.
+   */
+  @Patch(':pollId/extend')
+  extend(
+    @Param('id', ParseUUIDPipe) partieId: string,
+    @Param('pollId', ParseUUIDPipe) pollId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ExtendPollDto,
+  ) {
+    return this.poll.extend(partieId, pollId, user.id, dto);
   }
 
   /**

@@ -90,6 +90,7 @@ describe('EmailModule (intégration réelle via Mailpit)', () => {
     ['conjonction-reminder', 'Voir la rencontre'],
     ['conjonction-reservation', 'Répondre'],
     ['conjonction-date-fixee', 'Voir la rencontre'],
+    ['conjonction-relance', 'Voter dans le calendrier'],
     ['password-reset', 'Choisir un nouveau mot de passe'],
     ['level-up', 'Voir la fiche'],
     ['email-change-confirm', 'Confirmer cette nouvelle adresse'],
@@ -284,6 +285,45 @@ describe('EmailModule (intégration réelle via Mailpit)', () => {
       expect(message.HTML).toContain('samedi 24 octobre (soir) · Chez Léa');
       expect(message.HTML).toContain(`href="${link}"`);
       expect(message.HTML).toContain('>Voir la rencontre</a>');
+      for (const mot of ['partie', 'MJ', 'grimoire', 'campagne', 'joueur', 'séance']) {
+        expect(message.HTML).not.toContain(mot);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
+  // Story 40.7 : relance de la veille de l'échéance — sujet « Plus qu'un jour pour voter : « Titre » », bouton
+  // « Voter dans le calendrier » vers le calendrier du groupe, aucun mot de JDR.
+  it('conjonction-relance : sujet interpolé, bouton « Voter dans le calendrier », corps neutre', async () => {
+    if (!reachable) return;
+
+    const app = await NestFactory.createApplicationContext(TestAppModule, { logger: false });
+    const email = app.get(EmailService);
+    const to = `integration-test-${Date.now()}-relance@example.com`;
+    const link = 'https://example.com/g/abc.def/guild-calendar';
+
+    try {
+      expect(
+        await email.sendMail('conjonction-relance', to, {
+          eventTitle: "Catane d'automne",
+          deadline: 'samedi 24 octobre',
+          link,
+        }),
+      ).toEqual({ ok: true });
+
+      const searchRes = await fetch(
+        `${MAILPIT_API}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`,
+      );
+      const search = (await searchRes.json()) as { messages: Array<{ ID: string }> };
+      expect(search.messages.length).toBeGreaterThan(0);
+
+      const messageRes = await fetch(`${MAILPIT_API}/api/v1/message/${search.messages[0].ID}`);
+      const message = (await messageRes.json()) as { Subject: string; HTML: string };
+      expect(message.Subject).toBe("Plus qu'un jour pour voter : « Catane d'automne »");
+      expect(message.HTML).toContain(`href="${link}"`);
+      expect(message.HTML).toContain('se termine le samedi 24 octobre.');
+      expect(message.HTML).toContain('>Voter dans le calendrier</a>');
       for (const mot of ['partie', 'MJ', 'grimoire', 'campagne', 'joueur', 'séance']) {
         expect(message.HTML).not.toContain(mot);
       }

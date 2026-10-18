@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import request, { type Response } from 'supertest';
 import { EventsService } from '../../src/events/events.service';
+import { NotificationsService } from '../../src/notifications/notifications.service';
 import { PartiesService } from '../../src/parties/parties.service';
 import {
   RealtimeEventsService,
@@ -3793,5 +3794,377 @@ describe("Ralliement — fixer la date d'une conjonction (Story 40.6)", () => {
     // Rien n'a été écrit ni retiré : seule la réponse d'avant la fixation subsiste.
     const rows = await h.prisma.pollVote.findMany({ where: { pollId: card.poll!.id } });
     expect(rows.map((r) => [r.userId, r.optionId, r.answer])).toEqual([[guest.id, o1.id, 'YES']]);
+  });
+});
+
+describe('Ralliement — prolonger le vote et relancer la veille (Story 40.7)', () => {
+  let h: Harness;
+  let admin: TestUser;
+  let host: TestUser;
+  let guest: TestUser;
+  let third: TestUser;
+  let stranger: TestUser;
+  let otherAdmin: TestUser;
+  let groupId: string;
+  let otherGroupId: string;
+  let oneShotId: string;
+  let jdrId: string;
+
+  type PollLike = {
+    id: string;
+    status: string;
+    expiresAt: string | null;
+    options: { id: string; date: string; slot: string }[];
+  };
+  type CardLike = {
+    id: string;
+    seance: { id: string } | null;
+    poll: PollLike | null;
+  };
+  type ErrorLike = { statusCode: number; message: string | string[] };
+
+  const RELANCE_MAIL = 'conjonction-relance';
+  const HOST_ONLY = "Action réservée à l'hôte de la conjonction";
+  const NOT_LATER = "La nouvelle échéance doit être postérieure à l'échéance actuelle";
+  const PAST_DEADLINE = "L'échéance du vote ne peut pas être passée";
+  const INVALID_DAY = "La nouvelle échéance n'est pas un jour valide";
+  const ALREADY_FIXED = 'La date de cette conjonction est déjà fixée';
+  const VOTE_ENDED = 'Le vote est terminé : l’échéance est dépassée';
+
+  const message = (res: { body: unknown }) => (res.body as ErrorLike).message;
+  const endOfDay = (day: string) => `${day}T23:59:59.999Z`;
+  const create = async (who: TestUser, over: Record<string, unknown> = {}) => {
+    const res = await who.agent.post(`/parties/${groupId}/events`).send({
+      title: 'Sondage à prolonger',
+      pollOptions: [
+        { date: isoDay(8), slot: 'EVENING' },
+        { date: isoDay(9), slot: 'MORNING' },
+      ],
+      pollDeadline: isoDay(5),
+      ...over,
+    });
+    expect(res.status).toBe(201);
+    return body<CardLike>(res);
+  };
+  const extend = (who: TestUser, pollId: string, expiresAt: unknown, partieId = groupId) =>
+    who.agent.patch(`/parties/${partieId}/poll/${pollId}/extend`).send({ expiresAt });
+  const vote = (who: TestUser, pollId: string, optionId: string) =>
+    who.agent.post(`/parties/${groupId}/poll/${pollId}/vote`).send({ optionId, answer: 'YES' });
+  const pollRow = (pollId: string) =>
+    h.prisma.sessionPoll.findUniqueOrThrow({ where: { id: pollId } });
+  const cardFor = async (who: TestUser, eventId: string) =>
+    body<CardLike[]>(await who.agent.get(`/parties/${groupId}/events/list`).expect(200)).find(
+      (c) => c.id === eventId,
+    )!;
+  const relanceMails = (since: number, title: string) =>
+    h.email.calls
+      .slice(since)
+      .filter((c) => c.template === RELANCE_MAIL && c.data.eventTitle === title);
+  const unchanged = async (pollId: string, expiresAt: Date) => {
+    const row = await pollRow(pollId);
+    expect(row.expiresAt?.getTime()).toBe(expiresAt.getTime());
+  };
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, host, guest, third, stranger, otherAdmin] = await Promise.all([
+      h.createUser('prol-admin'),
+      h.createUser('prol-hote'),
+      h.createUser('prol-invite'),
+      h.createUser('prol-tiers'),
+      h.createUser('prol-etranger'),
+      h.createUser('prol-autre-admin'),
+    ]);
+    ({ id: groupId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'prol', 'ralliement'));
+    for (const who of [host, guest, third]) await h.addMember(groupId, who);
+    ({ id: otherGroupId } = await h.createPartie(
+      otherAdmin,
+      'CAMPAGNE_EPISODIQUE',
+      'prol-autre',
+      'ralliement',
+    ));
+    ({ id: oneShotId } = await h.createPartie(admin, 'ONE_SHOT', 'prol-isolee', 'ralliement'));
+    ({ id: jdrId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'prol-jdr'));
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it("l'hôte prolonge : échéance en fin du nouveau jour (UTC), relance ré-armée, carte vivante pour tous", async () => {
+    const card = await create(host);
+    await h.prisma.sessionPoll.update({
+      where: { id: card.poll!.id },
+      data: { relanceSentAt: new Date() },
+    });
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    const notify = jest.spyOn(h.app.get(PartiesService), 'notifyPartieSignalsChanged');
+    try {
+      await extend(host, card.poll!.id, isoDay(9)).expect(200);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(notify).toHaveBeenCalledWith(groupId, expect.anything());
+    } finally {
+      emit.mockRestore();
+      notify.mockRestore();
+    }
+
+    const row = await pollRow(card.poll!.id);
+    expect(row.expiresAt?.toISOString()).toBe(endOfDay(isoDay(9)));
+    expect(row.relanceSentAt).toBeNull();
+    expect(row.status).toBe('OPEN');
+    for (const who of [admin, host, guest, third]) {
+      expect((await cardFor(who, card.id)).poll?.expiresAt).toBe(endOfDay(isoDay(9)));
+    }
+  });
+
+  it("une échéance dépassée mais un sondage encore ouvert : l'hôte prolonge, les votes rouvrent", async () => {
+    const card = await create(host);
+    const optionId = card.poll!.options[0].id;
+    await h.prisma.sessionPoll.update({
+      where: { id: card.poll!.id },
+      data: { expiresAt: new Date(Date.now() - 3 * 86_400_000) },
+    });
+    const refused = await vote(guest, card.poll!.id, optionId);
+    expect(refused.status).toBe(400);
+    expect(message(refused)).toBe(VOTE_ENDED);
+
+    // Le jour d'aujourd'hui suffit (jamais avant aujourd'hui) : le vote rouvre jusqu'à ce soir.
+    await extend(host, card.poll!.id, isoDay(0)).expect(200);
+
+    await vote(guest, card.poll!.id, optionId).expect(201);
+    expect(await h.prisma.pollVote.count({ where: { pollId: card.poll!.id } })).toBe(1);
+  });
+
+  describe('refus (rien n’est écrit)', () => {
+    it("tout autre membre, administrateur compris : 403 « réservée à l'hôte » ; un étranger et l'administrateur d'un autre groupe : 403 « pas accès »", async () => {
+      const card = await create(host);
+      const before = (await pollRow(card.poll!.id)).expiresAt!;
+
+      for (const who of [guest, third, admin]) {
+        const res = await extend(who, card.poll!.id, isoDay(9));
+        expect(res.status).toBe(403);
+        expect(message(res)).toBe(HOST_ONLY);
+      }
+      for (const who of [stranger, otherAdmin]) {
+        const res = await extend(who, card.poll!.id, isoDay(9));
+        expect(res.status).toBe(403);
+        expect(message(res)).toBe("Vous n'avez pas accès à cette partie");
+      }
+      await unchanged(card.poll!.id, before);
+    });
+
+    it("la rencontre isolée (ONE_SHOT) et le JDR : 403 ; le sondage d'un autre groupe par la route du sien : 400", async () => {
+      const card = await create(host);
+      const before = (await pollRow(card.poll!.id)).expiresAt!;
+
+      const oneShot = await extend(admin, randomUUID(), isoDay(9), oneShotId);
+      expect(oneShot.status).toBe(403);
+      expect(message(oneShot)).toBe("Cette action n'est pas disponible pour ce type de partie");
+      // JDR : la capacité n'existe pas, même pour le MJ (propriétaire).
+      expect((await extend(admin, randomUUID(), isoDay(9), jdrId)).status).toBe(403);
+      // L'administrateur de l'autre groupe, par la route de SON groupe, ne touche pas ce sondage.
+      expect((await extend(otherAdmin, card.poll!.id, isoDay(9), otherGroupId)).status).toBe(400);
+      // Sondage inconnu dans son propre groupe.
+      expect((await extend(host, randomUUID(), isoDay(9))).status).toBe(400);
+      await unchanged(card.poll!.id, before);
+    });
+
+    it('jour identique ou antérieur à l’échéance, jour passé, format ou jour invalide : 400 français', async () => {
+      const card = await create(host); // échéance : fin du jour +5
+      const before = (await pollRow(card.poll!.id)).expiresAt!;
+
+      for (const day of [isoDay(5), isoDay(3)]) {
+        const res = await extend(host, card.poll!.id, day);
+        expect(res.status).toBe(400);
+        expect(message(res)).toBe(NOT_LATER);
+      }
+      const past = await extend(host, card.poll!.id, isoDay(-1));
+      expect(past.status).toBe(400);
+      expect(message(past)).toBe(PAST_DEADLINE);
+      const impossible = await extend(host, card.poll!.id, '2099-02-30');
+      expect(impossible.status).toBe(400);
+      expect(message(impossible)).toBe(INVALID_DAY);
+      for (const bad of ['demain', '2099-1-1', 42, null, undefined]) {
+        expect((await extend(host, card.poll!.id, bad)).status).toBe(400);
+      }
+      await unchanged(card.poll!.id, before);
+    });
+
+    it('date déjà fixée ou sondage fermé : 400 français', async () => {
+      const dated = await create(host);
+      await host.agent
+        .patch(`/parties/${groupId}/poll/${dated.poll!.id}/choose`)
+        .send({ optionId: dated.poll!.options[0].id })
+        .expect(200);
+      const before = (await pollRow(dated.poll!.id)).expiresAt!;
+      const res = await extend(host, dated.poll!.id, isoDay(20));
+      expect(res.status).toBe(400);
+      expect(message(res)).toBe(ALREADY_FIXED);
+      await unchanged(dated.poll!.id, before);
+
+      const closed = await create(host);
+      await h.prisma.sessionPoll.update({
+        where: { id: closed.poll!.id },
+        data: { status: 'CLOSED' },
+      });
+      const beforeClosed = (await pollRow(closed.poll!.id)).expiresAt!;
+      expect((await extend(host, closed.poll!.id, isoDay(20))).status).toBe(400);
+      await unchanged(closed.poll!.id, beforeClosed);
+    });
+  });
+
+  it('deux prolongations simultanées vers le même jour : une seule gagne sous le verrou, l’autre est refusée (400)', async () => {
+    const card = await create(host);
+
+    const [a, b] = await Promise.all([
+      extend(host, card.poll!.id, isoDay(10)),
+      extend(host, card.poll!.id, isoDay(10)),
+    ]);
+
+    expect([a.status, b.status].sort()).toEqual([200, 400]);
+    expect((await pollRow(card.poll!.id)).expiresAt?.toISOString()).toBe(endOfDay(isoDay(10)));
+  });
+
+  describe('relance de la veille (e-mail n°6)', () => {
+    /** Place l'échéance dans la fenêtre « la veille du jour d'échéance » (entre 24 h et 48 h d'ici). */
+    const eveOfDeadline = (pollId: string) =>
+      h.prisma.sessionPoll.update({
+        where: { id: pollId },
+        data: { expiresAt: new Date(Date.now() + 36 * 3_600_000) },
+      });
+    const run = () => h.app.get(NotificationsService).sendDueReminders();
+
+    it('la veille de l’échéance : les éligibles sans réponse reçoivent l’e-mail une seule fois ; la marque est posée', async () => {
+      const card = await create(host, { title: 'Relance cible' });
+      await vote(guest, card.poll!.id, card.poll!.options[0].id).expect(201);
+      await vote(host, card.poll!.id, card.poll!.options[1].id).expect(201);
+      await eveOfDeadline(card.poll!.id);
+
+      const before = h.email.calls.length;
+      await run();
+      const sent = relanceMails(before, 'Relance cible');
+      // « Tous les membres » : l'administrateur et le tiers n'ont pas répondu ; l'invité et l'hôte oui.
+      expect(sent.map((c) => c.to).sort()).toEqual([admin.email, third.email].sort());
+      expect(String(sent[0].data.link)).toContain(`/parties/${groupId}/guild-calendar`);
+      expect((await pollRow(card.poll!.id)).relanceSentAt).not.toBeNull();
+
+      // Une seconde passe ne renvoie rien : « une fois ».
+      const second = h.email.calls.length;
+      await run();
+      expect(relanceMails(second, 'Relance cible')).toEqual([]);
+    });
+
+    it('prolonger ré-arme la relance : la veille de la nouvelle échéance, elle repart', async () => {
+      const card = await create(host, { title: 'Relance rearmee' });
+      await eveOfDeadline(card.poll!.id);
+      let mark = h.email.calls.length;
+      await run();
+      expect(relanceMails(mark, 'Relance rearmee')).toHaveLength(4);
+      expect((await pollRow(card.poll!.id)).relanceSentAt).not.toBeNull();
+
+      await extend(host, card.poll!.id, isoDay(7)).expect(200);
+      expect((await pollRow(card.poll!.id)).relanceSentAt).toBeNull();
+      // Loin de la nouvelle échéance : rien ne part.
+      mark = h.email.calls.length;
+      await run();
+      expect(relanceMails(mark, 'Relance rearmee')).toEqual([]);
+
+      // La veille de la nouvelle échéance : la relance repart, à ceux qui n'ont toujours pas voté.
+      await vote(guest, card.poll!.id, card.poll!.options[0].id).expect(201);
+      await eveOfDeadline(card.poll!.id);
+      mark = h.email.calls.length;
+      await run();
+      expect(
+        relanceMails(mark, 'Relance rearmee')
+          .map((c) => c.to)
+          .sort(),
+      ).toEqual([admin.email, host.email, third.email].sort());
+    });
+
+    it('places limitées : seuls l’hôte et les inscrits confirmés sans réponse sont relancés', async () => {
+      const card = await create(host, { title: 'Relance limitee', capacity: 4 });
+      await guest.agent.post(`/scenarios/seances/${card.seance!.id}/inscription`).expect(201);
+      await eveOfDeadline(card.poll!.id);
+
+      const before = h.email.calls.length;
+      await run();
+
+      expect(
+        relanceMails(before, 'Relance limitee')
+          .map((c) => c.to)
+          .sort(),
+      ).toEqual([host.email, guest.email].sort());
+    });
+
+    it('tout le monde a voté : aucun e-mail, la marque est quand même posée', async () => {
+      const card = await create(host, { title: 'Relance complete' });
+      for (const who of [admin, host, guest, third]) {
+        await vote(who, card.poll!.id, card.poll!.options[0].id).expect(201);
+      }
+      await eveOfDeadline(card.poll!.id);
+
+      const before = h.email.calls.length;
+      await run();
+
+      expect(relanceMails(before, 'Relance complete')).toEqual([]);
+      expect((await pollRow(card.poll!.id)).relanceSentAt).not.toBeNull();
+    });
+
+    it('rien pour une date fixée, un sondage fermé, une échéance hors de la veille', async () => {
+      const dated = await create(host, { title: 'Relance datee' });
+      await host.agent
+        .patch(`/parties/${groupId}/poll/${dated.poll!.id}/choose`)
+        .send({ optionId: dated.poll!.options[0].id })
+        .expect(200);
+      const closed = await create(host, { title: 'Relance fermee' });
+      await h.prisma.sessionPoll.update({
+        where: { id: closed.poll!.id },
+        data: { status: 'CLOSED' },
+      });
+      const early = await create(host, { title: 'Relance trop tot' });
+      const late = await create(host, { title: 'Relance trop tard' });
+      for (const c of [dated, closed]) await eveOfDeadline(c.poll!.id);
+      await h.prisma.sessionPoll.update({
+        where: { id: late.poll!.id },
+        data: { expiresAt: new Date(Date.now() + 12 * 3_600_000) },
+      });
+
+      const before = h.email.calls.length;
+      await run();
+
+      for (const title of [
+        'Relance datee',
+        'Relance fermee',
+        'Relance trop tot',
+        'Relance trop tard',
+      ]) {
+        expect(relanceMails(before, title)).toEqual([]);
+      }
+      for (const c of [dated, closed, early, late]) {
+        expect((await pollRow(c.poll!.id)).relanceSentAt).toBeNull();
+      }
+    });
+
+    it('un sondage de JDR n’est jamais relancé, même dans la fenêtre', async () => {
+      const mj = admin;
+      const event = await h.prisma.event.create({
+        data: { partieId: jdrId, title: 'Relance jdr', ownerId: mj.id },
+      });
+      const poll = await h.prisma.sessionPoll.create({
+        data: {
+          partieId: jdrId,
+          createdById: mj.id,
+          expiresAt: new Date(Date.now() + 36 * 3_600_000),
+          options: { create: [{ date: new Date(`${isoDay(8)}T00:00:00.000Z`), slot: 'EVENING' }] },
+        },
+      });
+      await h.prisma.seance.create({ data: { eventId: event.id, pollId: poll.id } });
+
+      const before = h.email.calls.length;
+      await run();
+
+      expect(h.email.calls.slice(before).filter((c) => c.template === RELANCE_MAIL)).toEqual([]);
+      expect((await pollRow(poll.id)).relanceSentAt).toBeNull();
+    });
   });
 });

@@ -116,4 +116,14 @@ describe('EventsApiService (Story 40.1)', () => {
     req.flush(null);
     await expect(p).resolves.toBeNull();
   });
+
+  it('extend → PATCH /parties/:id/poll/:pollId/extend avec le nouveau jour d’échéance (Story 40.7)', async () => {
+    const p = service.extend('p1', 'poll-1', '2026-11-02');
+    const req = http.expectOne(`${API}/parties/p1/poll/poll-1/extend`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual({ expiresAt: '2026-11-02' });
+    req.flush(null);
+    await expect(p).resolves.toBeNull();
+  });
 });

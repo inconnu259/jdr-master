@@ -506,6 +506,15 @@ export const grimoireEmeraude = {
     'La date sera scellée et les inscrits prévenus par e-mail. Elle ne pourra plus être rouverte ; les inscriptions tardives restent possibles.',
   'partie.ralliement_event_fix_date_error':
     'La date de cette conjonction n’a pu être fixée. Réessayez.',
+  /* — prolonger le vote d’une conjonction (Story 40.7) : mots du contrat identiques, repli d’erreur selon le thème — */
+  'partie.ralliement_event_extend_btn': 'Prolonger le vote',
+  'partie.ralliement_event_extend_confirm_btn': 'Prolonger',
+  'partie.ralliement_event_extend_heading': '« {title} » — le vote se termine le {date}.',
+  'partie.ralliement_event_extend_field': 'Nouvelle échéance',
+  'partie.ralliement_event_extend_warning':
+    'Les personnes qui n’ont pas encore voté seront relancées la veille de la nouvelle échéance.',
+  'partie.ralliement_event_extend_error':
+    'Le vote de cette conjonction n’a pu être prolongé. Réessayez.',
   /* — calendrier du groupe pour un sondage de dates (Story 40.5b) : mots du contrat identiques, noms de la rencontre et tutoiement selon le thème — */
   'partie.ralliement_calendar_link': 'Calendrier du groupe',
   'partie.ralliement_event_poll_calendar_btn': 'Choisir les créneaux dans le calendrier',

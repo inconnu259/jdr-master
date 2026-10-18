@@ -176,6 +176,22 @@ export interface ReminderSeance {
   };
 }
 
+/** Sondage d'une conjonction dû pour la relance de vote, tel que lu par la tâche horaire (Story 40.7) :
+ *  de quoi décider, SANS requête supplémentaire, qui n'a pas encore voté. Les membres du groupe ne servent
+ *  que si la conjonction accueille tous les membres (`inscriptionMax` nul). */
+export interface VoteReminderPoll {
+  /** Réponses déjà données sur le sondage (une ligne par réponse) — seul `userId` compte. */
+  votes: { userId: string }[];
+  seance: {
+    inscriptionMax: number | null;
+    inscriptions: { status: InscriptionStatus; user: ReminderRecipient }[];
+    event: {
+      owner: ReminderRecipient | null;
+      partie: { memberships: { user: ReminderRecipient }[] };
+    };
+  };
+}
+
 /** De quoi écrire l'e-mail d'une place réservée (Story 40.4), lu après le commit. */
 export interface ReservationNotice {
   eventTitle: string;
@@ -1471,6 +1487,35 @@ export class EventsService
       ];
     }
     return [...new Map(recipients.map((r) => [r.id, r])).values()];
+  }
+
+  /**
+   * Destinataires de la relance de vote de la veille de l'échéance (Story 40.7) — UNE définition, lue par
+   * la tâche horaire : les votants éligibles du sondage (`eligibleVoters`, la même définition que le
+   * refus d'un vote et le résumé des cartes) qui n'ont AUCUNE réponse sur le sondage. Pur : tout est lu
+   * avec les sondages dus (une seule lecture groupée, jamais une requête par sondage ni par votant).
+   * Un éligible dont l'adresse n'est pas connue (ni hôte, ni inscrit, ni membre) est ignoré. L'ordre
+   * d'`eligibleVoters` est conservé (l'hôte d'abord).
+   */
+  voteReminderRecipients(poll: VoteReminderPoll): ReminderRecipient[] {
+    const { seance } = poll;
+    const known = new Map<string, ReminderRecipient>();
+    for (const user of [
+      ...(seance.event.owner ? [seance.event.owner] : []),
+      ...seance.inscriptions.map((i) => i.user),
+      ...seance.event.partie.memberships.map((m) => m.user),
+    ]) {
+      known.set(user.id, user);
+    }
+    const voted = new Set(poll.votes.map((v) => v.userId));
+    return eligibleVoters({
+      hostId: seance.event.owner?.id ?? null,
+      inscriptionMax: seance.inscriptionMax,
+      inscriptions: seance.inscriptions.map((i) => ({ userId: i.user.id, status: i.status })),
+      memberIds: seance.event.partie.memberships.map((m) => m.user.id),
+    })
+      .filter((userId) => !voted.has(userId))
+      .flatMap((userId) => known.get(userId) ?? []);
   }
 
   // ─── Prochaine séance ───────────────────────────────────────────────────────────────────────

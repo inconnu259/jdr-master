@@ -19,6 +19,7 @@ import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
 import { StatusBadge } from '../../../shared/status-badge/status-badge';
 import { DateFixDialog, type DateFixData } from '../date-fix-dialog/date-fix-dialog';
 import {
+  canExtendVote,
   canFixDate,
   canManageReservations,
   canRespondToReservation,
@@ -27,6 +28,7 @@ import {
   eventBadge,
   eventDateLabel,
   eventSituationTextKey,
+  extendMinKey,
   hasPendingPoll,
   isFull,
   isFullForViewer,
@@ -34,11 +36,13 @@ import {
   isPastEvent,
   isPendingParticipant,
   participationLine,
+  pollDeadlineKey,
   pollPanel,
   pollSlotRows,
   rankedPollSlots,
 } from '../event-card.util';
 import { EventForm } from '../event-form/event-form';
+import { ExtendVoteDialog, type ExtendVoteData } from '../extend-vote-dialog/extend-vote-dialog';
 import { EventsApiService } from '../events-api.service';
 import { ParticipantChip } from '../participant-chip/participant-chip';
 import { refusalMessage } from '../refusal-message';
@@ -78,6 +82,11 @@ let nextUid = 0;
  * créneaux du plus au moins plébiscité, le meilleur présélectionné. Au succès, la fenêtre demande à l'onglet
  * de relire la liste (`refreshRequested`) et suit la carte vivante : le panneau du sondage cède la place à la
  * date, l'heure et le lieu en grand, comme pour toute conjonction datée.
+ *
+ * Story 40.7 : l'hôte d'un sondage ouvert et sans date voit aussi « Prolonger le vote » (échéance dépassée
+ * comprise : prolonger rouvre le vote). Il ouvre la confirmation « Votre accord » (`ExtendVoteDialog`) : champ
+ * « Nouvelle échéance » (date native, au plus tôt le lendemain de l'échéance actuelle), texte de relance. Au
+ * succès, la fenêtre demande à l'onglet de relire la liste (`refreshRequested`) et suit la carte vivante.
  *
  * La carte vient de la liste vivante de l'onglet (lue par identifiant) : toute mise à jour reçue en
  * temps réel se reflète ici sans rechargement. « Modifier » bascule la MÊME fenêtre en mode édition
@@ -188,6 +197,8 @@ export class EventDialog {
   );
   /** Story 40.6 : « Fixer la date… » — l'hôte, sondage ouvert avec au moins un créneau. */
   protected readonly canFix = computed(() => canFixDate(this.card(), this.currentUserId()));
+  /** Story 40.7 : « Prolonger le vote » — l'hôte, sondage ouvert et sans date (échéance dépassée comprise). */
+  protected readonly canExtend = computed(() => canExtendVote(this.card(), this.currentUserId()));
   /** Créneaux candidats de la fiche, avec le nombre d'inscrits libres sur chacun. */
   protected readonly slotRows = computed(() => pollSlotRows(this.card(), this.theme.tone()));
   protected readonly dateLabel = computed(() => eventDateLabel(this.card(), this.theme.tone()));
@@ -226,6 +237,28 @@ export class EventDialog {
     });
     ref.afterClosed().subscribe((fixed) => {
       if (fixed) this.refreshRequested.emit();
+    });
+  }
+
+  /** Story 40.7 : ouvre la confirmation « Votre accord » de la prolongation ; le serveur est seul juge (hôte,
+   *  date déjà fixée, jour non postérieur). */
+  protected openExtendVote(): void {
+    const poll = this.card().poll;
+    if (!poll || !this.canExtend()) return;
+    const data: ExtendVoteData = {
+      title: this.card().title,
+      deadlineKey: pollDeadlineKey(this.card()),
+      minKey: extendMinKey(this.card(), this.todayKey()),
+      confirm: (day) => this.api.extend(this.partieId(), poll.id, day),
+    };
+    const ref = this.dialog.open<ExtendVoteDialog, ExtendVoteData, boolean>(ExtendVoteDialog, {
+      data,
+      width: 'min(560px, 96vw)',
+      autoFocus: 'first-tabbable',
+      restoreFocus: true,
+    });
+    ref.afterClosed().subscribe((extended) => {
+      if (extended) this.refreshRequested.emit();
     });
   }
 
