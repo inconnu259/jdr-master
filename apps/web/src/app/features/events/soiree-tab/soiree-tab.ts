@@ -34,6 +34,8 @@ export class SoireeTab {
   private readonly auth = inject(AuthService);
 
   readonly partieId = input.required<string>();
+  /** Description de la soirée (celle de la partie), lue sous le titre du détail. */
+  readonly description = input<string | null>(null);
 
   /** L'unique événement de la rencontre (`null` tant qu'il n'est pas lu). */
   protected readonly card = signal<EventCardDto | null>(null);

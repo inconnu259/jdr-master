@@ -280,4 +280,12 @@
     padding-right: 0;
     margin-bottom: 12px;
   }
+
+  /* Description de la soirée, sous le titre : texte libre de l'hôte, retours à la ligne conservés. */
+  .ed__description {
+    margin: 0 0 16px;
+    font-size: 0.9375rem;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+  }
 }

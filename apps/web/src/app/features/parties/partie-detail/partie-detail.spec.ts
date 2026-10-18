@@ -6475,6 +6475,25 @@ describe('PartieDetail — une soirée isolée sur une seule page (Story 41.1)',
     expect(el.querySelector('.ralliement-members input')).toBeNull();
   });
 
+  it('la description de la soirée se lit sous le titre ; sans description, rien n’est rendu', async () => {
+    const withText = await createFixture(soiree({ description: 'Apportez vos jeux' }), MJ_ID, {
+      members,
+      events: [event()],
+    });
+    await settle(withText.fixture);
+    expect(withText.el.querySelector('.ed__description')?.textContent?.trim()).toBe(
+      'Apportez vos jeux',
+    );
+    TestBed.resetTestingModule();
+
+    const without = await createFixture(soiree({ description: null }), MJ_ID, {
+      members,
+      events: [event()],
+    });
+    await settle(without.fixture);
+    expect(without.el.querySelector('.ed__description')).toBeNull();
+  });
+
   it('une date fixée, un lieu et une heure se lisent dans la fiche', async () => {
     const dated = event({
       seance: {

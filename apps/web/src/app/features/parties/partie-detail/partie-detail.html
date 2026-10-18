@@ -51,7 +51,7 @@
                premier onglet, au nom du thème au singulier, affiche en ligne le détail de son unique
                événement (UX-DR10). -->
           <mat-tab [label]="theme.tone()['partie.ralliement_soiree_tab']">
-            <app-soiree-tab [partieId]="p.id" />
+            <app-soiree-tab [partieId]="p.id" [description]="p.description" />
           </mat-tab>
         } @else {
         <mat-tab [label]="theme.tone()['parties.detail_tab_details']">

@@ -123,6 +123,9 @@ export class EventDialog {
    *  `DetailSurface`, sans participants ni actions d'inscription/réservation/modification (la modification
    *  par l'hôte arrive avec la Story 41.2), participation « sur invitation », pied omis. */
   readonly inline = input(false);
+  /** Description de la partie, affichée sous le titre en mode `inline` seulement (la soirée isolée n'a
+   *  plus d'onglet « Détails » où la lire). */
+  readonly description = input<string | null>(null);
   /** Carte à jour renvoyée par le serveur (modification par l'hôte, inscription, désinscription) :
    *  l'onglet la met à jour tout de suite. */
   readonly saved = output<EventCardDto>();

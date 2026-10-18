@@ -9,6 +9,7 @@
   @if (card(); as c) {
     <app-event-dialog
       [inline]="true"
+      [description]="description()"
       [partieId]="partieId()"
       [card]="c"
       [todayKey]="todayKey"

@@ -304,6 +304,9 @@
     <header class="ed__head">
       <ng-container [ngTemplateOutlet]="head" />
     </header>
+    @if (description(); as text) {
+      <p class="ed__description">{{ text }}</p>
+    }
     <ng-container [ngTemplateOutlet]="body" />
   </article>
 } @else {
