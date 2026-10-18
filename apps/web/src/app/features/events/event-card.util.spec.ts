@@ -212,6 +212,21 @@ describe('event-card.util (Story 40.1)', () => {
       );
     });
 
+    it('soirée isolée (Story 41.4) : la pastille d’un membre est « Je participe », puis « J’y étais » une fois passée', () => {
+      const futur = withPeople(8, 2);
+      const passe = card('p', '2026-10-01', { participants: futur.participants });
+      expect(eventSituation(futur, 'x', TODAY).labelKey).toBe(
+        'partie.ralliement_event_chip_not_registered',
+      );
+      expect(eventSituation(futur, 'x', TODAY, true)).toEqual({
+        labelKey: 'partie.ralliement_event_chip_participating',
+        dotted: false,
+      });
+      expect(eventSituation(passe, 'x', TODAY, true).labelKey).toBe(
+        'partie.ralliement_event_chip_was_there',
+      );
+    });
+
     it('soirée isolée (Story 41.1) : tout membre non hôte « participe », sans ligne d’inscription', () => {
       const futur = withPeople(8, 2);
       const passe = card('p', '2026-10-01', { participants: futur.participants });

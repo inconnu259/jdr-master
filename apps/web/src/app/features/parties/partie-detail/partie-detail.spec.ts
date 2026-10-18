@@ -3346,11 +3346,14 @@ describe('PartieDetail — ralliement, garde minimale (Story 38.2)', () => {
     expect(el.querySelector('app-scenario-list')).toBeNull();
   });
 
-  it('l’admin d’une rencontre isolée garde l’accès à la modification, sans clôture ni suppression', async () => {
+  it('l’admin d’une rencontre isolée garde l’accès à la modification et peut la clore (Story 41.4), sans suppression', async () => {
     const { el } = await createFixture(ralliement({ kind: 'ONE_SHOT' }), MJ_ID);
     const links = Array.from(el.querySelectorAll('.icon-bar a')).map((a) => a.getAttribute('href'));
     expect(links).toEqual(['/parties/party-1/edit']);
-    expect(el.querySelector('.icon-bar button')).toBeNull();
+    // Story 41.4 : « Clore » seulement — ni « Brûler » ni « Quitter l'office » (annuler : epic 42).
+    expect(Array.from(el.querySelectorAll('.icon-bar button')).map((b) => (b.textContent ?? '').trim())).toEqual([
+      expect.stringContaining(TONE_MAP['grimoire-emeraude']['partie.close_btn']),
+    ]);
   });
 
   /** Fait émettre les signaux temps réel des services de domaine, puis laisse les effets s'exécuter. */
@@ -3915,7 +3918,8 @@ describe('PartieDetail — un groupe s’ouvre sur ses conjonctions (Story 39.1)
     ]);
     expect(tabs(el)[0].getAttribute('aria-selected')).toBe('true');
     expect(el.querySelector('.conjonctions')).toBeNull();
-    expect(footerButtons(el)).toEqual([]);
+    // Story 41.4 : l'hôte de la soirée ne voit que « Clore » au pied de la page (jamais « Brûler »).
+    expect(footerButtons(el)).toEqual([TONE_MAP['grimoire-emeraude']['partie.close_btn']]);
   });
 
   it('témoin JDR : les onglets d’une quête ne contiennent pas de Conjonctions', async () => {
@@ -6626,6 +6630,98 @@ describe('PartieDetail — une soirée isolée sur une seule page (Story 41.1)',
       expect(guest.el.querySelector('.ralliement-members input')).toBeNull();
       expect(guest.el.querySelector('.ralliement-members button')).toBeNull();
       expect(guest.el.querySelector('.soiree-guests-empty')).toBeNull();
+    });
+  });
+
+  describe('soirée terminée (Story 41.4)', () => {
+    const finished = (over: Partial<PartieDto> = {}) => soiree({ status: 'TERMINEE', ...over });
+    const clickSecondTab = (el: HTMLElement, fixture: ComponentFixture<PartieDetail>) => {
+      tabs(el)[1].click();
+      fixture.detectChanges();
+    };
+
+    it('bandeau « terminée » propre à la rencontre (jamais « dissous »), pas de « Modifier » dans le détail', async () => {
+      const { fixture, el } = await createFixture(finished(), MJ_ID, {
+        members,
+        events: [event()],
+      });
+      await settle(fixture);
+      const tone = TONE_MAP['grimoire-emeraude'];
+      expect(el.querySelector('.closed-banner')?.textContent).toContain(
+        tone['partie.ralliement_soiree_status_closed_label'],
+      );
+      expect(el.querySelector('.closed-banner')?.textContent).not.toContain(
+        tone['partie.ralliement_status_closed_label'],
+      );
+      expect(el.querySelector('.ed__edit')).toBeNull();
+    });
+
+    it('l’hôte n’a plus d’outils d’invitation ni de « Retirer » ; la liste des invités reste lisible', async () => {
+      const { fixture, el } = await createFixture(finished(), MJ_ID, {
+        members,
+        events: [event()],
+        noopAnimations: true,
+      });
+      await settle(fixture);
+      clickSecondTab(el, fixture);
+
+      expect(el.querySelector('.ralliement-members input')).toBeNull();
+      expect(el.querySelector('.ralliement-members .search-row')).toBeNull();
+      const rows = Array.from(el.querySelectorAll('.ralliement-members .result-row'));
+      expect(rows).toHaveLength(2);
+      expect(el.querySelector('.ralliement-members .result-row button')).toBeNull();
+    });
+
+    it('« Rouvrir » remplace « Clore » ; l’action relit la partie et rend ses outils', async () => {
+      const { fixture, el } = await createFixture(finished(), MJ_ID, {
+        members,
+        events: [event()],
+      });
+      await settle(fixture);
+      const tone = TONE_MAP['grimoire-emeraude'];
+      const labels = Array.from(el.querySelectorAll('.icon-bar button')).map((b) =>
+        (b.textContent ?? '').trim(),
+      );
+      expect(labels).toEqual([expect.stringContaining(tone['partie.reopen_btn'])]);
+    });
+
+    it('la pastille « Ma situation » dit « J’y étais » pour un membre d’une soirée passée, « Je participe » avant', async () => {
+      const past = event();
+      past.seance!.date = '2020-01-01';
+      past.seance!.slot = 'EVENING';
+      const old = await createFixture(finished({ role: 'member' }), OTHER_ID, {
+        members,
+        events: [past],
+      });
+      await settle(old.fixture);
+      const tone = TONE_MAP['grimoire-emeraude'];
+      expect(old.el.querySelector('.ed__chip')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_chip_was_there'],
+      );
+      TestBed.resetTestingModule();
+
+      const upcoming = await createFixture(soiree({ role: 'member' }), OTHER_ID, {
+        members,
+        events: [event({ participants: [] })],
+      });
+      await settle(upcoming.fixture);
+      expect(upcoming.el.querySelector('.ed__chip')?.textContent?.trim()).toBe(
+        tone['partie.ralliement_event_chip_participating'],
+      );
+    });
+
+    it('une soirée à venir offre « Clore » à l’hôte, rien à un invité', async () => {
+      const host = await createFixture(soiree(), MJ_ID, { members, events: [event()] });
+      expect(
+        Array.from(host.el.querySelectorAll('.icon-bar button')).map((b) => (b.textContent ?? '').trim()),
+      ).toEqual([expect.stringContaining(TONE_MAP['grimoire-emeraude']['partie.close_btn'])]);
+      TestBed.resetTestingModule();
+
+      const guest = await createFixture(soiree({ role: 'member' }), OTHER_ID, {
+        members,
+        events: [event()],
+      });
+      expect(guest.el.querySelector('.icon-bar button')).toBeNull();
     });
   });
 

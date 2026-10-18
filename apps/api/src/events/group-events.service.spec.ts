@@ -44,6 +44,7 @@ describe('GroupEventsService (Story 40.1)', () => {
     createHosted: jest.Mock;
     updateHosted: jest.Mock;
     isAwaitingDate: jest.Mock;
+    assertIsolatedOpen: jest.Mock;
     inscrireConjonction: jest.Mock;
     desinscrireConjonction: jest.Mock;
     accepterReservation: jest.Mock;
@@ -78,6 +79,7 @@ describe('GroupEventsService (Story 40.1)', () => {
         return Promise.resolve();
       }),
       isAwaitingDate: jest.fn().mockResolvedValue(false),
+      assertIsolatedOpen: jest.fn().mockResolvedValue(undefined),
       inscrireConjonction: jest.fn(() => {
         order.push('inscrire');
         return Promise.resolve();

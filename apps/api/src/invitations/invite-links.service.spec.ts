@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InviteLinksService } from './invite-links.service';
 import { PrismaService } from '../prisma/prisma.service';
+import type { EventsService } from '../events/events.service';
 import { PartiesService } from '../parties/parties.service';
 import { PermissionService } from '../permissions/permission.service';
 import { testGrant } from '../common/test-utils/grant';
@@ -55,6 +56,7 @@ describe('InviteLinksService', () => {
       parties as unknown as PartiesService,
       permissions as unknown as PermissionService,
       realtimeEvents as unknown as RealtimeEventsService,
+      { assertIsolatedOpen: jest.fn().mockResolvedValue(undefined) } as unknown as EventsService,
     );
   });
 

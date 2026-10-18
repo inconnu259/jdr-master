@@ -10,6 +10,7 @@ import type { InviteLink, Prisma } from '@prisma/client';
 import type { InviteLinkPreviewDto } from '@master-jdr/shared';
 import { familyOf } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { EventsService } from '../events/events.service';
 import { PartiesService } from '../parties/parties.service';
 import { PermissionService } from '../permissions/permission.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
@@ -26,11 +27,14 @@ export class InviteLinksService {
     private readonly parties: PartiesService,
     private readonly permissions: PermissionService,
     private readonly realtimeEvents: RealtimeEventsService,
+    // Story 41.4 : une soirée terminée ne prend plus de lien ni de nouveau membre (lecture seule).
+    private readonly events: EventsService,
   ) {}
 
   /** Le MJ (ou l'administrateur d'un ralliement) génère un lien d'invitation pour SA partie. */
   async create(partieId: string, mjId: string, dto: CreateInviteLinkDto) {
-    await this.permissions.assert(mjId, 'INVITE_LINK_CREATE', { partieId });
+    const { partie } = await this.permissions.assert(mjId, 'INVITE_LINK_CREATE', { partieId });
+    await this.events.assertIsolatedOpen(partie);
     const expiresAt = dto.expiresAt
       ? new Date(dto.expiresAt)
       : new Date(Date.now() + DEFAULT_TTL_MS);
@@ -112,11 +116,18 @@ export class InviteLinksService {
   ): Promise<InviteLink & { partie: { ownerId: string | null; gameSystemId: string } }> {
     const link = await tx.inviteLink.findUnique({
       where: { token },
-      include: { partie: { select: { ownerId: true, gameSystemId: true } } },
+      include: {
+        partie: {
+          select: { id: true, ownerId: true, gameSystemId: true, kind: true, closedAt: true },
+        },
+      },
     });
     if (!link) throw new NotFoundException('Lien invalide');
     const status = this.linkStatus(link);
     if (!status.valid) throw new ForbiddenException(status.reason);
+    // Story 41.4 : on ne rejoint plus une soirée terminée (lecture hors transaction, sans effet pour les
+    // autres types de partie).
+    await this.events.assertIsolatedOpen(link.partie);
     // Textes neutres pour un ralliement (Story 39.3) : ni « MJ » ni « partie ».
     const isGroup = familyOf(link.partie.gameSystemId) === 'ralliement';
     if (link.partie.ownerId === userId) {

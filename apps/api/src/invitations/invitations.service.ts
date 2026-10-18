@@ -38,6 +38,8 @@ export class InvitationsService {
   async invite(partieId: string, inviterId: string, inviteeUserId: string) {
     // MJ uniquement (JDR) ; administrateur uniquement (ralliement, Story 39.3).
     const { partie } = await this.permissions.assert(inviterId, 'INVITATION_CREATE', { partieId });
+    // Story 41.4 : plus d'invitation à une soirée terminée.
+    await this.events.assertIsolatedOpen(partie);
     if (inviteeUserId === inviterId) {
       throw new BadRequestException('Vous ne pouvez pas vous inviter vous-même.');
     }
@@ -152,6 +154,8 @@ export class InvitationsService {
   /** Le destinataire accepte : crée le Membership et marque ACCEPTED (atomique). */
   async accept(invitationId: string, userId: string) {
     const inv = await this.requirePendingForInvitee(invitationId, userId);
+    // Story 41.4 : on ne rejoint plus une soirée terminée.
+    await this.events.assertIsolatedOpen(inv.partie);
     await this.prisma.$transaction([
       this.prisma.membership.upsert({
         where: { userId_partieId: { userId, partieId: inv.partieId } },
@@ -218,6 +222,7 @@ export class InvitationsService {
     // l'envoi, sans dépendre de la casse saisie par le MJ (foo@bar.com === Foo@Bar.com).
     const email = rawEmail.trim().toLowerCase();
     const { partie } = await this.permissions.assert(inviterId, 'INVITATION_CREATE', { partieId });
+    await this.events.assertIsolatedOpen(partie);
     const origin = process.env.WEB_ORIGIN ?? 'http://localhost:4200';
     const user = await this.prisma.user.findUnique({ where: { email } });
 
@@ -260,7 +265,11 @@ export class InvitationsService {
     const inv = await this.prisma.invitation.findUnique({
       where: { id: invitationId },
       // Propriétaire de la partie : `accept()` le notifie (Story 39.3), pas l'invitant.
-      include: { partie: { select: { ownerId: true } } },
+      include: {
+        partie: {
+          select: { id: true, ownerId: true, kind: true, gameSystemId: true, closedAt: true },
+        },
+      },
     });
     if (!inv || inv.inviteeUserId !== userId) throw new NotFoundException('Invitation introuvable');
     if (inv.status !== 'PENDING') throw new ConflictException('Invitation déjà traitée.');

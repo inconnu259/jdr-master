@@ -123,6 +123,8 @@ export class GroupEventsService {
     // sur invitation, donc ni places limitées ni réservations.
     const isolated = grant.partie.kind === 'ONE_SHOT';
     if (isolated) {
+      // Story 41.4 : une soirée terminée est figée.
+      await this.events.assertIsolatedOpen(grant.partie);
       if (dto.capacity != null || (dto.reservedUserIds?.length ?? 0) > 0) {
         throw new BadRequestException(ISOLATED_NO_PLACES_MESSAGE);
       }

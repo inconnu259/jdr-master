@@ -474,6 +474,39 @@ describe('EventDialog — sondage de dates (Story 40.5)', () => {
   template: `<app-event-dialog
     partieId="g1"
     [inline]="true"
+    [frozen]="true"
+    [card]="card"
+    todayKey="2026-10-17"
+    [currentUserId]="'host'"
+  />`,
+})
+class FrozenHost {
+  card: EventCardDto = {
+    id: 'e1',
+    title: 'Marathon Pandémie',
+    hostId: 'host',
+    hostDisplayName: 'Léa',
+    seance: {
+      id: 's1',
+      date: null,
+      slot: null,
+      lieu: null,
+      heureRdv: null,
+      notePratique: null,
+      capacity: null,
+      placesTaken: 1,
+    },
+    participants: [],
+    myInscription: null,
+    poll: null,
+  };
+}
+
+@Component({
+  imports: [EventDialog],
+  template: `<app-event-dialog
+    partieId="g1"
+    [inline]="true"
     [card]="card()"
     todayKey="2026-10-17"
     [currentUserId]="userId()"
@@ -586,6 +619,29 @@ describe('EventDialog — rendu en ligne d’une soirée isolée (Story 41.1)', 
       expect(q('.ed__footer') !== null, userId).toBe(userId === HOST);
       TestBed.resetTestingModule();
     }
+  });
+
+  it('soirée terminée (Story 41.4) : plus de « Modifier », même pour l’hôte d’une soirée à venir close', async () => {
+    const { q, fixture } = await mount(soireeCard(), HOST);
+    expect(q('.ed__edit')).not.toBeNull();
+    TestBed.resetTestingModule();
+
+    await TestBed.configureTestingModule({
+      imports: [FrozenHost],
+      providers: [
+        provideNoopAnimations(),
+        { provide: EventsApiService, useValue: {} },
+        { provide: PartiesService, useValue: { members: vi.fn().mockResolvedValue([]) } },
+        { provide: ThemeToneService, useValue: { tone: signal(TONE) } },
+      ],
+    }).compileComponents();
+    const frozen = TestBed.createComponent(FrozenHost);
+    frozen.detectChanges();
+    await frozen.whenStable();
+    frozen.detectChanges();
+    expect((frozen.nativeElement as HTMLElement).querySelector('.ed__edit')).toBeNull();
+    expect((frozen.nativeElement as HTMLElement).querySelector('.ed__footer')).toBeNull();
+    expect(fixture).toBeTruthy();
   });
 
   it('« Modifier » sur une soirée qui attend sa date demande la fenêtre de création (Story 41.2) ; datée, il édite en ligne', async () => {

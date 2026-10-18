@@ -10,6 +10,7 @@
     <app-event-dialog
       [inline]="true"
       [description]="description()"
+      [frozen]="frozen()"
       (saved)="onSaved($event)"
       (refreshRequested)="refresh()"
       (calendarRequested)="openCalendar()"

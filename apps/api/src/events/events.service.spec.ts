@@ -15,6 +15,7 @@ import {
   VOTE_DATE_SET_MESSAGE,
   VOTE_ENDED_MESSAGE,
   VOTE_NOT_ELIGIBLE_MESSAGE,
+  EVENING_FINISHED_MESSAGE,
   PAST_EVENT_MESSAGE,
   PAST_ROSTER_MESSAGE,
   RESERVE_ALREADY_MESSAGE,
@@ -2802,9 +2803,36 @@ describe('EventsService (Story 37.3)', () => {
           startDate: null,
           inscriptionMax: null,
           inscriptions: [],
-          event: { partieId: 'p1', ownerId: 'hote' },
+          event: {
+            partieId: 'p1',
+            ownerId: 'hote',
+            partie: {
+              id: 'p1',
+              kind: 'CAMPAGNE_EPISODIQUE',
+              gameSystemId: 'ralliement',
+              closedAt: null,
+            },
+          },
           ...over,
         });
+
+      it('soirée isolée close (même sans date) : le vote est refusé (400), une soirée ouverte reste ouverte (Story 41.4)', async () => {
+        const isolated = (closedAt: Date | null) => ({
+          partieId: 'p1',
+          ownerId: 'hote',
+          partie: { id: 'p1', kind: 'ONE_SHOT', gameSystemId: 'ralliement', closedAt },
+        });
+        seanceRow({ event: isolated(new Date()) });
+        await expect(service.assertCanVote(POLL, { kind: 'ONE_SHOT' }, 'hote')).rejects.toThrow(
+          EVENING_FINISHED_MESSAGE,
+        );
+
+        seanceRow({ event: isolated(null) });
+        prisma.seance.findMany.mockResolvedValue([]);
+        await expect(
+          service.assertCanVote(POLL, { kind: 'ONE_SHOT' }, 'hote'),
+        ).resolves.toBeUndefined();
+      });
 
       it('« Tous les membres » : un membre du groupe vote, un étranger est refusé (403)', async () => {
         seanceRow();
@@ -2928,6 +2956,64 @@ describe('EventsService (Story 37.3)', () => {
       });
     });
 
+    describe('endedIsolatedPartieIds() et assertIsolatedOpen() — Story 41.4', () => {
+      it('une seule lecture groupée : fin de plage (à défaut début) strictement avant le début du jour UTC ; liste vide : aucune lecture', async () => {
+        prisma.seance.findMany.mockResolvedValue([
+          { event: { partieId: 'a' } },
+          { event: { partieId: 'a' } },
+          { event: { partieId: 'c' } },
+        ]);
+
+        const ended = await service.endedIsolatedPartieIds(['a', 'b', 'c']);
+
+        expect([...ended].sort()).toEqual(['a', 'c']);
+        expect(prisma.seance.findMany).toHaveBeenCalledTimes(1);
+        const where = callArg<{
+          where: { OR: { endDate?: { lt: Date } | null; startDate?: { lt: Date } }[] };
+        }>(prisma.seance.findMany).where;
+        const startOfToday = new Date();
+        startOfToday.setUTCHours(0, 0, 0, 0);
+        expect(where.OR[0].endDate).toEqual({ lt: startOfToday });
+        expect(where.OR[1]).toEqual({ endDate: null, startDate: { lt: startOfToday } });
+
+        prisma.seance.findMany.mockClear();
+        await expect(service.endedIsolatedPartieIds([])).resolves.toEqual(new Set());
+        expect(prisma.seance.findMany).not.toHaveBeenCalled();
+      });
+
+      it('soirée terminée (close ou passée) → 400 ; ouverte, groupe, JDR → sans effet ni lecture inutile', async () => {
+        const evening = (over: Record<string, unknown> = {}) => ({
+          id: 'p1',
+          kind: 'ONE_SHOT' as const,
+          gameSystemId: 'ralliement',
+          closedAt: null,
+          ...over,
+        });
+        prisma.seance.findMany.mockResolvedValue([]);
+        await expect(service.assertIsolatedOpen(evening())).resolves.toBeUndefined();
+
+        await expect(service.assertIsolatedOpen(evening({ closedAt: new Date() }))).rejects.toThrow(
+          EVENING_FINISHED_MESSAGE,
+        );
+
+        prisma.seance.findMany.mockResolvedValue([{ event: { partieId: 'p1' } }]);
+        await expect(service.assertIsolatedOpen(evening())).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+
+        prisma.seance.findMany.mockClear();
+        await expect(
+          service.assertIsolatedOpen(
+            evening({ kind: 'CAMPAGNE_EPISODIQUE', closedAt: new Date() }),
+          ),
+        ).resolves.toBeUndefined();
+        await expect(
+          service.assertIsolatedOpen(evening({ gameSystemId: 'ryuutama', closedAt: new Date() })),
+        ).resolves.toBeUndefined();
+        expect(prisma.seance.findMany).not.toHaveBeenCalled();
+      });
+    });
+
     describe('invitationNotice() — Story 41.3', () => {
       const event = (seance: Record<string, unknown> | null) => ({
         title: 'Soirée',
@@ -2975,7 +3061,9 @@ describe('EventsService (Story 37.3)', () => {
             poll: { status: 'CLOSED', expiresAt: deadline },
           }),
         );
-        await expect(service.invitationNotice('p1')).resolves.toEqual(objectLike({ deadline: null }));
+        await expect(service.invitationNotice('p1')).resolves.toEqual(
+          objectLike({ deadline: null }),
+        );
       });
 
       it('partie sans événement : null', async () => {

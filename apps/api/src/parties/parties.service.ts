@@ -172,21 +172,30 @@ export function coverImageVersion(coverImageUrl: string | null): string | null {
  * Projection explicite (AD-15, Story 29.1) — énumère les champs renvoyés, jamais un objet Prisma
  * propagé tel quel.
  *
- * `hasScenario` détermine `status` (AD-8) : `closedAt` renseigné prime toujours (`TERMINEE`),
+ * `progress` détermine `status` (AD-8) : `closedAt` renseigné prime toujours (`TERMINEE`),
  * sinon la présence d'au moins un `Event` (Story 37.3 : chaque scénario en est l'extension) fait
  * passer de `A_VENIR` à `EN_COURS`. Compter les événements suffit à détecter « sans aucun scénario
  * ni séance » — `Seance.eventId` est une FK obligatoire (pas de séance orpheline) et tout événement
  * créé reçoit systématiquement au moins une séance (cf. `EventsService.createInTx`).
  * Story 40.1 : pour un GROUPE de ralliement (`CAMPAGNE_EPISODIQUE`), tout événement compte — sa
- * première conjonction le fait passer `EN_COURS` (cf. `isRalliementGroup`).
+ * première conjonction le fait passer `EN_COURS`. Story 41.4 (AD-18) : une rencontre isolée est
+ * `TERMINEE` dès que `closedAt` est posé OU que sa plage de dates est passée (`'ended'`) ; sans date elle
+ * reste `A_VENIR`. `progress` est la seule entrée de cette dérivation (cf. `isRalliementGroup`).
  */
+export type PartieProgress = 'none' | 'started' | 'ended';
+
 function toPartieDto(
   partie: Partie,
   role: PartieRole,
-  hasScenario: boolean,
+  progress: PartieProgress,
   isFavorite: boolean,
 ): PartieDto {
-  const status: PartieStatus = partie.closedAt ? 'TERMINEE' : hasScenario ? 'EN_COURS' : 'A_VENIR';
+  const status: PartieStatus =
+    partie.closedAt || progress === 'ended'
+      ? 'TERMINEE'
+      : progress === 'started'
+        ? 'EN_COURS'
+        : 'A_VENIR';
   return {
     id: partie.id,
     name: partie.name,
@@ -210,6 +219,11 @@ function toPartieDto(
  *  scénario). Seule source de cette distinction pour le statut. */
 function isRalliementGroup(partie: Pick<Partie, 'kind' | 'gameSystemId'>): boolean {
   return partie.kind === 'CAMPAGNE_EPISODIQUE' && familyOf(partie.gameSystemId) === 'ralliement';
+}
+
+/** Story 41.4 : une rencontre isolée de ralliement (`ONE_SHOT`), dont le statut suit sa date. */
+function isIsolatedRalliement(partie: Pick<Partie, 'kind' | 'gameSystemId'>): boolean {
+  return partie.kind === 'ONE_SHOT' && familyOf(partie.gameSystemId) === 'ralliement';
 }
 
 @Injectable()
@@ -273,7 +287,7 @@ export class PartiesService implements PartieSignalsPort {
           });
         }
         // Aucun `Scenario` n'existe dans un ralliement : `hasScenario` vaut toujours faux.
-        return toPartieDto(partie, 'admin', false, false);
+        return toPartieDto(partie, 'admin', 'none', false);
       }
 
       // AD-7 : une Partie ONE_SHOT n'existe jamais sans son scénario unique — créé au même titre
@@ -297,7 +311,7 @@ export class PartiesService implements PartieSignalsPort {
       // aucun — aucune requête `scenario.count()` nécessaire ici (Story 29.6).
       // isFavorite toujours false ici : une partie tout juste créée n'est jamais favorite,
       // aucune requête `partieFavorite` nécessaire (Story 29.8).
-      return toPartieDto(partie, 'mj', dto.kind === 'ONE_SHOT', false);
+      return toPartieDto(partie, 'mj', dto.kind === 'ONE_SHOT' ? 'started' : 'none', false);
     });
     // Story 38.5 : la transaction est validée — la liste d'accueil du créateur (autre onglet, autre
     // appareil) se rafraîchit sans rechargement, pour toute famille. Hors transaction, et un échec
@@ -316,12 +330,15 @@ export class PartiesService implements PartieSignalsPort {
    *  renvoyé — jamais un `scenario.count()` par partie dans une boucle (Story 29.6). Story 40.1 :
    *  les groupes de ralliement du lot (s'il y en a) sont lus par UNE seconde requête groupée, sans
    *  filtre de scénario ; une liste sans groupe garde exactement la requête historique. */
-  private async hasScenarioByPartieId(
+  private async progressByPartieId(
     parties: Pick<Partie, 'id' | 'kind' | 'gameSystemId'>[],
-  ): Promise<Set<string>> {
+  ): Promise<(partieId: string) => PartieProgress> {
     const groupIds = parties.filter(isRalliementGroup).map((p) => p.id);
     const otherIds = parties.filter((p) => !isRalliementGroup(p)).map((p) => p.id);
-    const [withScenario, withEvent] = await Promise.all([
+    // Story 41.4 : les rencontres isolées du lot, dont la plage de dates est passée (UNE lecture groupée,
+    // seulement s'il y en a).
+    const isolatedIds = parties.filter(isIsolatedRalliement).map((p) => p.id);
+    const [withScenario, withEvent, ended] = await Promise.all([
       otherIds.length === 0
         ? []
         : this.prisma.event.groupBy({
@@ -336,31 +353,42 @@ export class PartiesService implements PartieSignalsPort {
             where: { partieId: { in: groupIds } },
             _count: { _all: true },
           }),
+      this.events.endedIsolatedPartieIds(isolatedIds),
     ]);
     // `groupBy` ne renvoie jamais de groupe à compte zéro : chaque ligne retournée a au moins un
     // événement qui compte — porteur d'un scénario (première requête) ou, pour un groupe de
     // ralliement, n'importe lequel (seconde requête). Aucun filtre supplémentaire requis.
-    return new Set([...withScenario, ...withEvent].map((c) => c.partieId));
+    const started = new Set([...withScenario, ...withEvent].map((c) => c.partieId));
+    return (partieId) =>
+      ended.has(partieId) ? 'ended' : started.has(partieId) ? 'started' : 'none';
   }
 
-  /** Variante mono-partie de `hasScenarioByPartieId` — la lecture en lot (AD-3) ne s'applique pas
+  /** Variante mono-partie de `progressByPartieId` — la lecture en lot (AD-3) ne s'applique pas
    *  quand une seule partie est concernée (`findOneDto`, `update`, `close`, `reopen`). */
-  private async hasScenario(
+  private async progressOf(
     partie: Pick<Partie, 'id' | 'kind' | 'gameSystemId'>,
-  ): Promise<boolean> {
+  ): Promise<PartieProgress> {
+    // Story 41.4 : une rencontre isolée dont la plage de dates est passée est terminée.
+    if (isIsolatedRalliement(partie)) {
+      return (await this.events.endedIsolatedPartieIds([partie.id])).has(partie.id)
+        ? 'ended'
+        : 'none';
+    }
     // Story 40.1 : un groupe de ralliement compte toutes ses conjonctions.
     if (isRalliementGroup(partie)) {
-      return (await this.prisma.event.count({ where: { partieId: partie.id } })) > 0;
+      return (await this.prisma.event.count({ where: { partieId: partie.id } })) > 0
+        ? 'started'
+        : 'none';
     }
     // Story 38.2 : seuls les événements porteurs d'un `Scenario` comptent — l'événement unique
     // d'une rencontre isolée de ralliement n'en est pas un.
     const count = await this.prisma.event.count({
       where: { partieId: partie.id, scenario: { isNot: null } },
     });
-    return count > 0;
+    return count > 0 ? 'started' : 'none';
   }
 
-  /** Lecture en lot (même discipline qu'AD-3/`hasScenarioByPartieId`, Story 29.8) : une seule
+  /** Lecture en lot (même discipline qu'AD-3/`progressByPartieId`, Story 29.8) : une seule
    *  requête groupée pour dériver `isFavorite` de tout le tableau renvoyé par `listForUser()`. */
   private async favoritePartieIds(userId: string, partieIds: string[]): Promise<Set<string>> {
     if (partieIds.length === 0) return new Set();
@@ -371,8 +399,8 @@ export class PartiesService implements PartieSignalsPort {
     return new Set(favorites.map((f) => f.partieId));
   }
 
-  /** Variante mono-partie de `favoritePartieIds` — même logique que `hasScenario()` vs
-   *  `hasScenarioByPartieId()` (`findOneDto`, `update`, `close`, `reopen`). */
+  /** Variante mono-partie de `favoritePartieIds` — même logique que `progressOf()` vs
+   *  `progressByPartieId()` (`findOneDto`, `update`, `close`, `reopen`). */
   private async isFavorite(userId: string, partieId: string): Promise<boolean> {
     const favorite = await this.prisma.partieFavorite.findUnique({
       where: { userId_partieId: { userId, partieId } },
@@ -394,15 +422,15 @@ export class PartiesService implements PartieSignalsPort {
         orderBy: { createdAt: 'desc' },
       });
       const mineIds = mine.map((p) => p.id);
-      const [roles, hasScenarioIds, favoriteIds] = await Promise.all([
+      const [roles, progressOf, favoriteIds] = await Promise.all([
         this.permissions.rolesOf(userId, mineIds),
-        this.hasScenarioByPartieId(mine),
+        this.progressByPartieId(mine),
         this.favoritePartieIds(userId, mineIds),
       ]);
       return mine.flatMap((p) => {
         const partieRole = roles.get(p.id);
         if (!partieRole) return [];
-        return [toPartieDto(p, partieRole, hasScenarioIds.has(p.id), favoriteIds.has(p.id))];
+        return [toPartieDto(p, partieRole, progressOf(p.id), favoriteIds.has(p.id))];
       });
     }
     if (role === 'player') {
@@ -415,17 +443,12 @@ export class PartiesService implements PartieSignalsPort {
         (m) => familyOf(m.partie.gameSystemId) !== 'ralliement',
       );
       const partieIds = memberships.map((m) => m.partie.id);
-      const [hasScenarioIds, favoriteIds] = await Promise.all([
-        this.hasScenarioByPartieId(memberships.map((m) => m.partie)),
+      const [progressOf, favoriteIds] = await Promise.all([
+        this.progressByPartieId(memberships.map((m) => m.partie)),
         this.favoritePartieIds(userId, partieIds),
       ]);
       return memberships.map((m) =>
-        toPartieDto(
-          m.partie,
-          'player',
-          hasScenarioIds.has(m.partie.id),
-          favoriteIds.has(m.partie.id),
-        ),
+        toPartieDto(m.partie, 'player', progressOf(m.partie.id), favoriteIds.has(m.partie.id)),
       );
     }
     const ownedParties = await this.prisma.partie.findMany({
@@ -434,13 +457,11 @@ export class PartiesService implements PartieSignalsPort {
     });
     const parties = ownedParties.filter((p) => familyOf(p.gameSystemId) !== 'ralliement');
     const partieIds = parties.map((p) => p.id);
-    const [hasScenarioIds, favoriteIds] = await Promise.all([
-      this.hasScenarioByPartieId(parties),
+    const [progressOf, favoriteIds] = await Promise.all([
+      this.progressByPartieId(parties),
       this.favoritePartieIds(userId, partieIds),
     ]);
-    return parties.map((p) =>
-      toPartieDto(p, 'mj', hasScenarioIds.has(p.id), favoriteIds.has(p.id)),
-    );
+    return parties.map((p) => toPartieDto(p, 'mj', progressOf(p.id), favoriteIds.has(p.id)));
   }
 
   /** Récupère une partie visible par l'utilisateur (`PARTIE_READ`, MJ ou membre) enrichie
@@ -451,11 +472,11 @@ export class PartiesService implements PartieSignalsPort {
    *  optionnels). Une partie sans propriétaire (AD-5) les laisse également absents. */
   async findOneDto(id: string, userId: string): Promise<PartieDto> {
     const { partie, role } = await this.permissions.assert(userId, 'PARTIE_READ', { partieId: id });
-    const [hasScenario, favorite] = await Promise.all([
-      this.hasScenario(partie),
+    const [progress, favorite] = await Promise.all([
+      this.progressOf(partie),
       this.isFavorite(userId, id),
     ]);
-    const dto = toPartieDto(partie, role, hasScenario, favorite);
+    const dto = toPartieDto(partie, role, progress, favorite);
     if (partie.ownerId === null) return dto;
     const owner = await this.prisma.user.findUnique({
       where: { id: partie.ownerId },
@@ -546,6 +567,8 @@ export class PartiesService implements PartieSignalsPort {
     if (cause.type === 'REMOVED' && userId === cause.byUserId) {
       throw new ConflictException(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
     }
+    // Story 41.4 : les invités d'une soirée terminée ne bougent plus (400).
+    if (cause.type === 'REMOVED') await this.events.assertIsolatedOpen(partie);
 
     const outcome = await this.prisma.$transaction(async (tx) => {
       await this.lockPartie(tx, partieId);
@@ -832,11 +855,11 @@ export class PartiesService implements PartieSignalsPort {
     // Le changement de système fait apparaître ou disparaître HOMME_DRAGON_A_CREER (et le lien) :
     // signaux du MJ et des membres, en plus de `partie:` ci-dessus (jamais en remplacement).
     if (systemChanged) await this.notifyPartieSignalsChanged(id, partie.ownerId);
-    const [hasScenario, favorite] = await Promise.all([
-      this.hasScenario(partie),
+    const [progress, favorite] = await Promise.all([
+      this.progressOf(partie),
       this.isFavorite(userId, id),
     ]);
-    return toPartieDto(updated, role, hasScenario, favorite);
+    return toPartieDto(updated, role, progress, favorite);
   }
 
   /**
@@ -997,11 +1020,11 @@ export class PartiesService implements PartieSignalsPort {
     // transformer en 500 parce qu'une notification a échoué.
     await this.emitPartieAndMembersSafe(id, partie.ownerId);
 
-    const [hasScenario, favorite] = await Promise.all([
-      this.hasScenario(partie),
+    const [progress, favorite] = await Promise.all([
+      this.progressOf(partie),
       this.isFavorite(userId, id),
     ]);
-    return toPartieDto(updated, role, hasScenario, favorite);
+    return toPartieDto(updated, role, progress, favorite);
   }
 
   /** Déclare la partie terminée (AD-8, Story 29.6) — MJ uniquement. Réversible via `reopen()`. */
@@ -1014,13 +1037,13 @@ export class PartiesService implements PartieSignalsPort {
       data: { closedAt: new Date() },
     });
     await this.emitPartieAndMembersSafe(id, partie.ownerId);
-    // Le MJ peut clôturer une partie jamais commencée (aucun scénario) — hasScenario recalculé,
+    // Le MJ peut clôturer une partie jamais commencée (aucun scénario) — progression recalculée,
     // jamais supposé, `closedAt` primant de toute façon sur le résultat dans toPartieDto().
-    const [hasScenario, favorite] = await Promise.all([
-      this.hasScenario(partie),
+    const [progress, favorite] = await Promise.all([
+      this.progressOf(partie),
       this.isFavorite(userId, id),
     ]);
-    return toPartieDto(updated, role, hasScenario, favorite);
+    return toPartieDto(updated, role, progress, favorite);
   }
 
   /** Revient sur une clôture (AD-8, Story 29.6) — MJ uniquement. */
@@ -1033,11 +1056,11 @@ export class PartiesService implements PartieSignalsPort {
       data: { closedAt: null },
     });
     await this.emitPartieAndMembersSafe(id, partie.ownerId);
-    const [hasScenario, favorite] = await Promise.all([
-      this.hasScenario(partie),
+    const [progress, favorite] = await Promise.all([
+      this.progressOf(partie),
       this.isFavorite(userId, id),
     ]);
-    return toPartieDto(updated, role, hasScenario, favorite);
+    return toPartieDto(updated, role, progress, favorite);
   }
 
   async remove(id: string, userId: string) {
@@ -1174,14 +1197,14 @@ export class PartiesService implements PartieSignalsPort {
     // pas déjà été émis ailleurs.
     await this.emitPartieAndMembersSafe(id, partie.ownerId);
 
-    const [hasScenario, favorite] = await Promise.all([
-      this.hasScenario(partie),
+    const [progress, favorite] = await Promise.all([
+      this.progressOf(partie),
       this.isFavorite(userId, id),
     ]);
     const updated = await this.prisma.partie.findUniqueOrThrow({
       where: { id },
     });
-    return toPartieDto(updated, role, hasScenario, favorite);
+    return toPartieDto(updated, role, progress, favorite);
   }
 
   /** Retire l'image de couverture (AC3, AC4) — MJ seul. La bannière générée reprend sa place. */
@@ -1201,14 +1224,14 @@ export class PartiesService implements PartieSignalsPort {
 
     await this.emitPartieAndMembersSafe(id, partie.ownerId);
 
-    const [hasScenario, favorite] = await Promise.all([
-      this.hasScenario(partie),
+    const [progress, favorite] = await Promise.all([
+      this.progressOf(partie),
       this.isFavorite(userId, id),
     ]);
     const updated = await this.prisma.partie.findUniqueOrThrow({
       where: { id },
     });
-    return toPartieDto(updated, role, hasScenario, favorite);
+    return toPartieDto(updated, role, progress, favorite);
   }
 
   /**

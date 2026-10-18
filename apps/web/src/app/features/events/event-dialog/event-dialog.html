@@ -19,6 +19,14 @@
         {{ theme.tone()['partie.ralliement_event_situation'] }}
       </h3>
       <p class="ed__situation-text">{{ situationText() }}</p>
+      @if (situationChip(); as chip) {
+        <!-- Story 41.4 : la pastille « Ma situation » d'une soirée (en ligne seulement). -->
+        <p class="ed__chip-row">
+          <span class="ed__chip" [class.ed__chip--dotted]="chip.dotted">{{
+            theme.tone()[chip.labelKey]
+          }}</span>
+        </p>
+      }
       @if (showSignUp()) {
         <button
           mat-flat-button

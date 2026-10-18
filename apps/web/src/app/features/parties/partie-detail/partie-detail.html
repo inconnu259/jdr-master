@@ -8,7 +8,15 @@
       @if (p.status === 'TERMINEE') {
         <p class="closed-banner">
           <mat-icon aria-hidden="true">flag</mat-icon>
-          {{ theme.tone()[isRalliement() ? 'partie.ralliement_status_closed_label' : 'partie.status_closed_label'] }}
+          {{
+            theme.tone()[
+              isSoiree()
+                ? 'partie.ralliement_soiree_status_closed_label'
+                : isRalliement()
+                  ? 'partie.ralliement_status_closed_label'
+                  : 'partie.status_closed_label'
+            ]
+          }}
         </p>
       }
       @if (isDesktop() && !isRalliement()) {
@@ -51,7 +59,11 @@
                premier onglet, au nom du thème au singulier, affiche en ligne le détail de son unique
                événement (UX-DR10). -->
           <mat-tab [label]="theme.tone()['partie.ralliement_soiree_tab']">
-            <app-soiree-tab [partieId]="p.id" [description]="p.description" />
+            <app-soiree-tab
+              [partieId]="p.id"
+              [description]="p.description"
+              [frozen]="isSoireeFinished()"
+            />
           </mat-tab>
         } @else {
         <mat-tab [label]="theme.tone()['parties.detail_tab_details']">
@@ -582,6 +594,19 @@
         <a mat-button class="icon-bar__btn" [routerLink]="['/parties', p.id, 'edit']">
           <mat-icon aria-hidden="true">edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
         </a>
+        @if (isSoiree()) {
+          <!-- Story 41.4 : l'hôte d'une soirée la clôt ou la rouvre (terminée aussi par sa date). Pas de
+               « Brûler » : annuler une soirée est l'objet de l'epic 42. -->
+          @if (p.status !== 'TERMINEE') {
+            <button mat-button class="icon-bar__btn" (click)="closeGame(p)">
+              <mat-icon aria-hidden="true">flag</mat-icon> {{ theme.tone()['partie.close_btn'] }}
+            </button>
+          } @else {
+            <button mat-button class="icon-bar__btn" (click)="reopenGame(p)">
+              <mat-icon aria-hidden="true">replay</mat-icon> {{ theme.tone()['partie.reopen_btn'] }}
+            </button>
+          }
+        }
         @if (isGroup()) {
           @if (p.status !== 'TERMINEE') {
             <button mat-button class="icon-bar__btn" (click)="closeGame(p)">

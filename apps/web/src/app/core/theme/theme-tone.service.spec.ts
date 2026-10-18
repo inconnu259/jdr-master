@@ -928,6 +928,8 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_soiree_participation',
     // Story 41.3 : état vide de l'onglet de l'hôte et pastille d'une invitation reçue, sans pronom
     'partie.ralliement_soiree_guests_empty',
+    // Story 41.4 : bandeau d'une rencontre isolée terminée, sans pronom
+    'partie.ralliement_soiree_status_closed_label',
     'dashboard.invitation_pending_chip',
     // Story 39.4 : badge, boutons et confirmation de nomination des administrateurs d’un groupe,
     // verbatim du contrat d’UI (identiques dans les trois thèmes) ; « Vous restez membre » prend le

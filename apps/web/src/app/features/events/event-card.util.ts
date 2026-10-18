@@ -230,6 +230,7 @@ export function eventSituation(
   card: EventCardDto,
   currentUserId: string | null | undefined,
   todayKey: string,
+  membersParticipate = false,
 ): EventSituation {
   // Story 40.5 : « Vote à faire » l'emporte sur toute autre ligne tant que le vote attend la personne.
   if (needsVote(card, currentUserId, todayKey)) {
@@ -240,7 +241,8 @@ export function eventSituation(
   if (hasReservedPlace(card) && !isPastEvent(card, todayKey)) {
     return { labelKey: 'partie.ralliement_event_chip_reserved', dotted: false };
   }
-  if (!isParticipantOf(card, currentUserId)) {
+  // Story 41.4 : dans une soirée isolée, tout membre participe (« J'y étais » une fois passée).
+  if (!membersParticipate && !isParticipantOf(card, currentUserId)) {
     return { labelKey: 'partie.ralliement_event_chip_not_registered', dotted: true };
   }
   return isPastEvent(card, todayKey)

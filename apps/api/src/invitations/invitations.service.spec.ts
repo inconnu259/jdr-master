@@ -33,7 +33,7 @@ describe('InvitationsService', () => {
   let inviteLinks: { findOrCreateForEmail: jest.Mock };
   let email: { sendMail: jest.Mock };
   let realtimeEvents: { emit: jest.Mock };
-  let events: { invitationNotice: jest.Mock };
+  let events: { invitationNotice: jest.Mock; assertIsolatedOpen: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -65,7 +65,10 @@ describe('InvitationsService', () => {
     };
     email = { sendMail: jest.fn().mockResolvedValue({ ok: true }) };
     realtimeEvents = { emit: jest.fn() };
-    events = { invitationNotice: jest.fn().mockResolvedValue(null) };
+    events = {
+      invitationNotice: jest.fn().mockResolvedValue(null),
+      assertIsolatedOpen: jest.fn().mockResolvedValue(undefined),
+    };
     service = new InvitationsService(
       prisma as unknown as PrismaService,
       parties as unknown as PartiesService,
@@ -75,6 +78,46 @@ describe('InvitationsService', () => {
       realtimeEvents as unknown as RealtimeEventsService,
       events as unknown as EventsService,
     );
+  });
+
+  describe('soirée terminée (Story 41.4) — plus d’invitation', () => {
+    const finished = () =>
+      events.assertIsolatedOpen.mockRejectedValue(
+        new BadRequestException('Cette soirée est terminée'),
+      );
+
+    it('invite, inviteByEmail : refusés avant toute écriture ni e-mail', async () => {
+      finished();
+      await expect(service.invite('s1', 'host', 'u1')).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.inviteByEmail('s1', 'host', 'a@example.com')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(prisma.invitation.upsert).not.toHaveBeenCalled();
+      expect(inviteLinks.findOrCreateForEmail).not.toHaveBeenCalled();
+      expect(email.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('accept : refusé, aucune appartenance créée ; decline reste possible', async () => {
+      prisma.invitation.findUnique.mockResolvedValue({
+        id: 'inv1',
+        inviteeUserId: 'u1',
+        partieId: 's1',
+        status: 'PENDING',
+        partie: {
+          id: 's1',
+          ownerId: 'host',
+          kind: 'ONE_SHOT',
+          gameSystemId: 'ralliement',
+          closedAt: null,
+        },
+      });
+      finished();
+
+      await expect(service.accept('inv1', 'u1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+
+      await expect(service.decline('inv1', 'u1')).resolves.toEqual({ ok: true });
+    });
   });
 
   describe('soirée isolée (ONE_SHOT, Story 41.3) — e-mail n° 2', () => {

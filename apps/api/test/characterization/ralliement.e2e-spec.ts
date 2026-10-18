@@ -4939,3 +4939,186 @@ describe('Ralliement — inviter à une soirée isolée (Story 41.3)', () => {
     expect(h.email.calls.filter((c) => c.to === target.email)).toEqual([]);
   });
 });
+
+// ─── Clore une soirée isolée une fois passée (Story 41.4) ─────────────────────────────────
+//
+// Statut : isolée → `closedAt` ou plage passée → TERMINEE, sinon A_VENIR (AD-18). Une soirée terminée est
+// figée : plus d'invitation, de vote, de modification ni de retrait d'invité.
+describe('Ralliement — clore une soirée isolée une fois passée (Story 41.4)', () => {
+  let h: Harness;
+  let host: TestUser;
+  let guest: TestUser;
+  let invitee: TestUser;
+
+  type PartieLike = { id: string; status: string };
+
+  const FINISHED = 'Cette soirée est terminée : plus rien ne peut y changer';
+  const newSoiree = async (name: string) => {
+    const { id } = await h.createPartie(host, 'ONE_SHOT', name, 'ralliement');
+    await h.addMember(id, guest);
+    const event = await h.prisma.event.findFirstOrThrow({ where: { partieId: id } });
+    const seance = await h.prisma.seance.findFirstOrThrow({ where: { eventId: event.id } });
+    return { id, eventId: event.id, seanceId: seance.id };
+  };
+  /** Date la séance directement en base (une soirée passée ne se saisit pas par l'API : jour passé refusé). */
+  const dateSeance = (seanceId: string, offsetDays: number) => {
+    const day = new Date(`${isoDay(offsetDays)}T00:00:00.000Z`);
+    return h.prisma.seance.update({
+      where: { id: seanceId },
+      data: { startDate: day, endDate: day, startSlot: 'EVENING', endSlot: 'EVENING' },
+    });
+  };
+  const statusOf = async (id: string) =>
+    body<PartieLike>(await host.agent.get(`/parties/${id}`).expect(200)).status;
+  const listedStatus = async (who: TestUser, id: string) =>
+    body<PartieLike[]>(await who.agent.get('/parties').expect(200)).find((p) => p.id === id)
+      ?.status;
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [host, guest, invitee] = await Promise.all([
+      h.createUser('clos-hote'),
+      h.createUser('clos-invite'),
+      h.createUser('clos-cible'),
+    ]);
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it('sans date : « À venir » ; demain et aujourd’hui : « À venir » ; hier : « Terminée » — au détail comme dans la liste', async () => {
+    const { id, seanceId } = await newSoiree('statut');
+    expect(await statusOf(id)).toBe('A_VENIR');
+    expect(await listedStatus(host, id)).toBe('A_VENIR');
+
+    await dateSeance(seanceId, 1);
+    expect(await statusOf(id)).toBe('A_VENIR');
+    await dateSeance(seanceId, 0);
+    expect(await statusOf(id)).toBe('A_VENIR');
+    expect(await listedStatus(guest, id)).toBe('A_VENIR');
+
+    await dateSeance(seanceId, -1);
+    expect(await statusOf(id)).toBe('TERMINEE');
+    expect(await listedStatus(host, id)).toBe('TERMINEE');
+    expect(await listedStatus(guest, id)).toBe('TERMINEE');
+  });
+
+  it('close : « Terminée » même sans date ; rouvrir la remet « À venir » (date non passée) — et reste « Terminée » si la date est passée', async () => {
+    const { id, seanceId } = await newSoiree('clore');
+    await host.agent.patch(`/parties/${id}/close`).expect(200);
+    expect(await statusOf(id)).toBe('TERMINEE');
+    expect(await listedStatus(guest, id)).toBe('TERMINEE');
+    await host.agent.patch(`/parties/${id}/reopen`).expect(200);
+    expect(await statusOf(id)).toBe('A_VENIR');
+
+    await dateSeance(seanceId, -2);
+    await host.agent.patch(`/parties/${id}/close`).expect(200);
+    await host.agent.patch(`/parties/${id}/reopen`).expect(200);
+    expect(await statusOf(id)).toBe('TERMINEE');
+  });
+
+  it('soirée passée figée : invitations (pseudo, e-mail, lien), retrait d’un invité et modification refusés en 400 français', async () => {
+    const { id, eventId, seanceId } = await newSoiree('figee');
+    await dateSeance(seanceId, -1);
+
+    const refusals = [
+      await host.agent.post(`/parties/${id}/invitations`).send({ inviteeUserId: invitee.id }),
+      await host.agent
+        .post(`/parties/${id}/invitations/by-email`)
+        .send({ email: 'nouveau@example.com' }),
+      await host.agent.post(`/parties/${id}/invite-links`).send({}),
+      await host.agent.delete(`/parties/${id}/members/${guest.id}`),
+      await host.agent
+        .patch(`/parties/${id}/events/${eventId}`)
+        .send({ title: 'Trop tard', date: isoDay(3), slot: 'EVENING' }),
+    ];
+    for (const res of refusals) {
+      expect(res.status).toBe(400);
+      expect(String((res.body as { message: string | string[] }).message)).toContain(FINISHED);
+    }
+    expect(await h.prisma.membership.count({ where: { partieId: id, userId: guest.id } })).toBe(1);
+    expect((await h.prisma.event.findUniqueOrThrow({ where: { id: eventId } })).title).not.toBe(
+      'Trop tard',
+    );
+  });
+
+  it('une invitation en attente ne peut plus être acceptée une fois la soirée terminée (400) ; la refuser reste possible', async () => {
+    const { id } = await newSoiree('accepter');
+    await host.agent
+      .post(`/parties/${id}/invitations`)
+      .send({ inviteeUserId: invitee.id })
+      .expect(201);
+    const [invitation] = body<{ id: string }[]>(
+      await invitee.agent.get('/invitations').expect(200),
+    );
+    await host.agent.patch(`/parties/${id}/close`).expect(200);
+
+    const res = await invitee.agent.post(`/invitations/${invitation.id}/accept`);
+    expect(res.status).toBe(400);
+    expect(await h.prisma.membership.count({ where: { partieId: id, userId: invitee.id } })).toBe(
+      0,
+    );
+    await invitee.agent.post(`/invitations/${invitation.id}/decline`).expect(201);
+  });
+
+  it('un lien d’invitation ne fait plus rejoindre une soirée terminée (400)', async () => {
+    const { id } = await newSoiree('lien');
+    const link = body<{ token: string }>(
+      await host.agent.post(`/parties/${id}/invite-links`).send({}).expect(201),
+    );
+    await host.agent.patch(`/parties/${id}/close`).expect(200);
+    const joiner = await h.createUser('clos-lien');
+    expect((await joiner.agent.post(`/invite-links/${link.token}/join`)).status).toBe(400);
+    expect(await h.prisma.membership.count({ where: { partieId: id, userId: joiner.id } })).toBe(0);
+  });
+
+  it('vote : un membre ne vote plus sur le sondage d’une soirée close sans date (400)', async () => {
+    const { id, eventId } = await newSoiree('vote-clos');
+    const card = body<{ poll: { id: string; options: { id: string }[] } }>(
+      await host.agent
+        .patch(`/parties/${id}/events/${eventId}`)
+        .send({
+          title: 'Soirée',
+          pollOptions: [
+            { date: isoDay(8), slot: 'EVENING' },
+            { date: isoDay(9), slot: 'MORNING' },
+          ],
+          pollDeadline: isoDay(5),
+        })
+        .expect(200),
+    );
+    const vote = () =>
+      guest.agent
+        .post(`/parties/${id}/poll/${card.poll.id}/vote`)
+        .send({ optionId: card.poll.options[0].id, answer: 'YES' });
+    await host.agent.patch(`/parties/${id}/close`).expect(200);
+    const res = await vote();
+    expect(res.status).toBe(400);
+    expect(String((res.body as { message: string }).message)).toContain(FINISHED);
+
+    await host.agent.patch(`/parties/${id}/reopen`).expect(200);
+    expect((await vote()).status).toBe(201);
+  });
+
+  it('une soirée à venir reste modifiable, et un groupe garde son statut et ses écritures', async () => {
+    const { id, eventId } = await newSoiree('avenir');
+    const res = await host.agent
+      .patch(`/parties/${id}/events/${eventId}`)
+      .send({ title: 'Soirée', date: isoDay(4), slot: 'EVENING' });
+    expect(res.status).toBe(200);
+
+    const { id: groupId } = await h.createPartie(
+      host,
+      'CAMPAGNE_EPISODIQUE',
+      'clos-groupe',
+      'ralliement',
+    );
+    expect(await statusOf(groupId)).toBe('A_VENIR');
+    await host.agent
+      .post(`/parties/${groupId}/events`)
+      .send({ title: 'Conjonction', date: isoDay(5), slot: 'EVENING' })
+      .expect(201);
+    expect(await statusOf(groupId)).toBe('EN_COURS');
+  });
+});

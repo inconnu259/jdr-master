@@ -232,6 +232,13 @@ export class PartieDetail implements OnInit {
     () => this.isRalliement() && this.partie()?.kind === 'ONE_SHOT',
   );
 
+  /** Story 41.4 : une soirée terminée (close ou date passée, `status` du serveur) est figée — ni invitation,
+   *  ni « Retirer », ni « Modifier » ; le serveur refuse aussi (400). */
+  protected readonly isSoireeFinished = computed(
+    () => this.isSoiree() && this.partie()?.status === 'TERMINEE',
+  );
+  protected readonly isSoireeOpen = computed(() => this.isSoiree() && !this.isSoireeFinished());
+
   /** Libellé du second onglet d'un ralliement : « Missives » (thème) pour un groupe ; pour une soirée
    *  isolée, « Invitations » côté hôte (administrateur) et « Invités » côté invité (Story 41.1). */
   protected readonly membersTabLabel = computed(() => {
@@ -252,7 +259,7 @@ export class PartieDetail implements OnInit {
    *  depuis « Missives ». Le rôle vient du serveur (`PartieDto.role`), jamais de `ownerId` : un groupe
    *  compte plusieurs administrateurs. La rencontre isolée n'a pas cette interface (epic 41). */
   protected readonly canInviteMembers = computed(
-    () => (this.isGroup() || this.isSoiree()) && this.partie()?.role === 'admin',
+    () => (this.isGroup() || this.isSoireeOpen()) && this.partie()?.role === 'admin',
   );
 
   /** Story 39.4 : l'utilisateur courant est administrateur de ce GROUPE (jamais d'une rencontre

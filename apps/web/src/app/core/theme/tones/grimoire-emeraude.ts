@@ -401,6 +401,7 @@ export const grimoireEmeraude = {
   'partie.ralliement_soiree_invitations_tab': 'Invitations',
   'partie.ralliement_soiree_participation': 'Sur invitation · pas de limite',
   'partie.ralliement_soiree_guests_empty': 'Aucun invité pour l’instant',
+  'partie.ralliement_soiree_status_closed_label': 'Cette rencontre est terminée.',
   'dashboard.invitation_pending_chip': 'Invitation à accepter',
   'partie.ralliement_soiree_participation_form':
     'Sur invitation · pas de limite — vous invitez ensuite depuis l’onglet Invitations',

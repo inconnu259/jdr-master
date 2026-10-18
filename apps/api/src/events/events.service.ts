@@ -118,6 +118,10 @@ export interface InvitationNotice {
   lieu: string | null;
 }
 
+/** Refus d'agir sur une soirée isolée terminée — date passée ou close (Story 41.4) : invitation, vote,
+ *  modification, retrait d'un invité. */
+export const EVENING_FINISHED_MESSAGE = 'Cette soirée est terminée : plus rien ne peut y changer';
+
 /** Refus de modifier une conjonction dont le jour est passé (Story 40.2). */
 export const PAST_EVENT_MESSAGE = 'Cette conjonction est passée : elle ne peut plus être modifiée';
 
@@ -1379,6 +1383,45 @@ export class EventsService
   }
 
   /**
+   * Story 41.4 : parmi ces rencontres isolées, lesquelles ont leur plage de dates PASSÉE — fin de plage
+   * (`endDate`, à défaut `startDate`) strictement avant le début du jour courant UTC (aujourd'hui reste à
+   * venir, même convention que les conjonctions). UNE lecture groupée ; une rencontre sans date n'y est
+   * jamais. L'appelant ne passe que des rencontres isolées (`ONE_SHOT` de la famille ralliement).
+   */
+  async endedIsolatedPartieIds(partieIds: string[]): Promise<Set<string>> {
+    if (partieIds.length === 0) return new Set();
+    const startOfToday = new Date();
+    startOfToday.setUTCHours(0, 0, 0, 0);
+    const seances = await this.prisma.seance.findMany({
+      where: {
+        event: { partieId: { in: partieIds } },
+        OR: [{ endDate: { lt: startOfToday } }, { endDate: null, startDate: { lt: startOfToday } }],
+      },
+      select: { event: { select: { partieId: true } } },
+    });
+    return new Set(seances.map((s) => s.event.partieId));
+  }
+
+  /**
+   * Story 41.4 : une soirée isolée est figée (400) quand elle est terminée — `closedAt` posé ou date passée,
+   * la même règle que le statut `TERMINEE`. Sans effet pour tout autre type de partie.
+   */
+  async assertIsolatedOpen(partie: {
+    id: string;
+    kind: PartieKind;
+    gameSystemId: string;
+    closedAt: Date | null;
+  }): Promise<void> {
+    if (partie.kind !== 'ONE_SHOT' || familyOf(partie.gameSystemId) !== 'ralliement') return;
+    if (
+      partie.closedAt !== null ||
+      (await this.endedIsolatedPartieIds([partie.id])).has(partie.id)
+    ) {
+      throw new BadRequestException(EVENING_FINISHED_MESSAGE);
+    }
+  }
+
+  /**
    * Story 41.3 : de quoi écrire l'e-mail d'invitation à une soirée isolée — son événement unique (le
    * premier de la partie), sa date ou l'échéance de son vote, son lieu. Lecture seule : l'invitation ne
    * lit jamais les tables d'événements elle-même. `null` si la partie n'a aucun événement.
@@ -1466,12 +1509,21 @@ export class EventsService
         startDate: true,
         inscriptionMax: true,
         inscriptions: { select: { userId: true, status: true } },
-        event: { select: { partieId: true, ownerId: true } },
+        event: {
+          select: {
+            partieId: true,
+            ownerId: true,
+            partie: { select: { id: true, kind: true, gameSystemId: true, closedAt: true } },
+          },
+        },
       },
     });
     if (!seance || seance.event.partieId !== poll.partieId) {
       throw new BadRequestException('Poll introuvable ou fermé');
     }
+    // Story 41.4 : une soirée close (même sans date) ne prend plus de vote ; une soirée passée est datée,
+    // donc déjà refusée plus bas.
+    await this.assertIsolatedOpen(seance.event.partie);
     if (seance.startDate) throw new BadRequestException(VOTE_DATE_SET_MESSAGE);
     if (poll.expiresAt && poll.expiresAt.getTime() < Date.now()) {
       throw new BadRequestException(VOTE_ENDED_MESSAGE);

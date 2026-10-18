@@ -28,6 +28,7 @@ import {
   canUnsubscribe,
   eventBadge,
   eventDateLabel,
+  eventSituation,
   eventSituationTextKey,
   extendMinKey,
   hasPendingPoll,
@@ -129,6 +130,8 @@ export class EventDialog {
   /** Story 41.2 : l'hôte veut compléter une soirée qui attend sa date — l'onglet ouvre alors la fenêtre de
    *  création (mêmes champs, brouillon du calendrier compris) au lieu de l'édition en ligne. */
   readonly completeRequested = output<void>();
+  /** Story 41.4 : soirée terminée (close ou passée) — plus de « Modifier ». */
+  readonly frozen = input(false);
   /** Carte à jour renvoyée par le serveur (modification par l'hôte, inscription, désinscription) :
    *  l'onglet la met à jour tout de suite. */
   readonly saved = output<EventCardDto>();
@@ -165,7 +168,11 @@ export class EventDialog {
 
   protected readonly past = computed(() => isPastEvent(this.card(), this.todayKey()));
   protected readonly canEdit = computed(
-    () => isHostOf(this.card(), this.currentUserId()) && !this.past(),
+    () => !this.frozen() && isHostOf(this.card(), this.currentUserId()) && !this.past(),
+  );
+  /** Story 41.4 : « Ma situation » d'une soirée en pastille écrite (« Je participe », « J'y étais »…). */
+  protected readonly situationChip = computed(() =>
+    this.inline() ? eventSituation(this.card(), this.currentUserId(), this.todayKey(), true) : null,
   );
   /** Story 41.2 : événement sans date ni sondage (une soirée fraîchement créée). */
   protected readonly awaitingDate = computed(() => {
