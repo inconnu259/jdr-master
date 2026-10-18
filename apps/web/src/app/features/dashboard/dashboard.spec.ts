@@ -1884,6 +1884,90 @@ describe('Dashboard — filtres Genre / Rang et regroupement par type (Story 38.
   });
 });
 
+describe('Dashboard — filtrer et masquer les annulées (Story 42.4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const parties = () => [
+    makeRalliement('r'),
+    makeParty('c', 'player', 'ANNULEE'),
+    makeParty('f', 'player', 'TERMINEE'),
+    makeQuete('q', 'mj', 'EN_COURS'),
+  ];
+  it('le filtre « Phase » propose « Annulée » et ne montre alors que les annulées', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, parties());
+    const options = Array.from(
+      fixture.nativeElement.querySelectorAll('select option[value="ANNULEE"]'),
+    ) as HTMLOptionElement[];
+    expect(options).toHaveLength(1);
+    expect(options[0].textContent?.trim()).toBe(
+      TONE_MAP['grimoire-emeraude']['dashboard.status_cancelled_badge'],
+    );
+
+    const comp = fixture.componentInstance as any;
+    comp.statusFilter.set('ANNULEE');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.tile')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.tile--cancelled')).not.toBeNull();
+  });
+
+  it('la case de masquage cache aussi les annulées, et le bouton de révélation les rend', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, parties(), new Map(), {
+      hideFinishedParties: true,
+    });
+    expect(fixture.nativeElement.querySelector('.tile--cancelled')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.tile--closed')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.tile')).toHaveLength(2);
+
+    fixture.nativeElement.querySelector('.controls-bar__reveal').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.tile--cancelled')).not.toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.tile')).toHaveLength(4);
+  });
+
+  it('seules des annulées sont masquées : le bouton de révélation existe quand même', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('c', 'player', 'ANNULEE'), makeParty('e', 'player', 'EN_COURS')],
+      new Map(),
+      { hideFinishedParties: true },
+    );
+    expect((fixture.componentInstance as any).hasHiddenFinished()).toBe(true);
+    expect(fixture.nativeElement.querySelector('.controls-bar__reveal')).not.toBeNull();
+  });
+
+  it('sans la préférence, les annulées restent visibles', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, parties(), new Map(), {
+      hideFinishedParties: false,
+    });
+    expect(fixture.nativeElement.querySelectorAll('.tile')).toHaveLength(4);
+    expect(fixture.nativeElement.querySelector('.controls-bar__reveal')).toBeNull();
+  });
+
+  it('le filtre de genre s’applique aux annulées comme aux autres', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [{ ...makeRalliement('c'), status: 'ANNULEE' as const }, makeQuete('q', 'mj', 'EN_COURS')],
+      new Map(),
+      { hideFinishedParties: true },
+    );
+    const comp = fixture.componentInstance as any;
+    // « c » est un ralliement annulé ; sous le genre « quête », rien n'est caché donc rien à révéler.
+    comp.genreFilter.set('quete');
+    expect(comp.hasHiddenFinished()).toBe(false);
+  });
+
+  it.each(['grimoire-emeraude', 'foret-ancienne', 'atelier-cuivre'] as const)(
+    'thème %s : le libellé de la case et celui du bouton disent « annulé » (UX-DR14)',
+    (theme) => {
+      const tone = TONE_MAP[theme];
+      expect(tone['dashboard.hide_finished_label']).toMatch(/annulé/);
+      expect(tone['dashboard.show_finished_btn']).toMatch(/annulé/);
+    },
+  );
+});
+
 describe('Dashboard — favori d’un ralliement (Story 38.5)', () => {
   afterEach(() => TestBed.resetTestingModule());
 

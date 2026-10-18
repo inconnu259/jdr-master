@@ -241,7 +241,7 @@ export class Dashboard implements OnInit {
     const genre = this.genreFilter();
     return this.allParties().some(
       (p) =>
-        p.status === 'TERMINEE' &&
+        Dashboard.isFinishedOrCancelled(p) &&
         (role === 'all' || p.role === role) &&
         (genre === 'all' || Dashboard.genreOf(p) === genre),
     );
@@ -262,7 +262,7 @@ export class Dashboard implements OnInit {
       if (role !== 'all' && p.role !== role) return false;
       if (genre !== 'all' && Dashboard.genreOf(p) !== genre) return false;
       if (status !== 'all' && p.status !== status) return false;
-      if (hideFinished && p.status === 'TERMINEE') return false;
+      if (hideFinished && Dashboard.isFinishedOrCancelled(p)) return false;
       if (query && !p.name.toLowerCase().includes(query)) return false;
       return true;
     });
@@ -309,6 +309,12 @@ export class Dashboard implements OnInit {
       };
     });
   });
+
+  /** Story 42.4 : « clos » au sens de la case à cocher — terminée OU annulée (statut `ANNULEE`, Story 42.2).
+   *  La préférence enregistrée (`hideFinishedParties`) garde son nom et sa valeur ; seule sa portée s'élargit. */
+  private static isFinishedOrCancelled(partie: PartieDto): boolean {
+    return partie.status === 'TERMINEE' || partie.status === 'ANNULEE';
+  }
 
   private static hasActionableSignal(signals: readonly PartySignalCode[]): boolean {
     return signals.some((s) => !NON_ACTIONABLE_SIGNALS.includes(s));
