@@ -108,6 +108,9 @@ export const KIND_NOT_ALLOWED_FOR_SYSTEM_MESSAGE =
   "Ce type de partie n'est pas disponible pour ce système de jeu";
 
 /** Story 38.2 : le type (`kind`) et le système d'un ralliement sont définitifs. */
+/** Refus de retirer de sa liste une partie qui n'est ni terminée ni annulée (Story 42.5, FR17). */
+export const HIDE_NOT_OVER_MESSAGE =
+  'Seule une partie terminée ou annulée peut être retirée de votre liste';
 export const RALLIEMENT_TYPE_LOCKED_MESSAGE = "Le type d'un ralliement ne peut pas être modifié";
 
 /** Story 39.3 : un administrateur ne retire qu'un simple membre. Story 39.5 : le créateur n'est plus
@@ -447,7 +450,11 @@ export class PartiesService implements PartieSignalsPort {
   async listForUser(userId: string, role?: 'mj' | 'player'): Promise<PartieDto[]> {
     if (role === undefined) {
       const mine = await this.prisma.partie.findMany({
-        where: { OR: [{ ownerId: userId }, { memberships: { some: { userId } } }] },
+        // Story 42.5 : les parties que l'utilisateur a retirées de sa liste n'y figurent plus, nulle part.
+        where: {
+          OR: [{ ownerId: userId }, { memberships: { some: { userId } } }],
+          hiddenBy: { none: { userId } },
+        },
         orderBy: { createdAt: 'desc' },
       });
       const mineIds = mine.map((p) => p.id);
@@ -464,7 +471,7 @@ export class PartiesService implements PartieSignalsPort {
     }
     if (role === 'player') {
       const allMemberships = await this.prisma.membership.findMany({
-        where: { userId },
+        where: { userId, partie: { hiddenBy: { none: { userId } } } },
         orderBy: { joinedAt: 'desc' },
         include: { partie: true },
       });
@@ -481,7 +488,7 @@ export class PartiesService implements PartieSignalsPort {
       );
     }
     const ownedParties = await this.prisma.partie.findMany({
-      where: { ownerId: userId },
+      where: { ownerId: userId, hiddenBy: { none: { userId } } },
       orderBy: { createdAt: 'desc' },
     });
     const parties = ownedParties.filter((p) => familyOf(p.gameSystemId) !== 'ralliement');
@@ -1096,6 +1103,28 @@ export class PartiesService implements PartieSignalsPort {
     return toPartieDto(updated, role, progress, favorite);
   }
 
+  /**
+   * Story 42.5 (FR17, AD-10) : retire DÉFINITIVEMENT une partie terminée ou annulée de la liste de
+   * `userId`, et de lui seul. Droit : un rôle sur la partie (`PARTIE_READ`, 403/404 sinon) ; le statut,
+   * calculé par la fonction unique (jamais lu du client), doit être TERMINEE ou ANNULEE (400 sinon).
+   * Idempotent (`skipDuplicates`). Les lectures de l'utilisateur l'excluent ensuite côté serveur ; les autres
+   * participants la gardent. N'émet qu'après l'écriture : `user:{userId}` rafraîchit ses autres onglets.
+   */
+  async hide(userId: string, partieId: string): Promise<{ ok: true }> {
+    const { partie, role } = await this.permissions.assert(userId, 'PARTIE_READ', { partieId });
+    const progress = await this.progressOf(partie);
+    const { status } = toPartieDto(partie, role, progress, false);
+    if (status !== 'TERMINEE' && status !== 'ANNULEE') {
+      throw new BadRequestException(HIDE_NOT_OVER_MESSAGE);
+    }
+    await this.prisma.partieHidden.createMany({
+      data: [{ userId, partieId }],
+      skipDuplicates: true,
+    });
+    this.realtimeEvents.emit(userTopic(userId));
+    return { ok: true };
+  }
+
   /** Revient sur une clôture (AD-8, Story 29.6) — MJ uniquement. */
   async reopen(id: string, userId: string): Promise<PartieDto> {
     const { partie, role } = await this.permissions.assert(userId, 'PARTIE_REOPEN', {
@@ -1106,6 +1135,8 @@ export class PartiesService implements PartieSignalsPort {
       where: { id },
       data: { closedAt: null },
     });
+    // Story 42.5 : rouvrir une partie close la rend à TOUS ceux qui l'avaient retirée de leur liste.
+    await this.prisma.partieHidden.deleteMany({ where: { partieId: id } });
     await this.emitPartieAndMembersSafe(id, partie.ownerId);
     const [progress, favorite] = await Promise.all([
       this.progressOf(partie),

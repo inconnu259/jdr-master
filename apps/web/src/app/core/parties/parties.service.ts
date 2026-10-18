@@ -53,6 +53,18 @@ export class PartiesService {
     return firstValueFrom(this.http.get<PartieDto[]>(url, { withCredentials: true }));
   }
 
+  /** Story 42.5 : retire DÉFINITIVEMENT de SA liste une partie terminée ou annulée (`PUT /parties/:id/hidden`,
+   *  idempotent, pour soi seul). Le serveur est seul juge (400 si la partie n'est pas terminée ni annulée). */
+  hide(partieId: string): Promise<{ ok: true }> {
+    return firstValueFrom(
+      this.http.put<{ ok: true }>(
+        `${API}/parties/${partieId}/hidden`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+  }
+
   // Plusieurs composants montés simultanément peuvent recharger sur le même changed() (cf. bug
   // 429 en rafale sur ScenariosService.listAll, même correctif ici) — les appels concurrents pour
   // la même clé partagent la même requête en vol.

@@ -2090,7 +2090,11 @@ export class EventsService
     range: OwnEventsRange,
   ): Promise<OwnEvents> {
     const found = await this.prisma.partie.findMany({
-      where: { OR: [{ ownerId: userId }, { memberships: { some: { userId } } }] },
+      // Story 42.5 : une partie retirée de sa liste sort aussi de son calendrier personnel.
+      where: {
+        OR: [{ ownerId: userId }, { memberships: { some: { userId } } }],
+        hiddenBy: { none: { userId } },
+      },
       select: { id: true, name: true, kind: true, gameSystemId: true },
     });
     if (found.length === 0) return { parties: [], seances: [], inscriptionsOuvertes: [] };

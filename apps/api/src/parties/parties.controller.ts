@@ -47,6 +47,12 @@ export class PartiesController {
     return this.parties.findOneDto(id, user.id);
   }
 
+  /** Story 42.5 : retirer de SA liste une partie terminée ou annulée (définitif, pour soi seul). */
+  @Put(':id/hidden')
+  hide(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.parties.hide(user.id, id);
+  }
+
   @Get(':id/members')
   members(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.parties.listMembers(id, user.id);

@@ -55,6 +55,15 @@ describe('PartiesService (front)', () => {
     expect(await p).toEqual([partie]);
   });
 
+  it('hide → PUT /parties/:id/hidden, sans corps utile, avec withCredentials (Story 42.5)', async () => {
+    const p = service.hide('p1');
+    const req = http.expectOne(`${API}/parties/p1/hidden`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush({ ok: true });
+    expect(await p).toEqual({ ok: true });
+  });
+
   it('create → POST avec le payload', async () => {
     const payload = { name: 'La Nuit', kind: 'ONE_SHOT' as const, gameSystemId: 'draconis' };
     const p = service.create(payload);

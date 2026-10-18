@@ -1,5 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { of } from 'rxjs';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { vi } from 'vitest';
@@ -121,13 +123,17 @@ async function createFixture(
   const myPartiesSvc = {
     allParties: signal(allParties),
     refreshAll: vi.fn().mockResolvedValue(undefined),
+    hide: vi.fn().mockResolvedValue(undefined),
   };
+  // Story 42.5 : la confirmation « Retirer de ma liste » (défaut : « Renoncer »).
+  const dialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(false) }) };
   await TestBed.configureTestingModule({
     imports: [Dashboard],
     providers: [
       provideRouter([]),
       provideAnimationsAsync(),
       { provide: MyPartiesService, useValue: myPartiesSvc },
+      { provide: MatDialog, useValue: dialog },
       { provide: InvitationsService, useValue: invitationsSvc },
       { provide: OpenPollsService, useValue: { openPolls: signal(openPolls) } },
       { provide: PartySignalsService, useValue: { signals: signal(partySignals) } },
@@ -153,7 +159,7 @@ async function createFixture(
   }
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, invitationsSvc, realtimeSvc, authSvc, myPartiesSvc, accountSvc };
+  return { fixture, invitationsSvc, realtimeSvc, authSvc, myPartiesSvc, accountSvc, dialog };
 }
 
 describe('Dashboard — liste unifiée (Story 29.1, AC1)', () => {
@@ -1881,6 +1887,89 @@ describe('Dashboard — filtres Genre / Rang et regroupement par type (Story 38.
     expect(comp.hasHiddenFinished()).toBe(true);
     comp.genreFilter.set('ralliement');
     expect(comp.hasHiddenFinished()).toBe(false);
+  });
+});
+
+describe('Dashboard — retirer de sa liste (Story 42.5)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const CONFIRM =
+    'Retirer « Party p1 » de votre liste ? Elle disparaîtra définitivement pour vous seul ; les autres participants la conservent.';
+  const buttons = (fixture: { nativeElement: HTMLElement }) =>
+    Array.from(fixture.nativeElement.querySelectorAll('.hide-btn')) as HTMLButtonElement[];
+
+  it('le bouton n’existe que sur une partie terminée ou annulée, avec un nom accessible', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'player', 'TERMINEE'),
+      makeParty('p2', 'player', 'ANNULEE'),
+      makeParty('p3', 'player', 'EN_COURS'),
+      makeParty('p4', 'player', 'A_VENIR'),
+    ]);
+
+    const found = buttons(fixture);
+    expect(found).toHaveLength(2);
+    expect(found.map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Retirer de ma liste : Party p1',
+      'Retirer de ma liste : Party p2',
+    ]);
+  });
+
+  it.each(['large', 'medium', 'compact'] as const)(
+    'mode %s : le bouton est offert, le clic n’ouvre pas la partie',
+    async (mode) => {
+      const { fixture } = await createFixture(
+        new Map(),
+        undefined,
+        [makeParty('p1', 'player', 'TERMINEE')],
+        new Map(),
+        { partiesViewMode: mode },
+      );
+      expect(buttons(fixture)).toHaveLength(1);
+    },
+  );
+
+  it('confirmer : la phrase du contrat, le bouton « Retirer », puis le retrait et la relecture', async () => {
+    const { fixture, myPartiesSvc, dialog } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'player', 'TERMINEE'),
+    ]);
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+
+    buttons(fixture)[0].click();
+    await fixture.whenStable();
+
+    const data = dialog.open.mock.calls[0][1].data;
+    expect(data.message).toBe(CONFIRM);
+    expect(data.confirmLabel).toBe('Retirer');
+    expect(data.destructive).toBeUndefined();
+    expect(myPartiesSvc.hide).toHaveBeenCalledWith('p1');
+  });
+
+  it('« Renoncer » : rien n’est envoyé', async () => {
+    const { fixture, myPartiesSvc, dialog } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'player', 'ANNULEE'),
+    ]);
+    dialog.open.mockReturnValue({ afterClosed: () => of(false) });
+
+    buttons(fixture)[0].click();
+    await fixture.whenStable();
+
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(myPartiesSvc.hide).not.toHaveBeenCalled();
+  });
+
+  it('un refus du serveur laisse la tuile et le bouton en place', async () => {
+    const { fixture, myPartiesSvc, dialog } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'player', 'TERMINEE'),
+    ]);
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+    myPartiesSvc.hide.mockRejectedValue(new Error('400'));
+
+    buttons(fixture)[0].click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('.tile')).toHaveLength(1);
+    expect(buttons(fixture)[0].disabled).toBe(false);
   });
 });
 

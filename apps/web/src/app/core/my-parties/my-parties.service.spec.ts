@@ -6,11 +6,14 @@ import { PartiesService } from '../parties/parties.service';
 describe('MyPartiesService', () => {
   let service: MyPartiesService;
   let result: unknown[];
-  let partiesMock: { list: ReturnType<typeof vi.fn> };
+  let partiesMock: { list: ReturnType<typeof vi.fn>; hide: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     result = [];
-    partiesMock = { list: vi.fn(() => Promise.resolve(result)) };
+    partiesMock = {
+      list: vi.fn(() => Promise.resolve(result)),
+      hide: vi.fn().mockResolvedValue({ ok: true }),
+    };
     TestBed.configureTestingModule({
       providers: [{ provide: PartiesService, useValue: partiesMock }],
     });
@@ -27,6 +30,19 @@ describe('MyPartiesService', () => {
     TestBed.inject(MyPartiesService);
 
     expect(localStorage.getItem('master-jdr.mode')).toBeNull();
+  });
+
+  it('Story 42.5 : hide() retire la partie côté serveur PUIS relit la liste ; un refus remonte et ne relit rien', async () => {
+    result = [{ id: 'p2', role: 'mj' }];
+    await service.hide('p1');
+    expect(partiesMock.hide).toHaveBeenCalledWith('p1');
+    expect(partiesMock.list).toHaveBeenCalledTimes(1);
+    expect(service.allParties().map((p) => p.id)).toEqual(['p2']);
+
+    partiesMock.list.mockClear();
+    partiesMock.hide.mockRejectedValue(new Error('400'));
+    await expect(service.hide('p1')).rejects.toThrow('400');
+    expect(partiesMock.list).not.toHaveBeenCalled();
   });
 
   it('hasMjParties devient true après refresh avec des parties', async () => {

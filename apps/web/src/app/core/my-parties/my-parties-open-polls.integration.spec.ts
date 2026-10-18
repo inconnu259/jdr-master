@@ -95,7 +95,7 @@ describe('MyPartiesService × OpenPollsService (Story 38.5)', () => {
     expect(listAll).toHaveBeenCalledWith('pl2');
   });
 
-  it("allParties() est en lecture seule : aucun .set() possible hors refreshAll()", async () => {
+  it('allParties() est en lecture seule : aucun .set() possible hors refreshAll()', async () => {
     const { myParties } = await setup([]);
     expect((myParties.allParties as unknown as { set?: unknown }).set).toBeUndefined();
   });

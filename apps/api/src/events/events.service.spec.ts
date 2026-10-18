@@ -3639,6 +3639,20 @@ describe('EventsService (Story 37.3)', () => {
         });
       });
 
+      it('ownEventsOf() exclut les parties que l’utilisateur a retirées de sa liste (Story 42.5)', async () => {
+        prisma.partie.findMany.mockResolvedValue([]);
+
+        await service.ownEventsOf('me', jest.fn().mockResolvedValue(new Map()), {
+          fromMs: 0,
+          toMs: 1,
+        });
+
+        expect(callArg<{ where: unknown }>(prisma.partie.findMany).where).toEqual({
+          OR: [{ ownerId: 'me' }, { memberships: { some: { userId: 'me' } } }],
+          hiddenBy: { none: { userId: 'me' } },
+        });
+      });
+
       it('ownEventsOf() ne lit que les événements non annulés', async () => {
         prisma.partie.findMany.mockResolvedValue([
           { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', gameSystemId: 'ralliement' },

@@ -306,6 +306,11 @@ export const atelierCuivre: Record<ToneKey, string> = {
   'dashboard.sort_type': 'Régime',
   'dashboard.sort_statut': 'État de service',
   'dashboard.hide_finished_label': 'Masquer les manufactures démantelées et annulées',
+  // Story 42.5 : « Retirer de ma liste » — textes du contrat (UX-DR12 n° 4), identiques dans les trois thèmes.
+  'dashboard.hide_party_aria': 'Retirer de ma liste : {name}',
+  'dashboard.hide_party_confirm':
+    'Retirer « {name} » de votre liste ? Elle disparaîtra définitivement pour vous seul ; les autres participants la conservent.',
+  'dashboard.hide_party_confirm_btn': 'Retirer',
   'dashboard.show_finished_btn': 'Afficher les manufactures démantelées et annulées',
   'dashboard.favorite_add_aria': 'Épingler au tableau (favori)',
   'dashboard.favorite_remove_aria': 'Retirer du tableau (favori)',

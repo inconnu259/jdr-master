@@ -363,3 +363,8 @@
 .row__dot--cancelled {
   background: var(--color-unavailable, #e74c3c);
 }
+
+// Story 42.5 : « Retirer de ma liste » — même gabarit discret que le favori, à sa droite.
+.hide-btn {
+  margin-left: 0.15rem;
+}

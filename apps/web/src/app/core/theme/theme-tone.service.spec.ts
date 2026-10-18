@@ -1035,6 +1035,10 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_event_fix_counts',
     'partie.ralliement_event_fix_past',
     'partie.ralliement_event_fix_warning',
+    // Story 42.5 : « Retirer de ma liste » — nom accessible et bouton sont du contrat ; la phrase de
+    // confirmation garde ses mots, la forêt la tutoie (« ta liste », « toi seul »)
+    'dashboard.hide_party_aria',
+    'dashboard.hide_party_confirm_btn',
     // Story 42.2 : l'état « Annulée » de la tuile et la phrase du bandeau d'une rencontre annulée sont du contrat
     'dashboard.status_cancelled_badge',
     'partie.ralliement_soiree_status_cancelled_label',

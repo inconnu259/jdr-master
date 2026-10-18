@@ -221,6 +221,19 @@
       >
         <mat-icon aria-hidden="true">{{ t.partie.isFavorite ? 'star' : 'star_border' }}</mat-icon>
       </button>
+      @if (canHide(t.partie)) {
+        <!-- Story 42.5 : « Retirer de ma liste » (partie terminée ou annulée), pour soi seul ; l'icône est doublée du
+             nom accessible et de la confirmation écrite. -->
+        <button
+          type="button"
+          class="favorite-btn hide-btn"
+          [disabled]="isHidePending(t.partie.id)"
+          [attr.aria-label]="hideAriaLabel(t.partie)"
+          (click)="$event.stopPropagation(); confirmHide(t.partie)"
+        >
+          <mat-icon aria-hidden="true">visibility_off</mat-icon>
+        </button>
+      }
     </div>
   } @else {
   <mat-card
@@ -281,6 +294,19 @@
         >
           <mat-icon aria-hidden="true">{{ t.partie.isFavorite ? 'star' : 'star_border' }}</mat-icon>
         </button>
+        @if (canHide(t.partie)) {
+          <!-- Story 42.5 : « Retirer de ma liste » (partie terminée ou annulée), pour soi seul ; l'icône est doublée du
+               nom accessible et de la confirmation écrite. -->
+          <button
+            type="button"
+            class="favorite-btn hide-btn"
+            [disabled]="isHidePending(t.partie.id)"
+            [attr.aria-label]="hideAriaLabel(t.partie)"
+            (click)="$event.stopPropagation(); confirmHide(t.partie)"
+          >
+            <mat-icon aria-hidden="true">visibility_off</mat-icon>
+          </button>
+        }
       </mat-card-title>
       <mat-card-subtitle>
         {{ subtitle(t.partie) }}

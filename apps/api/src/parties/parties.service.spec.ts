@@ -77,6 +77,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   GAME_SYSTEM_FAMILY_CHANGE_MESSAGE,
   GAME_SYSTEM_WITHOUT_MODULE_MESSAGE,
+  HIDE_NOT_OVER_MESSAGE,
   KIND_NOT_ALLOWED_FOR_SYSTEM_MESSAGE,
   LAST_ADMIN_MESSAGE,
   PartiesService,
@@ -145,6 +146,10 @@ describe('PartiesService', () => {
     partieFavorite: {
       findUnique: jest.Mock;
       findMany: jest.Mock;
+    };
+    partieHidden: {
+      createMany: jest.Mock;
+      deleteMany: jest.Mock;
     };
     partieVisibilityLock: {
       findMany: jest.Mock;
@@ -243,6 +248,11 @@ describe('PartiesService', () => {
       partieFavorite: {
         findUnique: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
+      },
+      // Story 42.5 : masquage « Retirer de ma liste » (défaut : rien de masqué).
+      partieHidden: {
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       // Story 31.6 — les tests dédiés au cadenas de visibilité reconfigurent explicitement.
       partieVisibilityLock: {
@@ -598,7 +608,8 @@ describe('PartiesService', () => {
     ]);
     expect(prisma.membership.findMany).toHaveBeenCalledWith(
       objectLike({
-        where: { userId: 'u' },
+        // Story 42.5 : les parties retirées de sa liste n'y figurent plus.
+        where: { userId: 'u', partie: { hiddenBy: { none: { userId: 'u' } } } },
         include: { partie: true },
       }),
     );
@@ -629,7 +640,10 @@ describe('PartiesService', () => {
         ['p1', 'mj'],
       ]);
       expect(prisma.partie.findMany).toHaveBeenNthCalledWith(1, {
-        where: { OR: [{ ownerId: 'u' }, { memberships: { some: { userId: 'u' } } }] },
+        where: {
+          OR: [{ ownerId: 'u' }, { memberships: { some: { userId: 'u' } } }],
+          hiddenBy: { none: { userId: 'u' } },
+        },
         orderBy: { createdAt: 'desc' },
       });
       // Une seule lecture de rôles pour toutes les parties, jamais une par partie.
@@ -1461,6 +1475,84 @@ describe('PartiesService', () => {
         roles.admin2 = 'ADMIN';
       }
       expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // Story 42.5 : « Retirer de ma liste » — masquage définitif, par utilisateur, d'une partie terminée ou annulée.
+  describe('retirer de sa liste (Story 42.5)', () => {
+    const closed = { ...partie, closedAt: new Date('2026-01-01T00:00:00Z') };
+
+    it('une partie terminée (JDR compris) : ligne écrite sans doublon, puis user:{id} émis', async () => {
+      prisma.partie.findUnique.mockResolvedValue(closed);
+
+      await expect(service.hide('mj1', 'p1')).resolves.toEqual({ ok: true });
+
+      expect(prisma.partieHidden.createMany).toHaveBeenCalledWith({
+        data: [{ userId: 'mj1', partieId: 'p1' }],
+        skipDuplicates: true,
+      });
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+    });
+
+    it('une soirée isolée annulée : retirable, même non close', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        kind: 'ONE_SHOT',
+        gameSystemId: 'ralliement',
+        ownerId: 'admin1',
+      });
+      prisma.membership.findUnique.mockResolvedValue({ userId: 'admin1', role: 'ADMIN' });
+      prisma.event.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+
+      await expect(service.hide('admin1', 'p1')).resolves.toEqual({ ok: true });
+      expect(prisma.partieHidden.createMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('une partie à venir ou en cours : refusée (400), rien d’écrit ni d’émis', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+
+      const refusal = service.hide('mj1', 'p1');
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(HIDE_NOT_OVER_MESSAGE);
+
+      prisma.event.count.mockResolvedValue(1);
+      await expect(service.hide('mj1', 'p1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.partieHidden.createMany).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('un étranger à la partie : refusé (403), rien d’écrit', async () => {
+      prisma.partie.findUnique.mockResolvedValue(closed);
+      prisma.membership.findUnique.mockResolvedValue(null);
+
+      await expect(service.hide('etranger', 'p1')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.partieHidden.createMany).not.toHaveBeenCalled();
+    });
+
+    it('une partie inconnue : 404', async () => {
+      prisma.partie.findUnique.mockResolvedValue(null);
+
+      await expect(service.hide('mj1', 'zzz')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('listForUser(mj) exclut les parties retirées de SA liste', async () => {
+      prisma.partie.findMany.mockResolvedValue([]);
+
+      await service.listForUser('mj1', 'mj');
+
+      expect(callArg<{ where: unknown }>(prisma.partie.findMany).where).toEqual({
+        ownerId: 'mj1',
+        hiddenBy: { none: { userId: 'mj1' } },
+      });
+    });
+
+    it('reopen supprime les masquages de TOUS les utilisateurs de la partie', async () => {
+      prisma.partie.findUnique.mockResolvedValue(closed);
+      prisma.partie.update.mockResolvedValue({ ...closed, closedAt: null });
+
+      await service.reopen('p1', 'mj1');
+
+      expect(prisma.partieHidden.deleteMany).toHaveBeenCalledWith({ where: { partieId: 'p1' } });
     });
   });
 

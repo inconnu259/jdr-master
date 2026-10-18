@@ -1,6 +1,7 @@
 import {
   Component,
   DestroyRef,
+  Injector,
   OnInit,
   computed,
   effect,
@@ -52,6 +53,7 @@ import { RealtimeService, userTopic } from '../../core/realtime/realtime.service
 import { gameSystemName, partieKindLabelKey } from '../../core/parties/parties.util';
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 import { fillTone } from '../../core/theme/tone-format';
+import { firstValueFrom } from 'rxjs';
 
 /** Signaux purement informatifs (jamais une action à faire) — exclus du regroupement « ce qui
  *  t'attend » (Task 7) et de la teinte de priorité (Task 6, cf. party-signal-priority.ts). */
@@ -108,6 +110,7 @@ export interface PartieTileVm {
 })
 export class Dashboard implements OnInit {
   private readonly myPartiesSvc = inject(MyPartiesService);
+  private readonly injector = inject(Injector);
   private readonly invitations = inject(InvitationsService);
   private readonly openPollsSvc = inject(OpenPollsService);
   private readonly partySignalsSvc = inject(PartySignalsService);
@@ -638,6 +641,55 @@ export class Dashboard implements OnInit {
   private readonly pendingFavorites = signal<ReadonlySet<string>>(new Set());
 
   /** Vrai si un clic sur l'étoile de cette partie est déjà en cours de traitement. */
+  /** Story 42.5 : « Retirer de ma liste » n'est offert que sur une partie terminée ou annulée (le serveur
+   *  refuse sinon). Parties retirées en cours de confirmation/écriture : le bouton est désactivé. */
+  private readonly pendingHides = signal<ReadonlySet<string>>(new Set());
+
+  protected canHide(partie: PartieDto): boolean {
+    return partie.status === 'TERMINEE' || partie.status === 'ANNULEE';
+  }
+
+  protected isHidePending(partieId: string): boolean {
+    return this.pendingHides().has(partieId);
+  }
+
+  protected hideAriaLabel(partie: PartieDto): string {
+    return fillTone(this.theme.tone()['dashboard.hide_party_aria'], { name: partie.name });
+  }
+
+  /** Story 42.5 (UX-DR12 n° 4) : confirmation « Votre accord », puis retrait définitif pour soi seul ; la
+   *  liste est relue par `MyPartiesService.hide`. « Renoncer » ne change rien. */
+  protected async confirmHide(partie: PartieDto): Promise<void> {
+    if (!this.canHide(partie) || this.pendingHides().has(partie.id)) return;
+    const tone = this.theme.tone();
+    // La fenêtre de confirmation n'est chargée qu'au premier clic : l'écran d'accueil (bundle initial) ne
+    // porte ni `MatDialog` ni `ConfirmDialog` (budget du bundle initial).
+    const [{ MatDialog }, { ConfirmDialog }] = await Promise.all([
+      import('@angular/material/dialog'),
+      import('../parties/confirm-dialog/confirm-dialog'),
+    ]);
+    const ref = this.injector.get(MatDialog).open(ConfirmDialog, {
+      data: {
+        message: fillTone(tone['dashboard.hide_party_confirm'], { name: partie.name }),
+        confirmLabel: tone['dashboard.hide_party_confirm_btn'],
+      },
+    });
+    const confirmed = await firstValueFrom(ref.afterClosed());
+    if (!confirmed) return;
+    this.pendingHides.update((s) => new Set(s).add(partie.id));
+    try {
+      await this.myPartiesSvc.hide(partie.id);
+    } catch {
+      // Refus ou échec réseau : la tuile reste, rien n'a changé (le serveur est seul juge).
+    } finally {
+      this.pendingHides.update((s) => {
+        const next = new Set(s);
+        next.delete(partie.id);
+        return next;
+      });
+    }
+  }
+
   protected isFavoritePending(partieId: string): boolean {
     return this.pendingFavorites().has(partieId);
   }

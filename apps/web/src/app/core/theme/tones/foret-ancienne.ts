@@ -302,6 +302,11 @@ export const foretAncienne: Record<ToneKey, string> = {
   'dashboard.sort_type': 'Forme',
   'dashboard.sort_statut': 'Stade',
   'dashboard.hide_finished_label': 'Masquer les sentiers achevés et annulés',
+  // Story 42.5 : « Retirer de ma liste » — textes du contrat (UX-DR12 n° 4), identiques dans les trois thèmes.
+  'dashboard.hide_party_aria': 'Retirer de ma liste : {name}',
+  'dashboard.hide_party_confirm':
+    'Retirer « {name} » de ta liste ? Elle disparaîtra définitivement pour toi seul ; les autres participants la conservent.',
+  'dashboard.hide_party_confirm_btn': 'Retirer',
   'dashboard.show_finished_btn': 'Afficher les sentiers achevés et annulés',
   'dashboard.favorite_add_aria': 'Marquer d’une encoche (favori)',
   'dashboard.favorite_remove_aria': 'Retirer l’encoche (favori)',

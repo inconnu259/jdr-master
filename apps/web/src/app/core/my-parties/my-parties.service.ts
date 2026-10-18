@@ -60,6 +60,13 @@ export class MyPartiesService {
     if (list) this._allParties.set(list);
   }
 
+  /** Story 42.5 : retire une partie terminée ou annulée de la liste de l'utilisateur, puis relit la liste (la
+   *  partie en a disparu côté serveur). Un refus du serveur remonte à l'appelant, la liste reste inchangée. */
+  async hide(partieId: string): Promise<void> {
+    await this.parties.hide(partieId);
+    await this.refreshAll();
+  }
+
   /** Alias historiques de `refreshAll()` (la liste n'est plus scindée par rôle) : conservés pour les
    *  appelants existants, sans second appel réseau. */
   refreshMjParties(): Promise<void> {

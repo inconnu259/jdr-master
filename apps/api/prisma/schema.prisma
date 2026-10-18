@@ -47,6 +47,7 @@ model User {
   emailChangeTokens         EmailChangeToken[]
   emailChangeRollbackTokens EmailChangeRollbackToken[]
   favorites                 PartieFavorite[]
+  hiddenParties             PartieHidden[]
   announcementReads         AnnouncementRead[]
   calendarLayers            UserCalendarLayer[]
 }
@@ -86,6 +87,7 @@ model Partie {
   announcements       Announcement[]
   characterGroupRoles CharacterGroupRole[]
   favorites           PartieFavorite[]
+  hiddenBy            PartieHidden[]
   visibilityLocks     PartieVisibilityLock[]
 
   /// AD-23 — l'Homme Dragon que cette partie (une « aventure ») suit : au plus un, par construction.
@@ -126,6 +128,22 @@ model PartieFavorite {
   createdAt DateTime @default(now())
 
   @@unique([userId, partieId])
+}
+
+/// « Retirer de ma liste » (Story 42.5, AD-10) : masquage DÉFINITIF d'une partie terminée ou annulée,
+/// pour un seul utilisateur. Une ligne par (utilisateur, partie) ; la partie disparaît de SES lectures
+/// (liste, signaux, calendrier personnel) côté serveur, sans paramètre pour la réafficher. Les lignes
+/// d'une partie disparaissent à sa réouverture (`PartiesService.reopen`).
+model PartieHidden {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partieId  String
+  partie    Partie   @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, partieId])
+  @@index([partieId])
 }
 
 /// Une couche de calendrier active pour un utilisateur (Story 30.4) — état multi-valué, donc

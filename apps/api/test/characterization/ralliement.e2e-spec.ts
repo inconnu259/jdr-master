@@ -5942,3 +5942,154 @@ describe('Ralliement — annuler une soirée isolée (Story 42.2)', () => {
     expect(await statusOf(host, jdrId)).not.toBe('ANNULEE');
   });
 });
+
+describe('Ralliement — retirer de sa liste une partie terminée ou annulée (Story 42.5)', () => {
+  let h: Harness;
+  let host: TestUser;
+  let guest: TestUser;
+  let stranger: TestUser;
+
+  type PartieLike = { id: string; status: string };
+
+  const HIDE_REFUSAL = 'Seule une partie terminée ou annulée peut être retirée de votre liste';
+  const newSoiree = async (name: string, dated = false) => {
+    const { id } = await h.createPartie(host, 'ONE_SHOT', name, 'ralliement');
+    await h.addMember(id, guest);
+    const event = await h.prisma.event.findFirstOrThrow({ where: { partieId: id } });
+    if (dated) {
+      await host.agent
+        .patch(`/parties/${id}/events/${event.id}`)
+        .send({ title: name, date: isoDay(4), slot: 'EVENING' })
+        .expect(200);
+    }
+    return { id, eventId: event.id };
+  };
+  const hide = (who: TestUser, id: string) => who.agent.put(`/parties/${id}/hidden`);
+  const listed = async (who: TestUser) =>
+    body<PartieLike[]>(await who.agent.get('/parties').expect(200)).map((p) => p.id);
+  const listedByRole = async (who: TestUser, role: 'mj' | 'player') =>
+    body<PartieLike[]>(await who.agent.get(`/parties?role=${role}`).expect(200)).map((p) => p.id);
+  const signalIds = async (who: TestUser) =>
+    Object.keys(
+      body<Record<string, unknown>>(await who.agent.get('/me/party-signals').expect(200)),
+    );
+  const calendarParties = async (who: TestUser) =>
+    body<{ 'mes-seances': { partieId: string }[] }>(
+      await who.agent
+        .get('/me/calendar')
+        .query({ from: isoDay(0), to: isoDay(30) })
+        .expect(200),
+    )['mes-seances'].map((s) => s.partieId);
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [host, guest, stranger] = await Promise.all([
+      h.createUser('cache-hote'),
+      h.createUser('cache-invite'),
+      h.createUser('cache-etranger'),
+    ]);
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it('une soirée close : l’invité la retire — liste, signaux et calendrier la perdent pour lui seul ; l’hôte la garde', async () => {
+    const { id } = await newSoiree('close-retiree', true);
+    expect(await calendarParties(guest)).toContain(id);
+    await host.agent.patch(`/parties/${id}/close`).expect(200);
+    expect(await listed(guest)).toContain(id);
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    try {
+      expect(body<{ ok: boolean }>(await hide(guest, id).expect(200)).ok).toBe(true);
+      expect(emit).toHaveBeenCalledWith(userTopic(guest.id));
+    } finally {
+      emit.mockRestore();
+    }
+
+    expect(await h.prisma.partieHidden.count({ where: { partieId: id } })).toBe(1);
+    expect(await listed(guest)).not.toContain(id);
+    expect(await listedByRole(guest, 'player')).not.toContain(id);
+    expect(await signalIds(guest)).not.toContain(id);
+    expect(await calendarParties(guest)).not.toContain(id);
+    // L'hôte, lui, la garde partout ; l'invité peut encore la lire par son identifiant.
+    expect(await listed(host)).toContain(id);
+    expect(await calendarParties(host)).toContain(id);
+    await guest.agent.get(`/parties/${id}`).expect(200);
+  });
+
+  it('une soirée annulée : retirable par son hôte comme par un invité, sans signal ni entrée de liste ensuite', async () => {
+    const { id, eventId } = await newSoiree('annulee-retiree');
+    await host.agent.post(`/parties/${id}/events/${eventId}/cancel`).expect(201);
+    expect(await signalIds(guest)).toContain(id);
+
+    await hide(guest, id).expect(200);
+    await hide(host, id).expect(200);
+
+    for (const who of [guest, host]) {
+      expect(await listed(who)).not.toContain(id);
+      expect(await signalIds(who)).not.toContain(id);
+    }
+    expect(await h.prisma.partieHidden.count({ where: { partieId: id } })).toBe(2);
+  });
+
+  it('une quête de JDR terminée : son MJ et un joueur la retirent aussi', async () => {
+    const { id } = await h.createPartie(host, 'ONE_SHOT', 'jdr-retiree');
+    await h.addMember(id, guest);
+    await host.agent.patch(`/parties/${id}/close`).expect(200);
+
+    await hide(guest, id).expect(200);
+    await hide(host, id).expect(200);
+
+    expect(await listed(guest)).not.toContain(id);
+    expect(await listedByRole(host, 'mj')).not.toContain(id);
+  });
+
+  it('idempotent : un second retrait ne change rien et n’écrit pas de doublon', async () => {
+    const { id } = await newSoiree('deux-fois-retiree');
+    await host.agent.patch(`/parties/${id}/close`).expect(200);
+
+    await hide(guest, id).expect(200);
+    await hide(guest, id).expect(200);
+
+    expect(await h.prisma.partieHidden.count({ where: { partieId: id, userId: guest.id } })).toBe(
+      1,
+    );
+  });
+
+  it('une partie à venir : refusée (400), rien d’écrit', async () => {
+    const { id } = await newSoiree('a-venir-non-retirable', true);
+
+    const res = await hide(guest, id);
+
+    expect(res.status).toBe(400);
+    expect(String((res.body as { message: string }).message)).toBe(HIDE_REFUSAL);
+    expect(await h.prisma.partieHidden.count({ where: { partieId: id } })).toBe(0);
+    expect(await listed(guest)).toContain(id);
+  });
+
+  it('un étranger : 403 ; une partie inconnue : 404 — rien d’écrit', async () => {
+    const { id } = await newSoiree('etranger-refuse');
+    await host.agent.patch(`/parties/${id}/close`).expect(200);
+
+    expect((await hide(stranger, id)).status).toBe(403);
+    expect((await hide(stranger, randomUUID())).status).toBe(404);
+    expect(await h.prisma.partieHidden.count({ where: { partieId: id } })).toBe(0);
+  });
+
+  it('rouvrir une partie close rend la partie à tous ceux qui l’avaient retirée', async () => {
+    const { id } = await newSoiree('rouverte', true);
+    await host.agent.patch(`/parties/${id}/close`).expect(200);
+    await hide(guest, id).expect(200);
+    await hide(host, id).expect(200);
+    expect(await listed(guest)).not.toContain(id);
+
+    await host.agent.patch(`/parties/${id}/reopen`).expect(200);
+
+    expect(await h.prisma.partieHidden.count({ where: { partieId: id } })).toBe(0);
+    expect(await listed(guest)).toContain(id);
+    expect(await listed(host)).toContain(id);
+    expect(await calendarParties(guest)).toContain(id);
+  });
+});

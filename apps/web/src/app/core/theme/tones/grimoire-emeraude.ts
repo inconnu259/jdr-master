@@ -308,6 +308,11 @@ export const grimoireEmeraude = {
   'dashboard.sort_type': 'Nature',
   'dashboard.sort_statut': 'Phase',
   'dashboard.hide_finished_label': 'Masquer les grimoires clos et annulés',
+  // Story 42.5 : « Retirer de ma liste » — textes du contrat (UX-DR12 n° 4), identiques dans les trois thèmes.
+  'dashboard.hide_party_aria': 'Retirer de ma liste : {name}',
+  'dashboard.hide_party_confirm':
+    'Retirer « {name} » de votre liste ? Elle disparaîtra définitivement pour vous seul ; les autres participants la conservent.',
+  'dashboard.hide_party_confirm_btn': 'Retirer',
   'dashboard.show_finished_btn': 'Afficher les grimoires clos et annulés',
   'dashboard.favorite_add_aria': 'Marquer d’un signet (favori)',
   'dashboard.favorite_remove_aria': 'Retirer le signet (favori)',
