@@ -98,6 +98,8 @@ export class NotificationsService {
       where: {
         startDate: { gte: now, lte: in24h },
         reminderSentAt: null,
+        // Story 42.1 : une conjonction annulée n'est jamais rappelée.
+        event: { cancelledAt: null },
       },
       orderBy: [{ startDate: 'asc' }, { id: 'asc' }],
       include: {
@@ -200,6 +202,8 @@ export class NotificationsService {
             is: {
               startDate: null,
               event: {
+                // Story 42.1 : une conjonction annulée n'est jamais relancée (son sondage est clos).
+                cancelledAt: null,
                 // Story 41.2 : groupe comme soirée isolée (tout ralliement a un sondage de dates).
                 partie: { gameSystemId: { in: RALLIEMENT_SYSTEM_IDS } },
               },

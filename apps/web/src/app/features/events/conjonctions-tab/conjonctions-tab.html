@@ -84,6 +84,7 @@
     [card]="selected"
     [todayKey]="todayKey"
     [currentUserId]="currentUserId()"
+    [viewerIsAdmin]="isAdmin()"
     (saved)="onSaved($event)"
     (calendarRequested)="openCalendar()"
     (refreshRequested)="refresh()"

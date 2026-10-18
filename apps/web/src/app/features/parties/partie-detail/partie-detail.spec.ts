@@ -7,7 +7,7 @@ import { provideAnimationsAsync } from '@angular/platform-browser/animations/asy
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { signal, type WritableSignal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject, Subject, of } from 'rxjs';
 import { vi } from 'vitest';
 import type {
   AnnouncementDto,
@@ -336,6 +336,8 @@ async function createFixture(
           accepter: vi.fn(),
           reserver: vi.fn(),
           retirerReservation: vi.fn(),
+          // Story 42.1 : annuler une conjonction.
+          cancel: vi.fn(),
         },
       },
     ],
@@ -4704,6 +4706,7 @@ describe('PartieDetail — les conjonctions d’un groupe (Story 40.1)', () => {
     },
     participants: [],
     myInscription: null,
+    cancelled: false,
     poll: null,
     ...over,
   });
@@ -4975,6 +4978,7 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
       },
     ],
     myInscription: null,
+    cancelled: false,
     poll: null,
     ...over,
   });
@@ -5306,7 +5310,9 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
       const labels = Array.from(document.body.querySelectorAll('.ed__actions button')).map((b) =>
         b.textContent?.trim(),
       );
+      // Story 42.1 (⚠️ attente modifiée) : l'hôte voit aussi « Annuler la conjonction », en premier.
       expect(labels).toEqual([
+        tone['partie.ralliement_event_cancel_event_btn'],
         tone['partie.ralliement_event_edit_btn'],
         tone['partie.ralliement_event_close_btn'],
       ]);
@@ -5548,7 +5554,9 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
       await open(fixture, el, 'a');
       expect(q(SIGNUP)).toBeNull();
       expect(q(UNSUBSCRIBE)).toBeNull();
+      // Story 42.1 (⚠️ attente modifiée) : « Annuler la conjonction » précède « Modifier » pour l'hôte.
       expect(buttonLabels('.ed__actions button')).toEqual([
+        tone['partie.ralliement_event_cancel_event_btn'],
         tone['partie.ralliement_event_edit_btn'],
         tone['partie.ralliement_event_close_btn'],
       ]);
@@ -5812,6 +5820,7 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
         ...base,
         seance: { ...base.seance!, placesTaken: 4 },
         myInscription: 'RESERVED' as const,
+        cancelled: false,
       };
     };
 
@@ -5871,6 +5880,7 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
           },
         ],
         myInscription: 'CONFIRMED' as const,
+        cancelled: false,
       };
       api().accepter.mockResolvedValue(accepted);
       api().list.mockResolvedValue([accepted]);
@@ -6177,6 +6187,7 @@ describe('PartieDetail — du groupe vers son calendrier (Story 40.5b)', () => {
       },
     ],
     myInscription: null,
+    cancelled: false,
     poll: {
       id: 'p-a',
       expiresAt: '2099-12-30T23:59:59.999Z',
@@ -6392,6 +6403,7 @@ describe('PartieDetail — une soirée isolée sur une seule page (Story 41.1)',
       },
     ],
     myInscription: null,
+    cancelled: false,
     poll: null,
     ...over,
   });
@@ -6742,5 +6754,215 @@ describe('PartieDetail — une soirée isolée sur une seule page (Story 41.1)',
     );
     expect(tabLabels(quete.el)[0]).toBe(tone['parties.detail_tab_details']);
     expect(quete.el.querySelector('app-soiree-tab')).toBeNull();
+  });
+});
+
+// ─── Annuler une conjonction (Story 42.1) ──────────────────────────────────────────────────────
+
+describe('PartieDetail — annuler une conjonction (Story 42.1)', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
+    vi.restoreAllMocks();
+  });
+
+  const HOST_ID = 'member-host';
+  const GUEST_ID = 'member-guest';
+  const ADMIN_ID = 'admin-user';
+  const tone = TONE_MAP['grimoire-emeraude'];
+  const groupe = (over: Partial<PartieDto> = {}) =>
+    makePartie({
+      gameSystemId: 'ralliement',
+      kind: 'CAMPAGNE_EPISODIQUE',
+      role: 'member',
+      ...over,
+    });
+  const dayKey = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const j = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${j}`;
+  };
+  const card = (id: string, days: number, over: Partial<EventCardDto> = {}): EventCardDto => ({
+    id,
+    title: `Conjonction ${id}`,
+    hostId: HOST_ID,
+    hostDisplayName: 'Hélène Hôte',
+    seance: {
+      id: `s-${id}`,
+      date: dayKey(days),
+      slot: 'EVENING',
+      lieu: 'Lyon 3e',
+      heureRdv: null,
+      notePratique: null,
+      capacity: 8,
+      placesTaken: 2,
+    },
+    participants: [
+      {
+        userId: HOST_ID,
+        displayName: 'Hélène Hôte',
+        isHost: true,
+        isAdmin: false,
+        status: 'CONFIRMED',
+      },
+      {
+        userId: GUEST_ID,
+        displayName: 'Gaël Invité',
+        isHost: false,
+        isAdmin: false,
+        status: 'CONFIRMED',
+      },
+    ],
+    myInscription: null,
+    cancelled: false,
+    poll: null,
+    ...over,
+  });
+  const api = () =>
+    TestBed.inject(EventsApiService) as unknown as {
+      list: ReturnType<typeof vi.fn>;
+      cancel: ReturnType<typeof vi.fn>;
+    };
+  const dialogOpen = () =>
+    (TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> }).open;
+  const settle = async (fixture: ComponentFixture<PartieDetail>) => {
+    for (let i = 0; i < 12; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+  };
+  const q = <T extends Element>(sel: string) => document.body.querySelector<T>(sel);
+  const open = async (fixture: ComponentFixture<PartieDetail>, el: HTMLElement, id: string) => {
+    el.querySelector<HTMLElement>(`button[data-event-id="${id}"]`)!.click();
+    await settle(fixture);
+  };
+  const labels = () =>
+    Array.from(document.body.querySelectorAll('.ed__actions button')).map((b) =>
+      b.textContent?.trim(),
+    );
+
+  it('l’hôte voit « Annuler la conjonction » avant la date ; un administrateur qui n’est pas l’hôte aussi, sans « Modifier »', async () => {
+    const host = await createFixture(groupe(), HOST_ID, { members: [], events: [card('a', 3)] });
+    await open(host.fixture, host.el, 'a');
+    expect(q('.ed__cancel-event')?.textContent?.trim()).toBe('Annuler la conjonction');
+    expect(q('.ed__edit')).not.toBeNull();
+    q<HTMLButtonElement>('.ed__close')!.click();
+    await settle(host.fixture);
+    TestBed.resetTestingModule();
+
+    const admin = await createFixture(groupe({ role: 'admin' }), ADMIN_ID, {
+      members: [],
+      events: [card('a', 3)],
+    });
+    await open(admin.fixture, admin.el, 'a');
+    expect(q('.ed__cancel-event')?.textContent?.trim()).toBe('Annuler la conjonction');
+    expect(q('.ed__edit')).toBeNull();
+  });
+
+  it('un simple membre, ou une conjonction passée : pas de « Annuler la conjonction »', async () => {
+    const guest = await createFixture(groupe(), GUEST_ID, { members: [], events: [card('a', 3)] });
+    await open(guest.fixture, guest.el, 'a');
+    expect(q('.ed__cancel-event')).toBeNull();
+    q<HTMLButtonElement>('.ed__close')!.click();
+    await settle(guest.fixture);
+    TestBed.resetTestingModule();
+
+    const host = await createFixture(groupe(), HOST_ID, { members: [], events: [card('p', -3)] });
+    await open(host.fixture, host.el, 'p');
+    expect(q('.ed__cancel-event')).toBeNull();
+  });
+
+  it('« Annuler la conjonction » : confirmation « Votre accord » avec le nom ; confirmer appelle le serveur, la carte passe « Annulée » aussitôt', async () => {
+    const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+      members: [],
+      events: [card('a', 3)],
+    });
+    await open(fixture, el, 'a');
+    const done = { ...card('a', 3), cancelled: true };
+    api().cancel.mockResolvedValue(done);
+    api().list.mockResolvedValue([done]);
+    // La fenêtre rend sa réponse APRÈS l'appel du serveur, comme en vrai (fermeture sur succès).
+    const closed = new Subject<boolean>();
+    dialogOpen().mockReturnValue({ afterClosed: () => closed });
+
+    q<HTMLButtonElement>('.ed__cancel-event')!.click();
+    await settle(fixture);
+
+    const data = dialogOpen().mock.calls[0][1].data;
+    expect(data.title).toBe('Conjonction a');
+    await data.confirm();
+    closed.next(true);
+    await settle(fixture);
+    expect(api().cancel).toHaveBeenCalledWith('party-1', 'a');
+    // La fenêtre reste ouverte et dit l'état, sans plus aucune action.
+    expect(q('.ed__badge')?.textContent?.trim()).toBe('Annulée');
+    expect(q('.ed__cancelled')?.textContent?.trim()).toBe(
+      tone['partie.ralliement_event_cancelled_text'],
+    );
+    expect(labels()).toEqual([tone['partie.ralliement_event_close_btn']]);
+  });
+
+  it('« Renoncer » : rien n’est envoyé, la conjonction reste telle quelle', async () => {
+    const { fixture, el } = await createFixture(groupe(), HOST_ID, {
+      members: [],
+      events: [card('a', 3)],
+    });
+    await open(fixture, el, 'a');
+    dialogOpen().mockReturnValue({ afterClosed: () => of(false) });
+
+    q<HTMLButtonElement>('.ed__cancel-event')!.click();
+    await settle(fixture);
+
+    expect(api().cancel).not.toHaveBeenCalled();
+    expect(q('.ed__cancelled')).toBeNull();
+  });
+
+  it('carte annulée : estompée, badge « Annulée » écrit, sans « Ma situation », et toujours cliquable', async () => {
+    const { fixture, el } = await createFixture(groupe(), GUEST_ID, {
+      members: [],
+      events: [card('a', 3, { cancelled: true }), card('b', 4)],
+    });
+
+    const articles = Array.from(el.querySelectorAll('article.event-card'));
+    const [cancelled, normal] = articles;
+    expect(cancelled.classList).toContain('event-card--cancelled');
+    expect(cancelled.querySelector('.status-badge')?.textContent?.trim()).toBe('Annulée');
+    expect(cancelled.querySelector('.status-badge')?.classList).toContain(
+      'status-badge--cancelled',
+    );
+    expect(cancelled.querySelector('.event-card__situation')).toBeNull();
+    expect(normal.classList).not.toContain('event-card--cancelled');
+    expect(normal.querySelector('.event-card__situation')).not.toBeNull();
+
+    // Elle reste dans sa section et reste cliquable : la fenêtre s'ouvre, dit « Annulée », sans action.
+    await open(fixture, el, 'a');
+    expect(q('.ed__title')?.textContent?.trim()).toBe('Conjonction a');
+    expect(q('.ed__badge')?.textContent?.trim()).toBe('Annulée');
+    expect(q('.ed__cancelled')).not.toBeNull();
+    expect(q('.ed__signup')).toBeNull();
+    expect(q('.ed__cancel-event')).toBeNull();
+    expect(q('.ed__edit')).toBeNull();
+    expect(labels()).toEqual([tone['partie.ralliement_event_close_btn']]);
+  });
+
+  it('même l’hôte et l’administrateur n’ont plus aucune action sur une conjonction annulée', async () => {
+    const host = await createFixture(groupe(), HOST_ID, {
+      members: [],
+      events: [card('a', 3, { cancelled: true })],
+    });
+    await open(host.fixture, host.el, 'a');
+    expect(labels()).toEqual([tone['partie.ralliement_event_close_btn']]);
+    q<HTMLButtonElement>('.ed__close')!.click();
+    await settle(host.fixture);
+    TestBed.resetTestingModule();
+
+    const admin = await createFixture(groupe({ role: 'admin' }), ADMIN_ID, {
+      members: [],
+      events: [card('a', 3, { cancelled: true })],
+    });
+    await open(admin.fixture, admin.el, 'a');
+    expect(labels()).toEqual([tone['partie.ralliement_event_close_btn']]);
   });
 });

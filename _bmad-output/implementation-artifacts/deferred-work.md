@@ -406,3 +406,7 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-41-3-inviter-a-une-soiree-accepter-ou-decliner.md`
   summary: Fix the e-mail links built from `WEB_ORIGIN` when it holds a comma-separated list of origins.
   evidence: In the dev setup `WEB_ORIGIN` is "http://localhost:4200,http://192.168.1.22:4200" and every mail builds its link as `${WEB_ORIGIN}/…`, so the href contains both origins; pick the first origin or a dedicated single-origin variable.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-42-1-annuler-une-conjonction-de-groupe.md`
+  summary: Raise the label contrast of the existing destructive `ConfirmDialog` button (white on `--color-unavailable`).
+  evidence: `confirm-dialog.ts` sets `--mat-button-filled-label-text-color: #fff` on #e74c3c, which measures 3.8:1 (below the 4.5:1 text threshold of NFR4); the new cancel dialog of 42.1 uses the theme background colour instead (4.9 to 5.1:1). Pre-existing, outside the cancel story.

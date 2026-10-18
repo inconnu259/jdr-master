@@ -210,6 +210,18 @@ export class PollService {
     }
   }
 
+  /**
+   * Story 42.1 — ferme, dans la transaction de l'appelant, le sondage d'une conjonction annulée.
+   * Idempotent : un sondage déjà fermé (date fixée) reste tel quel. Aucun droit décidé ici (l'appelant a
+   * obtenu `EVENT_CANCEL`). N'émet rien : l'appelant émet après son commit.
+   */
+  async closeInTx(tx: Prisma.TransactionClient, pollId: string): Promise<void> {
+    await tx.sessionPoll.updateMany({
+      where: { id: pollId, status: 'OPEN' },
+      data: { status: 'CLOSED' },
+    });
+  }
+
   async findOpen(partieId: string, userId: string): Promise<SessionPollDto | null> {
     const { role } = await this.permissions.assert(userId, 'POLL_READ', { partieId });
     // Anti-spoil serveur : un joueur ne voit pas le vote de la séance d'un brouillon caché ; le MJ

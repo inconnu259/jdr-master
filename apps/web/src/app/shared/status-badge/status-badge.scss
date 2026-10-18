@@ -38,6 +38,15 @@
   background: color-mix(in srgb, var(--jdr-status-done, #5a5a6a) 12%, transparent);
 }
 
+/* Story 42.1 : badge « annulé » — le rouge de l'irréversible/annulé (`--color-unavailable`), toujours doublé
+   du mot « Annulée » et d'un contour plein : jamais la couleur seule. */
+.status-badge--cancelled {
+  color: var(--color-cancelled-text, #f26a5c);
+  border-color: var(--color-unavailable, #e74c3c);
+  background: color-mix(in srgb, var(--color-unavailable, #e74c3c) 14%, transparent);
+  font-weight: 600;
+}
+
 /* L'imminence est une INTENSITÉ, jamais une cinquième couleur : une seule teinte, trois densités
    de remplissage. Le signal reste donc perceptible sans distinguer les couleurs (P-1). */
 .status-badge--soon {

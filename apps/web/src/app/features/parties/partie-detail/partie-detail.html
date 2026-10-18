@@ -51,7 +51,11 @@
                pour tout membre). Story 40.1 : l'onglet (features/events) liste les conjonctions du
                groupe, propose « + Nouvelle conjonction » et remonte leur nombre réel. -->
           <mat-tab [label]="theme.tone()['partie.ralliement_conjonctions_tab']">
-            <app-conjonctions-tab [partieId]="p.id" (countChange)="conjonctionCount.set($event)" />
+            <app-conjonctions-tab
+              [partieId]="p.id"
+              [isAdmin]="p.role === 'admin'"
+              (countChange)="conjonctionCount.set($event)"
+            />
           </mat-tab>
         }
         @if (isSoiree()) {

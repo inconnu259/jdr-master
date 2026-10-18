@@ -142,6 +142,27 @@ describe('EmailService', () => {
     });
   });
 
+  it('conjonction-annulee : sujet neutre « Annulée : « <titre> » » et bouton « Voir » (Story 42.1)', async () => {
+    await service.sendMail('conjonction-annulee', 'ami@example.com', {
+      eventTitle: 'Catane',
+      actorName: 'Léa',
+      sessionDate: 'samedi 24 octobre (soir)',
+      link: 'https://x/parties/p1',
+    });
+    expect(mailer.sendMail).toHaveBeenCalledWith({
+      to: 'ami@example.com',
+      subject: 'Annulée : « {{eventTitle}} »',
+      template: 'conjonction-annulee',
+      context: {
+        eventTitle: 'Catane',
+        actorName: 'Léa',
+        sessionDate: 'samedi 24 octobre (soir)',
+        link: 'https://x/parties/p1',
+        actionLabel: 'Voir',
+      },
+    });
+  });
+
   it('conjonction-relance : sujet neutre « Plus qu’un jour pour voter : « <titre> » » et bouton « Voter dans le calendrier » (Story 40.7)', async () => {
     await service.sendMail('conjonction-relance', 'ami@example.com', {
       eventTitle: 'Catane',

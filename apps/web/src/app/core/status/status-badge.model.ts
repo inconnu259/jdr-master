@@ -14,7 +14,9 @@ import type { DaySlot } from '@master-jdr/shared';
  */
 
 /** Teintes de la palette de statut (`--jdr-status-*`, `styles.scss`). Jamais une couleur en dur. */
-export type BadgeTone = 'todo' | 'live' | 'soon' | 'done';
+/** Story 42.1 : `cancelled` est le rouge de l'« annulé » (DESIGN.md §2, `--color-unavailable`) — il ne vaut JAMAIS
+ *  seul : le badge d'une conjonction annulée écrit toujours « Annulée ». */
+export type BadgeTone = 'todo' | 'live' | 'soon' | 'done' | 'cancelled';
 
 /** L'imminence est une **intensité**, jamais un état ni une cinquième couleur : la séance garde
  *  `status-soon` et le badge se densifie. [Source: DESIGN.md §7.1] */

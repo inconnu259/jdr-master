@@ -18,6 +18,12 @@ export function eventDayKey(card: EventCardDto): string | null {
   return card.seance?.date ?? null;
 }
 
+/** Story 42.1 : la conjonction est annulée (définitif, décidé par le serveur). Elle n'offre plus aucune
+ *  action, quelle que soit sa date. */
+export function isCancelled(card: EventCardDto): boolean {
+  return card.cancelled;
+}
+
 /** Passée : son jour est AVANT aujourd'hui (aujourd'hui reste « À venir »). Sans date : à venir. */
 export function isPastEvent(card: EventCardDto, todayKey: string): boolean {
   const day = eventDayKey(card);
@@ -49,6 +55,7 @@ export function canSignUp(
   return (
     !!currentUserId &&
     card.seance !== null &&
+    !isCancelled(card) &&
     !isParticipantOf(card, currentUserId) &&
     // Story 40.4 : qui tient une place réservée l'accepte ou la décline, il ne « s'inscrit » pas.
     card.myInscription !== 'RESERVED' &&
@@ -66,6 +73,7 @@ export function isFullForViewer(
 ): boolean {
   return (
     isFull(card) &&
+    !isCancelled(card) &&
     !isParticipantOf(card, currentUserId) &&
     // Story 40.4 : la place réservée est la sienne — la conjonction n'est pas « complète » pour lui.
     card.myInscription !== 'RESERVED' &&
@@ -83,6 +91,7 @@ export function canUnsubscribe(
   return (
     !!currentUserId &&
     card.seance !== null &&
+    !isCancelled(card) &&
     isParticipantOf(card, currentUserId) &&
     !isHostOf(card, currentUserId) &&
     !isPastEvent(card, todayKey)
@@ -102,6 +111,15 @@ export function eventBadge(
   tone: EventTone,
   currentUserId?: string | null,
 ): StatusBadgeState {
+  // Story 42.1 : « Annulée », écrit, l'emporte sur tout autre état (même passée).
+  if (isCancelled(card)) {
+    return {
+      tone: 'cancelled',
+      labelKey: 'status.scenario_passe',
+      draft: false,
+      text: tone['partie.ralliement_event_badge_cancelled'],
+    };
+  }
   if (isPastEvent(card, todayKey)) {
     return { tone: 'done', labelKey: 'status.scenario_passe', draft: false };
   }
@@ -191,7 +209,12 @@ export function hasReservedPlace(card: EventCardDto): boolean {
 /** Story 40.4 : la personne peut accepter ou décliner sa place réservée — tant que la conjonction
  *  n'est pas passée (le serveur refuse après). */
 export function canRespondToReservation(card: EventCardDto, todayKey: string): boolean {
-  return card.seance !== null && hasReservedPlace(card) && !isPastEvent(card, todayKey);
+  return (
+    card.seance !== null &&
+    !isCancelled(card) &&
+    hasReservedPlace(card) &&
+    !isPastEvent(card, todayKey)
+  );
 }
 
 /** Story 40.4 : l'hôte gère les réservations de sa conjonction à places limitées tant qu'elle n'est
@@ -204,8 +227,24 @@ export function canManageReservations(
   return (
     card.seance !== null &&
     card.seance.capacity !== null &&
+    !isCancelled(card) &&
     isHostOf(card, currentUserId) &&
     !isPastEvent(card, todayKey)
+  );
+}
+
+/** Story 42.1 : la personne peut annuler la conjonction — son hôte, ou un administrateur du groupe —
+ *  tant qu'elle n'est ni passée ni déjà annulée. Le serveur reste juge (droit, verrou, jour UTC). */
+export function canCancelEvent(
+  card: EventCardDto,
+  currentUserId: string | null | undefined,
+  viewerIsAdmin: boolean,
+  todayKey: string,
+): boolean {
+  return (
+    !isCancelled(card) &&
+    !isPastEvent(card, todayKey) &&
+    (viewerIsAdmin || isHostOf(card, currentUserId))
   );
 }
 

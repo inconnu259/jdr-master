@@ -103,6 +103,9 @@ export const RALLIEMENT_UNAVAILABLE_MESSAGE =
 /** Refus d'une action réservée à l'hôte d'une conjonction (Story 40.2) : un autre membre du groupe,
  *  administrateur compris, ne la modifie pas. */
 export const HOST_ONLY_MESSAGE = "Action réservée à l'hôte de la conjonction";
+/** Refus d'annuler une conjonction (Story 42.1) : ni son hôte, ni administrateur du groupe. */
+export const HOST_OR_ADMIN_ONLY_MESSAGE =
+  "Seul l'hôte de la conjonction ou un administrateur du groupe peut l'annuler";
 /** Refus opposé à quelqu'un qui n'a aucun rôle sur la partie. */
 export const NO_ACCESS_MESSAGE = "Vous n'avez pas accès à cette partie";
 /** Refus d'une action de couche 3 sur une partie dont le système ne déclare pas la capacité. */
@@ -201,6 +204,7 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
   EVENT_CREATE: NOBODY,
   EVENT_LIST: NOBODY,
   EVENT_UPDATE: NOBODY,
+  EVENT_CANCEL: NOBODY,
   // Invitations : le MJ invite, liste et révoque (l'invitant est toujours le propriétaire, la
   // propriété d'une partie étant immuable).
   INVITATION_CREATE: OWNER_ONLY,
@@ -316,6 +320,10 @@ export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly Parti
   // Story 40.2 : modifier une conjonction. Tout membre passe la cellule ; la règle « hôte de
   // l'événement » est décidée plus bas, dans `assert()` (HOST_ONLY_ACTIONS) — jamais ailleurs.
   EVENT_UPDATE: ADMIN_AND_MEMBERS,
+  // Story 42.1 : annuler une conjonction. Tout membre passe la cellule ; « hôte de l'événement OU
+  // administrateur du groupe » est décidé plus bas, dans `assert()` (HOST_OR_ADMIN_ACTIONS). La cellule
+  // vaut pour la famille entière ; le refus de la rencontre isolée est posé dans le service (42.2 le lève).
+  EVENT_CANCEL: ADMIN_AND_MEMBERS,
   // Invitations (Story 39.3) : l'administrateur invite, liste et révoque ; un simple membre n'a que
   // la lecture de la liste des membres. La cellule vaut pour la famille entière (l'invitation à
   // usage unique, épopée 41, n'a pas encore d'interface : l'UI reste réservée aux groupes).
@@ -358,6 +366,12 @@ const HOST_ONLY_ACTIONS: ReadonlySet<PermissionAction> = new Set<PermissionActio
   // Story 40.4 : réserver / retirer une réservation — cible `{ seanceId }` (l'hôte est celui de
   // l'événement de la séance).
   'SEANCE_RESERVE',
+]);
+
+/** Story 42.1 — actions ouvertes à l'HÔTE de l'événement visé OU à un administrateur du groupe (cible
+ *  `{ eventId }` obligatoire ; sans événement ou sans hôte, seul l'administrateur passe). Décidé ICI. */
+const HOST_OR_ADMIN_ACTIONS: ReadonlySet<PermissionAction> = new Set<PermissionAction>([
+  'EVENT_CANCEL',
 ]);
 
 /** Story 40.6 — actions réservées à l'hôte, mais seulement dans la famille `ralliement` et seulement
@@ -469,6 +483,14 @@ export class PermissionService {
         resolved.eventId !== undefined);
     if (hostOnly && (eventOwnerId == null || eventOwnerId !== userId)) {
       throw new ForbiddenException(HOST_ONLY_MESSAGE);
+    }
+    // Story 42.1 : l'hôte de l'événement, ou un administrateur du groupe.
+    if (
+      HOST_OR_ADMIN_ACTIONS.has(action) &&
+      role !== 'admin' &&
+      (resolved.eventId === undefined || eventOwnerId == null || eventOwnerId !== userId)
+    ) {
+      throw new ForbiddenException(HOST_OR_ADMIN_ONLY_MESSAGE);
     }
     const capability = ACTION_CAPABILITY[action];
     if (capability !== undefined && !hasCapability(partie.gameSystemId, capability)) {

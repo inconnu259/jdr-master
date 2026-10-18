@@ -2,6 +2,7 @@ import type { EventCardDto } from '@master-jdr/shared';
 import { TONE_MAP } from '../../core/theme/tones';
 import {
   answeredSlotCount,
+  canCancelEvent,
   canExtendVote,
   canFixDate,
   canManageReservations,
@@ -15,6 +16,7 @@ import {
   extendMinKey,
   frUnit,
   initialsOf,
+  isCancelled,
   isFull,
   isFullForViewer,
   isHostOf,
@@ -61,6 +63,7 @@ const card = (id: string, date: string | null, over: Partial<EventCardDto> = {})
   },
   participants: [],
   myInscription: null,
+  cancelled: false,
   poll: null,
   ...over,
 });
@@ -799,6 +802,63 @@ describe('event-card.util (Story 40.1)', () => {
       expect(extendMinKey(pollCard({ expiresAt: '2026-10-17T23:59:59.999Z' }), TODAY)).toBe(
         '2026-10-18',
       );
+    });
+  });
+
+  // Story 42.1 — une conjonction annulée : badge écrit, plus aucune action, annulable avant sa date.
+  describe('conjonction annulée (Story 42.1)', () => {
+    const cancelled = (date: string | null = '2026-10-24') => card('c', date, { cancelled: true });
+
+    it('isCancelled lit le drapeau du serveur', () => {
+      expect(isCancelled(card('a', '2026-10-24'))).toBe(false);
+      expect(isCancelled(cancelled())).toBe(true);
+    });
+
+    it('le badge dit « Annulée », teinte annulée, et l’emporte sur « Passé » et sur tout autre état', () => {
+      for (const date of ['2026-10-24', '2026-10-01', null, TODAY]) {
+        const badge = eventBadge(cancelled(date), TODAY, TONE, 'moi');
+        expect(badge.tone, String(date)).toBe('cancelled');
+        expect(badge.text, String(date)).toBe('Annulée');
+        expect(badge.draft).toBe(false);
+      }
+    });
+
+    it('aucune action sur une conjonction annulée : s’inscrire, se désinscrire, répondre, réserver', () => {
+      const base = { myInscription: 'RESERVED' as const };
+      const c = card('c', '2026-10-24', { ...base, cancelled: true });
+      expect(canSignUp(cancelled(), 'membre', TODAY)).toBe(false);
+      expect(canSignUp(card('a', '2026-10-24'), 'membre', TODAY)).toBe(true);
+      expect(canRespondToReservation(c, TODAY)).toBe(false);
+      expect(canManageReservations(cancelled(), 'hote', TODAY)).toBe(false);
+      const joined = card('j', '2026-10-24', {
+        cancelled: true,
+        participants: [
+          { userId: 'x', displayName: 'X', isHost: false, isAdmin: false, status: 'CONFIRMED' },
+        ],
+      });
+      expect(canUnsubscribe(joined, 'x', TODAY)).toBe(false);
+      expect(canUnsubscribe({ ...joined, cancelled: false }, 'x', TODAY)).toBe(true);
+    });
+
+    it('« Complet » n’est jamais écrit pour une conjonction annulée', () => {
+      const full = card('f', '2026-10-24', {
+        cancelled: true,
+        seance: { ...card('f', '2026-10-24').seance!, capacity: 3, placesTaken: 3 },
+      });
+      expect(isFullForViewer(full, 'autre', TODAY)).toBe(false);
+    });
+
+    it('canCancelEvent : l’hôte ou un administrateur, avant la date, ni passée ni déjà annulée', () => {
+      const upcoming = card('a', '2026-10-24');
+      expect(canCancelEvent(upcoming, 'hote', false, TODAY)).toBe(true);
+      expect(canCancelEvent(upcoming, 'autre', true, TODAY)).toBe(true);
+      expect(canCancelEvent(upcoming, 'autre', false, TODAY)).toBe(false);
+      expect(canCancelEvent(upcoming, null, false, TODAY)).toBe(false);
+      // Sans date (sondage / date à fixer) : annulable ; aujourd’hui : annulable ; passée : non.
+      expect(canCancelEvent(card('n', null), 'hote', false, TODAY)).toBe(true);
+      expect(canCancelEvent(card('t', TODAY), 'hote', false, TODAY)).toBe(true);
+      expect(canCancelEvent(card('p', '2026-10-01'), 'hote', true, TODAY)).toBe(false);
+      expect(canCancelEvent(cancelled(), 'hote', true, TODAY)).toBe(false);
     });
   });
 });

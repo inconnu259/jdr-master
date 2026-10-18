@@ -162,6 +162,12 @@ export const VOTE_NOT_ELIGIBLE_MESSAGE = 'Vous ne pouvez pas voter sur cette con
 export const DATE_FIXED_MESSAGE =
   'La date de cette conjonction est fixée : le jour et le créneau ne peuvent plus changer';
 
+/** Refus de toute action sur une conjonction annulée (Story 42.1) : l'annulation est définitive. */
+export const CANCELLED_EVENT_MESSAGE =
+  'Cette conjonction est annulée : plus rien ne peut y changer';
+/** Refus d'annuler une conjonction dont le jour est passé (Story 42.1). */
+export const CANCEL_PAST_MESSAGE = 'Cette conjonction est passée : elle ne peut plus être annulée';
+
 /** Destinataire d'un rappel : identité minimale, jamais plus que l'adresse à qui écrire. */
 export interface ReminderRecipient {
   id: string;
@@ -202,6 +208,17 @@ export interface VoteReminderPoll {
       partie: { memberships: { user: ReminderRecipient }[] };
     };
   };
+}
+
+/** De quoi écrire l'e-mail d'annulation (Story 42.1, e-mail n° 7), lu après le commit. */
+export interface CancellationNotice {
+  partieId: string;
+  eventTitle: string;
+  /** Nom affiché de la personne qui a annulé (l'hôte, ou un administrateur du groupe). */
+  actorName: string;
+  startDate: Date | null;
+  startSlot: DaySlot | null;
+  recipients: ReminderRecipient[];
 }
 
 /** De quoi écrire l'e-mail d'une place réservée (Story 40.4), lu après le commit. */
@@ -479,6 +496,7 @@ export class EventsService
         // L'hôte d'une conjonction est le propriétaire de l'événement (Story 40.1) : sélection de
         // la personne à afficher, jamais une décision de droit.
         ownerId: true,
+        cancelledAt: true,
         owner: { select: { displayName: true } },
         seances: {
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -527,6 +545,8 @@ export class EventsService
         // Story 40.6 : une fois la date fixée (séance datée, sondage clos), la carte n'a plus de bloc de
         // sondage — elle montre la date normale et les badges habituels.
         poll: s && !s.startDate ? (openPollOf(pollBySeance.get(s.id)) ?? null) : null,
+        // Story 42.1 : annulée = sondage clos (donc déjà sans bloc de sondage) et plus aucune action.
+        cancelled: Boolean(e.cancelledAt),
       };
     });
     // Tri stable (création déjà ordonnée par la requête) : par date puis créneau (matin <
@@ -781,6 +801,7 @@ export class EventsService
         where: { id: eventId },
         select: {
           ownerId: true,
+          cancelledAt: true,
           seances: {
             orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
             take: 1,
@@ -790,6 +811,8 @@ export class EventsService
       });
       const seance = event?.seances[0];
       if (!event || !seance) throw new NotFoundException('Conjonction introuvable');
+      // Story 42.1 : une conjonction annulée ne change plus (relue sous le verrou de l'événement).
+      if (event.cancelledAt) throw new BadRequestException(CANCELLED_EVENT_MESSAGE);
 
       // Story 40.5 : le mode (date fixée / sondage de dates) ne change pas à la modification — une
       // conjonction à sondage garde ses créneaux et sa séance sans date, une conjonction datée garde
@@ -883,6 +906,100 @@ export class EventsService
       await this.recalculateNextSessionInTx(tx, grant.partieId);
     });
     this.realtimeEvents.emit(partieTopic(grant.partieId));
+  }
+
+  /**
+   * Story 42.1 (AD-9) : annule une conjonction de groupe, DÉFINITIVEMENT. L'autorisation `EVENT_CANCEL`
+   * (hôte ou administrateur) est celle de l'appelant. Une seule transaction, mêmes verrous et même ordre
+   * que `updateHosted` (la PARTIE puis l'événement) : `cancelledAt` est écrit, le sondage éventuel est fermé
+   * par la fermeture `closePoll` de l'appelant (`PollService` reste l'unique écrivain de `SessionPoll`) et
+   * la prochaine date de la partie est recalculée sans elle. Refus (400) d'une conjonction déjà annulée ou
+   * dont le jour est passé (jour UTC strictement avant aujourd'hui ; aujourd'hui reste annulable).
+   * `partie:{id}` est émis après validation ; les signaux de l'accueil et l'e-mail sont ceux de l'appelant.
+   */
+  async cancelHosted(
+    grant: PartieGrant,
+    eventId: string,
+    closePoll: (tx: Prisma.TransactionClient, pollId: string) => Promise<void>,
+  ): Promise<void> {
+    await this.assertEventInGrant(grant, eventId);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Partie" WHERE "id" = ${grant.partieId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
+      const event = await tx.event.findUnique({
+        where: { id: eventId },
+        select: {
+          cancelledAt: true,
+          seances: {
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take: 1,
+            select: { startDate: true, pollId: true },
+          },
+        },
+      });
+      if (!event) throw new NotFoundException('Conjonction introuvable');
+      if (event.cancelledAt) throw new BadRequestException(CANCELLED_EVENT_MESSAGE);
+      const seance = event.seances[0];
+      const day = seance?.startDate?.toISOString().substring(0, 10) ?? null;
+      if (day !== null && day < todayKeyUtc()) throw new BadRequestException(CANCEL_PAST_MESSAGE);
+
+      await tx.event.update({ where: { id: eventId }, data: { cancelledAt: new Date() } });
+      if (seance?.pollId) await closePoll(tx, seance.pollId);
+      await this.recalculateNextSessionInTx(tx, grant.partieId);
+    });
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
+  }
+
+  /**
+   * Story 42.1 : de quoi écrire l'e-mail d'annulation (n° 7), lu APRÈS le commit — titre, date, nom de la
+   * personne qui a annulé et destinataires : les inscrits (confirmés ET places réservées) plus l'hôte quand
+   * c'est un autre qui annule ; jamais celui qui annule, une adresse chacun. `null` si l'événement n'existe
+   * plus. Une conjonction non annulée n'a rien à notifier (`null`).
+   */
+  async cancellationNotice(eventId: string, actorId: string): Promise<CancellationNotice | null> {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        title: true,
+        partieId: true,
+        ownerId: true,
+        cancelledAt: true,
+        owner: { select: { id: true, email: true } },
+        seances: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: 1,
+          select: {
+            startDate: true,
+            startSlot: true,
+            inscriptions: {
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+              select: { user: { select: { id: true, email: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!event || !event.cancelledAt) return null;
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorId },
+      select: { displayName: true },
+    });
+    const seance = event.seances[0];
+    const candidates = [
+      ...(event.owner ? [event.owner] : []),
+      ...(seance?.inscriptions ?? []).map((i) => i.user),
+    ];
+    const recipients = [...new Map(candidates.map((u) => [u.id, u])).values()].filter(
+      (u) => u.id !== actorId,
+    );
+    return {
+      partieId: event.partieId,
+      eventTitle: event.title,
+      actorName: actor?.displayName ?? 'Un membre du groupe',
+      startDate: seance?.startDate ?? null,
+      startSlot: seance?.startSlot ?? null,
+      recipients,
+    };
   }
 
   /** Story 41.2 : l'événement attend-il sa date (séance sans date ni sondage) ? Lecture seule, pour que
@@ -1470,9 +1587,16 @@ export class EventsService
     await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${ref.eventId} FOR UPDATE`;
     const seance = await tx.seance.findUnique({
       where: { id: seanceId },
-      select: { startDate: true, inscriptionMax: true, event: { select: { ownerId: true } } },
+      select: {
+        startDate: true,
+        inscriptionMax: true,
+        event: { select: { ownerId: true, cancelledAt: true } },
+      },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
+    // Story 42.1 : inscription, désinscription, réservation et acceptation sont refusées une fois la
+    // conjonction annulée — lu sous le verrou, donc sérialisé avec l'annulation.
+    if (seance.event.cancelledAt) throw new BadRequestException(CANCELLED_EVENT_MESSAGE);
     return {
       seance: { startDate: seance.startDate, inscriptionMax: seance.inscriptionMax },
       ownerId: seance.event.ownerId,
@@ -1513,6 +1637,7 @@ export class EventsService
           select: {
             partieId: true,
             ownerId: true,
+            cancelledAt: true,
             partie: { select: { id: true, kind: true, gameSystemId: true, closedAt: true } },
           },
         },
@@ -1524,6 +1649,8 @@ export class EventsService
     // Story 41.4 : une soirée close (même sans date) ne prend plus de vote ; une soirée passée est datée,
     // donc déjà refusée plus bas.
     await this.assertIsolatedOpen(seance.event.partie);
+    // Story 42.1 : une conjonction annulée ne prend plus de vote.
+    if (seance.event.cancelledAt) throw new BadRequestException(CANCELLED_EVENT_MESSAGE);
     if (seance.startDate) throw new BadRequestException(VOTE_DATE_SET_MESSAGE);
     if (poll.expiresAt && poll.expiresAt.getTime() < Date.now()) {
       throw new BadRequestException(VOTE_ENDED_MESSAGE);
@@ -1568,9 +1695,11 @@ export class EventsService
     await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${ref.event.id} FOR UPDATE`;
     const seance = await tx.seance.findUnique({
       where: { pollId: poll.id },
-      select: { startDate: true },
+      select: { startDate: true, event: { select: { cancelledAt: true } } },
     });
     if (!seance) throw new BadRequestException('Poll introuvable ou fermé');
+    // Story 42.1 : voter, fixer la date ou prolonger le vote d'une conjonction annulée est refusé.
+    if (seance.event.cancelledAt) throw new BadRequestException(CANCELLED_EVENT_MESSAGE);
     return { dated: seance.startDate !== null };
   }
 
@@ -1738,7 +1867,8 @@ export class EventsService
     // compris) — les séances d'un brouillon caché n'y entrent donc jamais, sans quoi un joueur lirait
     // la date d'un scénario qu'il ne doit pas voir. Elles y entrent à l'ouverture du scénario.
     const seances = await tx.seance.findMany({
-      where: { AND: [{ event: { partieId } }, VISIBLE_SEANCE_WHERE] },
+      // Story 42.1 : une conjonction annulée n'est jamais la prochaine date.
+      where: { AND: [{ event: { partieId, cancelledAt: null } }, VISIBLE_SEANCE_WHERE] },
       select: { startDate: true, startSlot: true },
     });
 
@@ -1805,7 +1935,8 @@ export class EventsService
     const partieIds = parties.map((p) => p.id);
     const partieById = new Map(parties.map((p) => [p.id, p]));
     const seances = await this.prisma.seance.findMany({
-      where: { event: { partieId: { in: partieIds } } },
+      // Story 42.1 : une conjonction annulée n'occupe plus personne.
+      where: { event: { partieId: { in: partieIds }, cancelledAt: null } },
       include: {
         inscriptions: { select: { userId: true, status: true } },
         event: { select: { partieId: true, ownerId: true } },
@@ -1878,7 +2009,8 @@ export class EventsService
 
     const [seances, roleByPartie] = await Promise.all([
       this.prisma.seance.findMany({
-        where: { event: { partieId: { in: partieIds } } },
+        // Story 42.1 : une conjonction annulée sort des calendriers personnels.
+        where: { event: { partieId: { in: partieIds }, cancelledAt: null } },
         include: {
           inscriptions: { select: { userId: true, status: true } },
           event: {

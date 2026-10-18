@@ -547,6 +547,10 @@ model Event {
   ownerId     String?
   owner       User?    @relation("EventOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
+  /// Annulation (Story 42.1, AD-9) : posée sous le verrou de l'événement, définitive (jamais effacée).
+  /// Ralliement seulement — le JDR n'annule rien. Un événement annulé refuse toute action et sort des
+  /// rappels, des indisponibilités, de `nextSessionDate` et des calendriers personnels.
+  cancelledAt DateTime?
 
   scenario Scenario?
   seances  Seance[]

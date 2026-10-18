@@ -1412,6 +1412,8 @@ describe('Ralliement — proposer une conjonction à date fixée (Story 40.1)', 
       myInscription: null,
       // Story 40.5 : une conjonction à date fixée n'a pas de sondage.
       poll: null,
+      // Story 42.1 : une conjonction n'est pas annulée à sa création.
+      cancelled: false,
     });
 
     const events = await h.prisma.event.findMany({
@@ -1752,6 +1754,7 @@ describe('Ralliement — consulter et modifier une conjonction (Story 40.2)', ()
       ],
       myInscription: null,
       poll: null,
+      cancelled: false,
     });
     const event = await stored(card.id);
     expect(event.title).toBe('Corrigée');
@@ -5120,5 +5123,357 @@ describe('Ralliement — clore une soirée isolée une fois passée (Story 41.4)
       .send({ title: 'Conjonction', date: isoDay(5), slot: 'EVENING' })
       .expect(201);
     expect(await statusOf(groupId)).toBe('EN_COURS');
+  });
+});
+
+describe('Ralliement — annuler une conjonction de groupe (Story 42.1)', () => {
+  let h: Harness;
+  let admin: TestUser;
+  let host: TestUser;
+  let guest: TestUser;
+  let reservedUser: TestUser;
+  let third: TestUser;
+  let stranger: TestUser;
+  let otherAdmin: TestUser;
+  let groupId: string;
+  let otherGroupId: string;
+  let oneShotId: string;
+
+  type PollLike = { id: string; status: string; options: { id: string }[] };
+  type CardLike = {
+    id: string;
+    cancelled: boolean;
+    seance: { id: string; date: string | null } | null;
+    poll: PollLike | null;
+  };
+  type ErrorLike = { statusCode: number; message: string | string[] };
+
+  const CANCEL_MAIL = 'conjonction-annulee';
+  const CANCELLED = 'Cette conjonction est annulée : plus rien ne peut y changer';
+  const HOST_OR_ADMIN =
+    "Seul l'hôte de la conjonction ou un administrateur du groupe peut l'annuler";
+  const PAST = 'Cette conjonction est passée : elle ne peut plus être annulée';
+
+  const message = (res: { body: unknown }) => (res.body as ErrorLike).message;
+  const propose = async (who: TestUser, over: Record<string, unknown> = {}) => {
+    const res = await who.agent
+      .post(`/parties/${groupId}/events`)
+      .send({ title: 'À annuler', date: isoDay(3), slot: 'EVENING', ...over });
+    expect(res.status).toBe(201);
+    return body<CardLike>(res);
+  };
+  const proposePoll = (who: TestUser) =>
+    propose(who, {
+      title: 'Sondage à annuler',
+      date: undefined,
+      slot: undefined,
+      pollOptions: [
+        { date: isoDay(8), slot: 'EVENING' },
+        { date: isoDay(9), slot: 'MORNING' },
+      ],
+      pollDeadline: isoDay(5),
+    });
+  const cancel = (who: TestUser, eventId: string, partieId = groupId) =>
+    who.agent.post(`/parties/${partieId}/events/${eventId}/cancel`);
+  const cardFor = async (who: TestUser, eventId: string) =>
+    body<CardLike[]>(await who.agent.get(`/parties/${groupId}/events/list`).expect(200)).find(
+      (c) => c.id === eventId,
+    )!;
+  const eventRow = (eventId: string) =>
+    h.prisma.event.findUniqueOrThrow({ where: { id: eventId } });
+  const rows = async (seanceId: string) =>
+    (
+      await h.prisma.inscription.findMany({ where: { seanceId }, orderBy: { createdAt: 'asc' } })
+    ).map((i) => [i.userId, i.status]);
+  const cancelMails = (since: number, title: string) =>
+    h.email.calls
+      .slice(since)
+      .filter((c) => c.template === CANCEL_MAIL && c.data.eventTitle === title);
+  const signUp = (who: TestUser, seanceId: string) =>
+    who.agent.post(`/scenarios/seances/${seanceId}/inscription`);
+  const reserve = (who: TestUser, seanceId: string, userId: string) =>
+    who.agent.post(`/scenarios/seances/${seanceId}/reservations`).send({ userId });
+  const calendarOf = async (who: TestUser) =>
+    body<{ 'mes-seances': { seanceId: string }[] }>(
+      await who.agent
+        .get('/me/calendar')
+        .query({ from: isoDay(0), to: isoDay(30) })
+        .expect(200),
+    )['mes-seances'].map((s) => s.seanceId);
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, host, guest, reservedUser, third, stranger, otherAdmin] = await Promise.all([
+      h.createUser('annul-admin'),
+      h.createUser('annul-hote'),
+      h.createUser('annul-invite'),
+      h.createUser('annul-reserve'),
+      h.createUser('annul-tiers'),
+      h.createUser('annul-etranger'),
+      h.createUser('annul-autre-admin'),
+    ]);
+    ({ id: groupId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'annul', 'ralliement'));
+    for (const who of [host, guest, reservedUser, third]) await h.addMember(groupId, who);
+    ({ id: otherGroupId } = await h.createPartie(
+      otherAdmin,
+      'CAMPAGNE_EPISODIQUE',
+      'annul-autre',
+      'ralliement',
+    ));
+    ({ id: oneShotId } = await h.createPartie(admin, 'ONE_SHOT', 'annul-isolee', 'ralliement'));
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it('l’hôte annule : cancelledAt posé, carte « annulée », e-mail n° 7 aux inscrits confirmés et réservés (jamais à l’hôte), tous prévenus en direct', async () => {
+    const card = await propose(host, { title: 'Annulée par l’hôte', capacity: 4 });
+    const seanceId = card.seance!.id;
+    await signUp(guest, seanceId).expect(201);
+    await reserve(host, seanceId, reservedUser.id).expect(201);
+    const before = h.email.calls.length;
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    const notify = jest.spyOn(h.app.get(PartiesService), 'notifyPartieSignalsChanged');
+    let res: Response;
+    try {
+      res = await cancel(host, card.id);
+      expect(res.status).toBe(201);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(notify).toHaveBeenCalledWith(groupId, expect.anything());
+    } finally {
+      emit.mockRestore();
+      notify.mockRestore();
+    }
+
+    expect(body<CardLike>(res).cancelled).toBe(true);
+    expect((await eventRow(card.id)).cancelledAt).not.toBeNull();
+    for (const who of [admin, host, guest, reservedUser, third]) {
+      expect((await cardFor(who, card.id)).cancelled).toBe(true);
+    }
+    // Les lignes d'inscription restent telles quelles (l'historique de qui était inscrit).
+    expect(await rows(seanceId)).toEqual([
+      [guest.id, 'CONFIRMED'],
+      [reservedUser.id, 'RESERVED'],
+    ]);
+
+    const sent = cancelMails(before, 'Annulée par l’hôte');
+    expect(sent.map((c) => c.to).sort()).toEqual([guest.email, reservedUser.email].sort());
+    expect(sent[0].data).toMatchObject({ actorName: host.displayName });
+    expect(String(sent[0].data.link)).toContain(`/parties/${groupId}`);
+  });
+
+  it('un administrateur qui n’est pas l’hôte annule : l’hôte et les inscrits sont prévenus, pas l’administrateur', async () => {
+    const card = await propose(host, { title: 'Annulée par l’admin', capacity: 4 });
+    await signUp(guest, card.seance!.id).expect(201);
+    const before = h.email.calls.length;
+
+    await cancel(admin, card.id).expect(201);
+
+    expect((await eventRow(card.id)).cancelledAt).not.toBeNull();
+    const sent = cancelMails(before, 'Annulée par l’admin');
+    expect(sent.map((c) => c.to).sort()).toEqual([host.email, guest.email].sort());
+    expect(sent[0].data).toMatchObject({ actorName: admin.displayName });
+  });
+
+  it('une conjonction à sondage : le sondage est clos, la carte n’en porte plus, vote / date / prolongation sont refusés (400)', async () => {
+    const card = await proposePoll(host);
+    const poll = card.poll!;
+    await guest.agent
+      .post(`/parties/${groupId}/poll/${poll.id}/vote`)
+      .send({ optionId: poll.options[0].id, answer: 'YES' })
+      .expect(201);
+
+    await cancel(host, card.id).expect(201);
+
+    const closed = await h.prisma.sessionPoll.findUniqueOrThrow({ where: { id: poll.id } });
+    expect(closed.status).toBe('CLOSED');
+    const seen = await cardFor(third, card.id);
+    expect(seen.cancelled).toBe(true);
+    expect(seen.poll).toBeNull();
+
+    const vote = await third.agent
+      .post(`/parties/${groupId}/poll/${poll.id}/vote`)
+      .send({ optionId: poll.options[0].id, answer: 'YES' });
+    expect(vote.status).toBe(400);
+    const choose = await host.agent
+      .patch(`/parties/${groupId}/poll/${poll.id}/choose`)
+      .send({ optionId: poll.options[0].id });
+    expect(choose.status).toBe(400);
+    const extend = await host.agent
+      .patch(`/parties/${groupId}/poll/${poll.id}/extend`)
+      .send({ expiresAt: isoDay(7) });
+    expect(extend.status).toBe(400);
+    expect(await h.prisma.pollVote.count({ where: { optionId: poll.options[0].id } })).toBe(1);
+    const seance = await h.prisma.seance.findUniqueOrThrow({ where: { id: card.seance!.id } });
+    expect(seance.startDate).toBeNull();
+  });
+
+  it('plus aucune action : s’inscrire, se désinscrire, réserver, accepter, modifier → 400 « annulée », rien n’est écrit', async () => {
+    const card = await propose(host, { title: 'Figée', capacity: 5 });
+    const seanceId = card.seance!.id;
+    await signUp(guest, seanceId).expect(201);
+    await reserve(host, seanceId, reservedUser.id).expect(201);
+    await cancel(host, card.id).expect(201);
+    const before = await rows(seanceId);
+
+    const refusals = [
+      await signUp(third, seanceId),
+      await guest.agent.delete(`/scenarios/seances/${seanceId}/inscription`),
+      await reserve(host, seanceId, third.id),
+      await host.agent.delete(`/scenarios/seances/${seanceId}/reservations/${reservedUser.id}`),
+      await reservedUser.agent.patch(`/scenarios/seances/${seanceId}/inscription/accept`),
+      await host.agent
+        .patch(`/parties/${groupId}/events/${card.id}`)
+        .send({ title: 'Renommée', date: isoDay(9), slot: 'MORNING', capacity: 5 }),
+    ];
+    for (const res of refusals) {
+      expect(res.status).toBe(400);
+      expect(message(res)).toBe(CANCELLED);
+    }
+    expect(await rows(seanceId)).toEqual(before);
+    expect((await eventRow(card.id)).title).toBe('Figée');
+  });
+
+  it('une conjonction annulée sort des calendriers, du signal de réservation, des rappels et de la prochaine date', async () => {
+    const { id: soloId } = await h.createPartie(
+      admin,
+      'CAMPAGNE_EPISODIQUE',
+      'annul-solo',
+      'ralliement',
+    );
+    for (const who of [host, guest, reservedUser]) await h.addMember(soloId, who);
+    const create = async (title: string, day: number) =>
+      body<CardLike>(
+        await host.agent
+          .post(`/parties/${soloId}/events`)
+          .send({ title, date: isoDay(day), slot: 'EVENING', capacity: 4 })
+          .expect(201),
+      );
+    const cancelled = await create('Rappel annulé', 2);
+    const kept = await create('Rappel conservé', 4);
+    for (const card of [cancelled, kept]) await signUp(guest, card.seance!.id).expect(201);
+    await reserve(host, cancelled.seance!.id, reservedUser.id).expect(201);
+    const reservedSignal = async () =>
+      body<Record<string, { signals: string[] }>>(
+        await reservedUser.agent.get('/me/party-signals').expect(200),
+      )[soloId]?.signals ?? [];
+    expect(await reservedSignal()).toContain('RESERVATION_A_CONFIRMER');
+    expect(await calendarOf(host)).toContain(cancelled.seance!.id);
+    const nextDate = async () =>
+      body<{ nextSessionDate: string | null }>(
+        await host.agent.get(`/parties/${soloId}`).expect(200),
+      ).nextSessionDate?.substring(0, 10);
+    expect(await nextDate()).toBe(isoDay(2));
+
+    await cancel(host, cancelled.id, soloId).expect(201);
+
+    expect(await calendarOf(host)).not.toContain(cancelled.seance!.id);
+    expect(await calendarOf(guest)).not.toContain(cancelled.seance!.id);
+    expect(await calendarOf(guest)).toContain(kept.seance!.id);
+    expect(await reservedSignal()).not.toContain('RESERVATION_A_CONFIRMER');
+    // Prochaine date de la partie : celle de la conjonction conservée, jamais l'annulée.
+    expect(await nextDate()).toBe(isoDay(4));
+
+    // Rappel de la veille : les deux séances tombent dans la fenêtre de 24 h ; seule la conservée est rappelée.
+    for (const card of [cancelled, kept]) {
+      await h.prisma.seance.update({
+        where: { id: card.seance!.id },
+        data: { startDate: new Date(Date.now() + 2 * 3_600_000), reminderSentAt: null },
+      });
+    }
+    const before = h.email.calls.length;
+    await h.app.get(NotificationsService).sendDueReminders();
+    const reminders = h.email.calls
+      .slice(before)
+      .filter((c) => c.template === 'conjonction-reminder');
+    expect(reminders.some((c) => c.data.eventTitle === 'Rappel conservé')).toBe(true);
+    expect(reminders.some((c) => c.data.eventTitle === 'Rappel annulé')).toBe(false);
+  });
+
+  describe('refus (rien n’est écrit, aucun e-mail)', () => {
+    it('un membre qui n’est ni l’hôte ni administrateur : 403 ; un étranger et l’administrateur d’un autre groupe : 403 « pas accès »', async () => {
+      const card = await propose(host, { title: 'Intouchable' });
+      const before = h.email.calls.length;
+
+      const plain = await cancel(third, card.id);
+      expect(plain.status).toBe(403);
+      expect(message(plain)).toBe(HOST_OR_ADMIN);
+      for (const who of [stranger, otherAdmin]) {
+        const res = await cancel(who, card.id);
+        expect(res.status).toBe(403);
+        expect(message(res)).toBe(NO_ACCESS);
+      }
+
+      expect((await eventRow(card.id)).cancelledAt).toBeNull();
+      expect(cancelMails(before, 'Intouchable')).toEqual([]);
+    });
+
+    it('l’événement d’un groupe par la route d’un autre : 404 ; un événement inconnu : 404', async () => {
+      const card = await propose(host, { title: 'Chez nous' });
+
+      expect((await cancel(admin, card.id, otherGroupId)).status).toBe(404);
+      expect((await cancel(admin, randomUUID())).status).toBe(404);
+      expect((await eventRow(card.id)).cancelledAt).toBeNull();
+    });
+
+    it('une conjonction passée ou déjà annulée : 400 français, rien ne change', async () => {
+      const card = await propose(host, { title: 'Trop tard' });
+      await h.prisma.seance.update({
+        where: { id: card.seance!.id },
+        data: { startDate: new Date(`${isoDay(-2)}T00:00:00.000Z`) },
+      });
+      const past = await cancel(host, card.id);
+      expect(past.status).toBe(400);
+      expect(message(past)).toBe(PAST);
+      expect((await eventRow(card.id)).cancelledAt).toBeNull();
+
+      const other = await propose(host, { title: 'Déjà annulée' });
+      await cancel(host, other.id).expect(201);
+      const stamp = (await eventRow(other.id)).cancelledAt;
+      const again = await cancel(host, other.id);
+      expect(again.status).toBe(400);
+      expect(message(again)).toBe(CANCELLED);
+      expect((await eventRow(other.id)).cancelledAt).toEqual(stamp);
+    });
+
+    it('une rencontre isolée (ONE_SHOT) : 403 « indisponible », même à son administrateur (la Story 42.2 l’ouvrira)', async () => {
+      const event = await h.prisma.event.findFirstOrThrow({ where: { partieId: oneShotId } });
+
+      const res = await cancel(admin, event.id, oneShotId);
+
+      expect(res.status).toBe(403);
+      expect(message(res)).toBe(UNAVAILABLE);
+      expect((await eventRow(event.id)).cancelledAt).toBeNull();
+    });
+  });
+
+  it('deux annulations simultanées : une seule gagne sous le verrou, l’autre est refusée (400), un seul jeu d’e-mails', async () => {
+    const card = await propose(host, { title: 'Course', capacity: 4 });
+    await signUp(guest, card.seance!.id).expect(201);
+    const before = h.email.calls.length;
+
+    const [a, b] = await Promise.all([cancel(host, card.id), cancel(admin, card.id)]);
+
+    expect([a.status, b.status].sort()).toEqual([201, 400]);
+    expect(cancelMails(before, 'Course').filter((c) => c.to === guest.email)).toHaveLength(1);
+  });
+
+  it('une inscription et une annulation simultanées : jamais d’inscription après l’annulation', async () => {
+    const card = await propose(host, { title: 'Inscrit ou annulé', capacity: 4 });
+
+    const [signing, cancelling] = await Promise.all([
+      signUp(third, card.seance!.id),
+      cancel(host, card.id),
+    ]);
+
+    expect(cancelling.status).toBe(201);
+    expect([201, 400]).toContain(signing.status);
+    expect(await h.prisma.inscription.count({ where: { seanceId: card.seance!.id } })).toBe(
+      signing.status === 201 ? 1 : 0,
+    );
+    // Une fois l'annulation validée, plus aucune inscription n'est possible.
+    expect((await signUp(guest, card.seance!.id)).status).toBe(400);
   });
 });

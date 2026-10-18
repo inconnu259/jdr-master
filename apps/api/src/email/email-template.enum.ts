@@ -7,6 +7,7 @@ export type EmailTemplate =
   | 'conjonction-reservation'
   | 'conjonction-date-fixee'
   | 'conjonction-relance'
+  | 'conjonction-annulee'
   | 'password-reset'
   | 'password-changed'
   | 'level-up'

@@ -971,6 +971,26 @@ describe('PollService', () => {
     });
   });
 
+  describe('closeInTx() — fermeture du sondage d’une conjonction annulée (Story 42.1)', () => {
+    it('ferme le sondage OUVERT dans la transaction de l’appelant, sans rien émettre', async () => {
+      const tx = { sessionPoll: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) } };
+
+      await service.closeInTx(tx as never, 'poll1');
+
+      expect(tx.sessionPoll.updateMany).toHaveBeenCalledWith({
+        where: { id: 'poll1', status: 'OPEN' },
+        data: { status: 'CLOSED' },
+      });
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('un sondage déjà fermé n’est pas touché (le filtre OPEN) et ne lève rien', async () => {
+      const tx = { sessionPoll: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) } };
+
+      await expect(service.closeInTx(tx as never, 'poll1')).resolves.toBeUndefined();
+    });
+  });
+
   describe('updateInTx() — modification du sondage d’une conjonction (Story 40.5)', () => {
     const day = (key: string) => new Date(`${key}T00:00:00.000Z`);
     const future = new Date(Date.now() + 5 * 86_400_000);

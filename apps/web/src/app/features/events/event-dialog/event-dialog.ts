@@ -18,8 +18,13 @@ import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { fillTone } from '../../../core/theme/tone-format';
 import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
 import { StatusBadge } from '../../../shared/status-badge/status-badge';
+import {
+  CancelEventDialog,
+  type CancelEventData,
+} from '../cancel-event-dialog/cancel-event-dialog';
 import { DateFixDialog, type DateFixData } from '../date-fix-dialog/date-fix-dialog';
 import {
+  canCancelEvent,
   canExtendVote,
   canFixDate,
   canManageReservations,
@@ -32,6 +37,7 @@ import {
   eventSituationTextKey,
   extendMinKey,
   hasPendingPoll,
+  isCancelled,
   isFull,
   isFullForViewer,
   isHostOf,
@@ -132,6 +138,8 @@ export class EventDialog {
   readonly completeRequested = output<void>();
   /** Story 41.4 : soirée terminée (close ou passée) — plus de « Modifier ». */
   readonly frozen = input(false);
+  /** Story 42.1 : la personne est administrateur du groupe — elle peut annuler la conjonction d'un autre. */
+  readonly viewerIsAdmin = input(false);
   /** Carte à jour renvoyée par le serveur (modification par l'hôte, inscription, désinscription) :
    *  l'onglet la met à jour tout de suite. */
   readonly saved = output<EventCardDto>();
@@ -167,8 +175,21 @@ export class EventDialog {
   );
 
   protected readonly past = computed(() => isPastEvent(this.card(), this.todayKey()));
+  /** Story 42.1 : annulée — état écrit en tête, plus aucune action. */
+  protected readonly cancelled = computed(() => isCancelled(this.card()));
   protected readonly canEdit = computed(
-    () => !this.frozen() && isHostOf(this.card(), this.currentUserId()) && !this.past(),
+    () =>
+      !this.frozen() &&
+      !this.cancelled() &&
+      isHostOf(this.card(), this.currentUserId()) &&
+      !this.past(),
+  );
+  /** Story 42.1 : « Annuler la conjonction » — l'hôte ou un administrateur, avant la date, dans la fenêtre
+   *  d'un groupe seulement (l'annulation d'une soirée isolée est la Story 42.2). */
+  protected readonly canCancel = computed(
+    () =>
+      !this.inline() &&
+      canCancelEvent(this.card(), this.currentUserId(), this.viewerIsAdmin(), this.todayKey()),
   );
   /** Story 41.4 : « Ma situation » d'une soirée en pastille écrite (« Je participe », « J'y étais »…). */
   protected readonly situationChip = computed(() =>
@@ -301,6 +322,28 @@ export class EventDialog {
     });
     ref.afterClosed().subscribe((extended) => {
       if (extended) this.refreshRequested.emit();
+    });
+  }
+
+  /** Story 42.1 : ouvre la confirmation « Votre accord » (bouton rouge) ; le serveur est seul juge (droit,
+   *  jour passé, déjà annulée). Au succès la carte à jour remplace l'ancienne (`saved`) et la liste est relue. */
+  protected openCancel(): void {
+    if (!this.canCancel()) return;
+    let cancelled: EventCardDto | null = null;
+    const data: CancelEventData = {
+      title: this.card().title,
+      confirm: async () => {
+        cancelled = await this.api.cancel(this.partieId(), this.card().id);
+      },
+    };
+    const ref = this.dialog.open<CancelEventDialog, CancelEventData, boolean>(CancelEventDialog, {
+      data,
+      width: 'min(560px, 96vw)',
+      autoFocus: 'first-tabbable',
+      restoreFocus: true,
+    });
+    ref.afterClosed().subscribe((done) => {
+      if (done && cancelled) this.saved.emit(cancelled);
     });
   }
 

@@ -307,7 +307,10 @@ describe('NotificationsService', () => {
             relanceSentAt: null;
             expiresAt: { gt: Date; lte: Date };
             seance: {
-              is: { startDate: null; event: { partie: { gameSystemId: { in: string[] } } } };
+              is: {
+                startDate: null;
+                event: { cancelledAt: null; partie: { gameSystemId: { in: string[] } } };
+              };
             };
           };
         },
@@ -315,6 +318,8 @@ describe('NotificationsService', () => {
       expect(args.where.status).toBe('OPEN');
       expect(args.where.relanceSentAt).toBeNull();
       expect(args.where.seance.is.startDate).toBeNull();
+      // Story 42.1 : une conjonction annulée n'est jamais relancée.
+      expect(args.where.seance.is.event.cancelledAt).toBeNull();
       // Story 41.2 : tout ralliement (groupe ou soirée isolée), jamais le JDR.
       expect(args.where.seance.is.event.partie.gameSystemId.in).toEqual(['ralliement']);
       // expiresAt − 48 h ≤ maintenant < expiresAt − 24 h  ⇔  maintenant + 24 h < expiresAt ≤ maintenant + 48 h.
@@ -466,9 +471,17 @@ describe('NotificationsService', () => {
     await service.sendDueReminders();
 
     const [args] = prisma.seance.findMany.mock.calls[0] as [
-      { where: { startDate: { gte: Date; lte: Date }; reminderSentAt: null } },
+      {
+        where: {
+          startDate: { gte: Date; lte: Date };
+          reminderSentAt: null;
+          event: { cancelledAt: null };
+        };
+      },
     ];
     expect(args.where.reminderSentAt).toBeNull();
+    // Story 42.1 : une conjonction annulée n'est jamais rappelée.
+    expect(args.where.event).toEqual({ cancelledAt: null });
     expect(args.where.startDate.lte.getTime() - args.where.startDate.gte.getTime()).toBe(
       24 * 60 * 60 * 1000,
     );

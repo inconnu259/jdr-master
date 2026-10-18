@@ -49,4 +49,14 @@ export class EventsController {
   ) {
     return this.groupEvents.update(partieId, eventId, user.id, dto);
   }
+
+  /** Story 42.1 : l'hôte ou un administrateur annule la conjonction (définitif). */
+  @Post('parties/:id/events/:eventId/cancel')
+  cancel(
+    @Param('id', ParseUUIDPipe) partieId: string,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.groupEvents.cancel(partieId, eventId, user.id);
+  }
 }

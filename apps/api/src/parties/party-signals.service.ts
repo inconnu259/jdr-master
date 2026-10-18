@@ -128,7 +128,8 @@ export class PartySignalsService {
         where: {
           userId,
           status: 'RESERVED',
-          seance: { startDate: { gte: startOfTodayUtc() } },
+          // Story 42.1 : une place réservée d'une conjonction annulée n'attend plus de réponse.
+          seance: { startDate: { gte: startOfTodayUtc() }, event: { cancelledAt: null } },
         },
         select: { seance: { select: { event: { select: { partieId: true } } } } },
       }),

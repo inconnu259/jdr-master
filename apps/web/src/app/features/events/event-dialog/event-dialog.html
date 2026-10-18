@@ -14,7 +14,20 @@
   } @else {
     <!-- Panneau de situation : ma situation (avec « S'inscrire », ou « Complet » écrit quand il n'y a
          plus de place), puis date, heure et lieu en grand. Pas de vote à ce palier. -->
-    <section class="ed__situation" [attr.aria-labelledby]="uid + '-situation'">
+    <section
+      class="ed__situation"
+      [class.ed__situation--cancelled]="cancelled()"
+      [attr.aria-labelledby]="uid + '-situation'"
+    >
+      @if (cancelled()) {
+        <!-- Story 42.1 : conjonction annulée — l'état est écrit en tête, sans aucune action. -->
+        <h3 class="ed__situation-label" [id]="uid + '-situation'">
+          {{ theme.tone()['partie.ralliement_event_badge_cancelled'] }}
+        </h3>
+        <p class="ed__situation-text ed__cancelled" role="status">
+          {{ theme.tone()['partie.ralliement_event_cancelled_text'] }}
+        </p>
+      } @else {
       <h3 class="ed__situation-label" [id]="uid + '-situation'">
         {{ theme.tone()['partie.ralliement_event_situation'] }}
       </h3>
@@ -68,6 +81,7 @@
             {{ theme.tone()['partie.ralliement_event_decline_btn'] }}
           </button>
         </div>
+      }
       }
       <p class="ed__big ed__big--date">{{ dateLabel() }}</p>
       @if (timeText(); as time) {
@@ -293,6 +307,18 @@
             (click)="unsubscribe()"
           >
             {{ theme.tone()['partie.ralliement_event_unsubscribe_btn'] }}
+          </button>
+        }
+        @if (canCancel()) {
+          <!-- Story 42.1 : l'hôte ou un administrateur annule (confirmation « Votre accord », bouton rouge). -->
+          <button
+            mat-stroked-button
+            type="button"
+            class="ed__cancel-event"
+            [disabled]="busy()"
+            (click)="openCancel()"
+          >
+            {{ theme.tone()['partie.ralliement_event_cancel_event_btn'] }}
           </button>
         }
         @if (canEdit()) {

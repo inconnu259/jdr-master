@@ -47,6 +47,7 @@ function pollCard(over: Partial<EventCardDto['poll'] & object> = {}, host = HOST
       { userId: HOST, displayName: 'Léa', isHost: true, isAdmin: false, status: 'CONFIRMED' },
     ],
     myInscription: null,
+    cancelled: false,
     poll: {
       id: 'p1',
       expiresAt: '2026-10-20T23:59:59.999Z',
@@ -498,6 +499,7 @@ class FrozenHost {
     },
     participants: [],
     myInscription: null,
+    cancelled: false,
     poll: null,
   };
 }
@@ -542,6 +544,7 @@ describe('EventDialog — rendu en ligne d’une soirée isolée (Story 41.1)', 
         { userId: ME, displayName: 'Moi', isHost: false, isAdmin: false, status: 'CONFIRMED' },
       ],
       myInscription: null,
+      cancelled: false,
       poll: null,
       ...over,
     };

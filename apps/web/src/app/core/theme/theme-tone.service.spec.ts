@@ -1035,6 +1035,11 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_event_fix_counts',
     'partie.ralliement_event_fix_past',
     'partie.ralliement_event_fix_warning',
+    // Story 42.1 : annuler une conjonction — le mot « Annulée », la question et l’avertissement de la
+    // confirmation sont verbatim du contrat d’UI ; le bouton, le constat et le repli d’erreur ont une voix
+    'partie.ralliement_event_badge_cancelled',
+    'partie.ralliement_event_cancel_event_heading',
+    'partie.ralliement_event_cancel_event_warning',
     // Story 40.7 : prolonger le vote — libellés, phrase d’introduction et avertissement verbatim du contrat
     // d’UI (« Prolonger le vote », « Nouvelle échéance », « Les personnes qui n’ont pas encore voté… ») ;
     // seul le repli d’erreur a une voix
@@ -1770,6 +1775,43 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     }
     for (const key of Object.keys(TONE_MAP['grimoire-emeraude']).filter((k) =>
       k.startsWith('partie.ralliement_event_fix_'),
+    )) {
+      for (const theme of THEMES) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).not.toMatch(NON_JDR_BANNED_WORDS);
+      }
+    }
+  });
+
+  // Story 42.1 : annuler une conjonction. Le mot « Annulée », le titre de la confirmation et son avertissement
+  // sont identiques dans les trois thèmes ; les boutons, le constat de la fenêtre et le repli d'erreur nomment
+  // la rencontre à la manière du thème. Aucun mot de JDR.
+  it('Story 42.1 : « Annuler » garde « Annulée » et l’avertissement, et prend la voix du thème pour le bouton, le constat et l’erreur, sans mot de JDR', () => {
+    const neutres: Record<string, string> = {
+      'partie.ralliement_event_badge_cancelled': 'Annulée',
+      'partie.ralliement_event_cancel_event_heading': 'Annuler « {title} » ?',
+      'partie.ralliement_event_cancel_event_warning':
+        'Les inscrits seront prévenus par e-mail. Cette action est définitive.',
+    };
+    for (const [key, attendu] of Object.entries(neutres)) {
+      for (const theme of THEMES) expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(attendu);
+    }
+    for (const key of [
+      'partie.ralliement_event_cancel_event_btn',
+      'partie.ralliement_event_cancel_event_confirm_btn',
+      'partie.ralliement_event_cancelled_text',
+      'partie.ralliement_event_cancel_event_error',
+    ]) {
+      const voix = THEMES.map((theme) => TONE_MAP[theme][key]);
+      expect(new Set(voix).size, key).toBe(THEMES.length);
+    }
+    expect(TONE_MAP['grimoire-emeraude']['partie.ralliement_event_cancel_event_btn']).toBe(
+      'Annuler la conjonction',
+    );
+    for (const key of Object.keys(TONE_MAP['grimoire-emeraude']).filter(
+      (k) =>
+        k.startsWith('partie.ralliement_event_cancel_event_') ||
+        k === 'partie.ralliement_event_cancelled_text' ||
+        k === 'partie.ralliement_event_badge_cancelled',
     )) {
       for (const theme of THEMES) {
         expect(TONE_MAP[theme][key], `${theme} / ${key}`).not.toMatch(NON_JDR_BANNED_WORDS);

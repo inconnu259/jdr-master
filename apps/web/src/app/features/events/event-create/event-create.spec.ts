@@ -42,6 +42,7 @@ const CARD: EventCardDto = {
   seance: null,
   participants: [],
   myInscription: null,
+  cancelled: false,
   poll: null,
 };
 

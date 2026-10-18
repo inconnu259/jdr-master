@@ -117,3 +117,32 @@
   color: var(--mat-sys-on-surface);
   background: transparent;
 }
+
+/* Story 42.1 (⚠️ contrat UI, UX-DR16) — la carte annulée : contenu estompé à 50 % (titre, date, hôte, lieu),
+   trait diagonal rouge semi-transparent sur toute la carte (`pointer-events: none` : elle reste cliquable),
+   filet rouge. Le badge « Annulée » reste à pleine opacité : le mot porte le sens, le trait ne le porte
+   JAMAIS seul (NFR4). Aucune animation. */
+.event-card--cancelled {
+  --event-card-tone: var(--color-unavailable, #e74c3c);
+
+  .event-card__title,
+  .event-card__date,
+  .event-card__line {
+    opacity: 0.5;
+  }
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+      to top right,
+      transparent calc(50% - 1px),
+      color-mix(in srgb, var(--color-unavailable, #e74c3c) 60%, transparent) calc(50% - 1px),
+      color-mix(in srgb, var(--color-unavailable, #e74c3c) 60%, transparent) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    );
+  }
+}

@@ -47,6 +47,10 @@ body {
 :root {
   --color-available:   #2ecc71;
   --color-unavailable: #e74c3c;
+  /* Story 42.1 : TEXTE rouge de l'annulé — `--color-unavailable` donne 3,6 à 4,3:1 sur les surfaces des trois
+     thèmes (sombres) une fois teinté ; ce rouge plus clair tient ≥ 4,6:1 sur toutes (mesuré, NFR4). Le fond
+     et les traits gardent `--color-unavailable`. */
+  --color-cancelled-text: #f26a5c;
   --color-unknown:     #7f8c8d;
   --color-mixed:       #f0a030;
 }

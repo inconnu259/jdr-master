@@ -307,3 +307,22 @@
     overflow-wrap: anywhere;
   }
 }
+
+/* Story 42.1 (⚠️ contrat UI) — conjonction annulée : l'état est ÉCRIT en tête (« Annulée », constat), le cadre
+   passe au rouge de l'annulé mais ne porte jamais seul le sens. Aucune action n'est posée dans ce panneau. */
+.ed__situation--cancelled {
+  border-color: var(--color-unavailable, #e74c3c);
+  background: color-mix(in srgb, var(--color-unavailable, #e74c3c) 8%, transparent);
+}
+
+.ed__cancelled {
+  margin-bottom: 12px;
+}
+
+/* « Annuler la conjonction » : action irréversible, contour rouge (le bouton plein est dans la confirmation). */
+.ed__cancel-event {
+  min-height: 44px;
+  color: var(--color-cancelled-text, #f26a5c);
+  --mat-button-outlined-outline-color: var(--color-unavailable, #e74c3c);
+  --mat-button-outlined-label-text-color: var(--color-cancelled-text, #f26a5c);
+}

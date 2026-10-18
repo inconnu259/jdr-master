@@ -123,6 +123,20 @@ export class EventsApiService {
     );
   }
 
+  /** Story 42.1 : l'hôte, ou un administrateur du groupe, annule la conjonction (`POST /parties/:id/events/:eventId/cancel`,
+   *  définitif) — renvoie la carte à jour, `cancelled` posé. */
+  cancel(partieId: string, eventId: string): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.post<EventCardDto>(
+        `${API_BASE}/parties/${partieId}/events/${eventId}/cancel`,
+        null,
+        {
+          withCredentials: true,
+        },
+      ),
+    );
+  }
+
   /** Story 40.2 : l'hôte remplace sa conjonction (`PATCH /parties/:id/events/:eventId`) — renvoie
    *  la carte à jour, participants compris. */
   update(partieId: string, eventId: string, dto: UpdateEventDto): Promise<EventCardDto> {

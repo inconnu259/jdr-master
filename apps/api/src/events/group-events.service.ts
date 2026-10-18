@@ -145,6 +145,67 @@ export class GroupEventsService {
   }
 
   /**
+   * Story 42.1 : l'hôte de la conjonction, ou un administrateur du groupe, l'annule DÉFINITIVEMENT. Le droit
+   * est décidé par `PermissionService` (`EVENT_CANCEL`, cible `{ eventId }`) ; la partie est celle de
+   * l'événement, jamais celle de la route (404 sinon). La rencontre isolée est refusée (403) : son
+   * annulation relève de la Story 42.2. L'écriture (verrous, sondage fermé, prochaine date) est dans
+   * `EventsService.cancelHosted` ; ensuite, APRÈS validation, la liste d'accueil des membres est prévenue
+   * puis l'e-mail n° 7 part (échec journalisé, jamais remonté). Renvoie la carte à jour.
+   */
+  async cancel(partieId: string, eventId: string, userId: string): Promise<EventCardDto> {
+    const grant = await this.permissions.assert(userId, 'EVENT_CANCEL', { eventId });
+    if (grant.partieId !== partieId) throw new NotFoundException('Conjonction introuvable');
+    if (grant.partie.kind !== 'CAMPAGNE_EPISODIQUE') {
+      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
+    }
+
+    await this.events.cancelHosted(grant, eventId, (tx, pollId) =>
+      this.polls.closeInTx(tx, pollId),
+    );
+    // Après validation et après `partie:{id}` (émis par `EventsService.cancelHosted`) ; ne lève jamais.
+    await this.partieSignals.notifyChanged(grant.partieId);
+    await this.sendCancellationEmails(grant, eventId, userId);
+
+    const [card] = await this.events.listCards(grant, userId, [eventId]);
+    return card;
+  }
+
+  /** E-mail n° 7 « Annulée », un par destinataire, APRÈS le commit : lire ou envoyer en échec est journalisé
+   *  et n'annule jamais l'annulation (déjà validée). */
+  private async sendCancellationEmails(
+    grant: PartieGrant,
+    eventId: string,
+    actorId: string,
+  ): Promise<void> {
+    try {
+      const notice = await this.events.cancellationNotice(eventId, actorId);
+      if (!notice || notice.recipients.length === 0) return;
+      const link = `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${grant.partieId}`;
+      const sessionDate = notice.startDate
+        ? formatSessionDate(notice.startDate, notice.startSlot)
+        : null;
+      for (const recipient of notice.recipients) {
+        const result = await this.email.sendMail('conjonction-annulee', recipient.email, {
+          actorName: notice.actorName,
+          eventTitle: notice.eventTitle,
+          sessionDate,
+          link,
+        });
+        if (!result.ok) {
+          this.logger.error(
+            `Échec d'envoi de l'e-mail d'annulation (partie ${grant.partieId}, événement ${eventId})`,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `Échec de l'envoi des e-mails d'annulation (partie ${grant.partieId}, événement ${eventId})`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  /**
    * Story 40.3 : un membre s'inscrit à une conjonction (route partagée avec le JDR,
    * `POST scenarios/seances/:id/inscription`, branche « groupe »). Le droit `SEANCE_INSCRIBE` est
    * décidé par l'appelant, qui a déjà résolu la partie DEPUIS la séance (jamais depuis la route) et

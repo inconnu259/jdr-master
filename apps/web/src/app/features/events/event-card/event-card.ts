@@ -7,6 +7,7 @@ import {
   eventBadge,
   eventDateLabel,
   eventSituation,
+  isCancelled,
   isImminentEvent,
   isPastEvent,
 } from '../event-card.util';
@@ -15,6 +16,10 @@ import {
  * Carte d'une conjonction (Story 40.1, UX-DR7) : titre, badge d'état, date en gras, hôte, lieu (ligne
  * omise s'il est vide), « Ma situation » + chip. Rien de plus sur la carte ; l'état est TOUJOURS
  * écrit (badge, chip), jamais porté par la seule couleur ou la seule épaisseur du filet.
+ *
+ * Story 42.1 (⚠️ contrat UI, UX-DR16) : une conjonction annulée reste dans sa section et reste cliquable ;
+ * son contenu est estompé à 50 %, un trait diagonal rouge semi-transparent la barre, son badge dit « Annulée »
+ * (le trait ne porte jamais seul le sens) et la ligne « Ma situation » disparaît.
  *
  * Story 40.3 : le badge devient « Complet » (grisé) pour un membre non inscrit quand toutes les places
  * sont prises ; les inscrits et l'hôte gardent leur badge normal.
@@ -43,6 +48,8 @@ export class EventCard {
     this.open.emit(event.currentTarget as HTMLElement);
   }
 
+  /** Story 42.1 : annulée — contenu estompé, trait diagonal, badge « Annulée » écrit, sans « Ma situation ». */
+  protected readonly cancelled = computed(() => isCancelled(this.card()));
   protected readonly past = computed(() => isPastEvent(this.card(), this.todayKey()));
   protected readonly imminent = computed(() => isImminentEvent(this.card(), this.todayKey()));
   protected readonly badge = computed(() =>

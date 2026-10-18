@@ -128,7 +128,10 @@ describe('PartySignalsService', () => {
         objectLike({
           userId: 'u1',
           status: 'RESERVED',
-          seance: { startDate: { gte: new Date('2026-10-17T00:00:00.000Z') } },
+          seance: {
+            startDate: { gte: new Date('2026-10-17T00:00:00.000Z') },
+            event: { cancelledAt: null },
+          },
         }),
       );
     });

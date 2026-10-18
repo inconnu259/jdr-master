@@ -20,6 +20,8 @@ const SUBJECTS: Record<EmailTemplate, string> = {
   // Story 40.7 : relance de la veille de l'échéance du vote — vocabulaire neutre, envoyée une fois à ceux qui
   // n'ont pas encore voté.
   'conjonction-relance': "Plus qu'un jour pour voter : « {{eventTitle}} »",
+  // Story 42.1 : annulation d'une conjonction (e-mail n° 7) — vocabulaire neutre, envoyée aux inscrits.
+  'conjonction-annulee': 'Annulée : « {{eventTitle}} »',
   'password-reset': 'Réinitialisation de votre mot de passe',
   'password-changed': 'Votre mot de passe a été modifié',
   'level-up': 'Nouveau niveau disponible pour {{characterName}}',
@@ -41,6 +43,7 @@ const ACTION_LABELS: Record<EmailTemplate, string | null> = {
   'conjonction-reservation': 'Répondre',
   'conjonction-date-fixee': 'Voir la rencontre',
   'conjonction-relance': 'Voter dans le calendrier',
+  'conjonction-annulee': 'Voir',
   'password-reset': 'Choisir un nouveau mot de passe',
   'password-changed': null,
   'level-up': 'Voir la fiche',

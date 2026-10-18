@@ -2897,7 +2897,7 @@ describe('PartiesService', () => {
       const dto = await service.convertKind('p1', 'mj1', { kind: 'CAMPAGNE_LINEAIRE' });
 
       expect(prisma.seance.findMany).toHaveBeenCalledWith({
-        where: { AND: [{ event: { partieId: 'p1' } }, VISIBLE_SEANCE_WHERE] },
+        where: { AND: [{ event: { partieId: 'p1', cancelledAt: null } }, VISIBLE_SEANCE_WHERE] },
         select: { startDate: true, startSlot: true },
       });
       expect(prisma.partie.update).toHaveBeenCalledWith({

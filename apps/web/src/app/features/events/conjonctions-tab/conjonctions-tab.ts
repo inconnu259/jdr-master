@@ -72,6 +72,8 @@ export class ConjonctionsTab implements OnInit {
   private readonly drafts = inject(ConjonctionDraftService);
 
   readonly partieId = input.required<string>();
+  /** Story 42.1 : la personne est administrateur du groupe — elle peut annuler la conjonction d'un autre. */
+  readonly isAdmin = input(false);
   readonly countChange = output<number>();
 
   protected readonly events = signal<EventCardDto[]>([]);

@@ -8,6 +8,8 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import {
+  CANCELLED_EVENT_MESSAGE,
+  CANCEL_PAST_MESSAGE,
   DATE_FIXED_MESSAGE,
   EventsService,
   FULL_EVENT_MESSAGE,
@@ -90,7 +92,7 @@ function makePrisma() {
       // Story 41.3 : de quoi écrire l'e-mail d'invitation à une soirée.
       findFirst: jest.fn(),
     },
-    user: { findMany: jest.fn().mockResolvedValue([]) },
+    user: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
     seance: {
       count: jest.fn().mockResolvedValue(1),
       create: jest.fn(),
@@ -402,6 +404,7 @@ describe('EventsService (Story 37.3)', () => {
           ],
           myInscription: null,
           poll: null,
+          cancelled: false,
         },
       ]);
       // Une seule lecture, scopée à la partie de l'autorisation.
@@ -846,7 +849,7 @@ describe('EventsService (Story 37.3)', () => {
       // Anti-spoil serveur : seules les séances qui ne sont pas celles d'un brouillon caché
       // comptent (fragment partagé `VISIBLE_SEANCE_WHERE`).
       expect(prisma.tx.seance.findMany).toHaveBeenCalledWith({
-        where: { AND: [{ event: { partieId: 'p1' } }, VISIBLE_SEANCE_WHERE] },
+        where: { AND: [{ event: { partieId: 'p1', cancelledAt: null } }, VISIBLE_SEANCE_WHERE] },
         select: { startDate: true, startSlot: true },
       });
       expect(prisma.tx.partie.update).toHaveBeenCalledWith({
@@ -2916,7 +2919,7 @@ describe('EventsService (Story 37.3)', () => {
         });
         prisma.tx.seance.findUnique
           .mockResolvedValueOnce({ event: { id: 'e1', partieId: 'p1' } })
-          .mockResolvedValueOnce({ startDate: null });
+          .mockResolvedValueOnce({ startDate: null, event: { cancelledAt: null } });
 
         await expect(service.lockConjonction(prisma.tx as never, POLL)).resolves.toEqual({
           dated: false,
@@ -2925,7 +2928,10 @@ describe('EventsService (Story 37.3)', () => {
 
         prisma.tx.seance.findUnique
           .mockResolvedValueOnce({ event: { id: 'e1', partieId: 'p1' } })
-          .mockResolvedValueOnce({ startDate: new Date('2026-11-14T00:00:00.000Z') });
+          .mockResolvedValueOnce({
+            startDate: new Date('2026-11-14T00:00:00.000Z'),
+            event: { cancelledAt: null },
+          });
         await expect(service.lockConjonction(prisma.tx as never, POLL)).resolves.toEqual({
           dated: true,
         });
@@ -3281,6 +3287,361 @@ describe('EventsService (Story 37.3)', () => {
         await service.updateHosted(GRANT_E1, 'e1', input({ date: otherDay }));
 
         expect(prisma.tx.seance.update).toHaveBeenCalledTimes(1);
+      });
+    });
+  });
+
+  // Story 42.1 — annuler une conjonction de groupe (AD-9).
+  describe('annulation d’une conjonction (Story 42.1)', () => {
+    const GRANT_E1 = testGrant({ id: 'p1', ownerId: 'mj1' }, 'member', { eventId: 'e1' });
+    const GRANT_SE1 = testGrant({ id: 'p1', ownerId: 'mj1' }, 'member', {
+      eventId: 'e1',
+      seanceId: 'se1',
+    });
+    const inDays = (days: number) => new Date(Date.now() + days * 86_400_000);
+    const dayStart = (date: Date) =>
+      new Date(`${date.toISOString().substring(0, 10)}T00:00:00.000Z`);
+
+    function existing(over: Record<string, unknown> = {}) {
+      prisma.tx.event.findUnique.mockResolvedValue({
+        cancelledAt: null,
+        seances: [{ startDate: dayStart(inDays(5)), pollId: null }],
+        ...over,
+      });
+    }
+
+    describe('cancelHosted()', () => {
+      it('verrouille la Partie PUIS l’Event, écrit cancelledAt, recalcule la prochaine date, puis émet', async () => {
+        existing();
+        const closePoll = jest.fn();
+
+        await service.cancelHosted(GRANT_E1, 'e1', closePoll);
+
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        const locks = prisma.tx.$queryRaw.mock.calls.map((c) => (c[0] as string[]).join('?'));
+        expect(locks[0]).toContain('FROM "Partie"');
+        expect(locks[1]).toContain('FROM "Event"');
+        expect(prisma.tx.$queryRaw.mock.calls[1][1]).toBe('e1');
+        expect(prisma.tx.event.update).toHaveBeenCalledWith({
+          where: { id: 'e1' },
+          data: { cancelledAt: expect.any(Date) },
+        });
+        // Le recalcul reprend le verrou de la partie et exclut les conjonctions annulées.
+        expect(prisma.tx.seance.findMany).toHaveBeenCalledWith(
+          objectLike({
+            where: {
+              AND: [{ event: { partieId: 'p1', cancelledAt: null } }, VISIBLE_SEANCE_WHERE],
+            },
+          }),
+        );
+        expect(closePoll).not.toHaveBeenCalled();
+        expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      });
+
+      it('ferme le sondage de la conjonction par la fermeture de l’appelant, dans la même transaction', async () => {
+        existing({ seances: [{ startDate: null, pollId: 'poll-1' }] });
+        const closePoll = jest.fn();
+
+        await service.cancelHosted(GRANT_E1, 'e1', closePoll);
+
+        expect(closePoll).toHaveBeenCalledWith(prisma.tx, 'poll-1');
+        expect(prisma.tx.event.update).toHaveBeenCalledTimes(1);
+      });
+
+      it('une conjonction du jour peut encore être annulée', async () => {
+        existing({ seances: [{ startDate: dayStart(new Date()), pollId: null }] });
+
+        await service.cancelHosted(GRANT_E1, 'e1', jest.fn());
+
+        expect(prisma.tx.event.update).toHaveBeenCalledTimes(1);
+      });
+
+      it('déjà annulée → 400, rien d’écrit ni d’émis', async () => {
+        existing({ cancelledAt: new Date() });
+        const closePoll = jest.fn();
+
+        const refusal = service.cancelHosted(GRANT_E1, 'e1', closePoll);
+
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(CANCELLED_EVENT_MESSAGE);
+        expect(prisma.tx.event.update).not.toHaveBeenCalled();
+        expect(closePoll).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      });
+
+      it('jour passé → 400, rien d’écrit ni d’émis', async () => {
+        existing({ seances: [{ startDate: dayStart(inDays(-2)), pollId: 'poll-1' }] });
+        const closePoll = jest.fn();
+
+        const refusal = service.cancelHosted(GRANT_E1, 'e1', closePoll);
+
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(CANCEL_PAST_MESSAGE);
+        expect(prisma.tx.event.update).not.toHaveBeenCalled();
+        expect(closePoll).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      });
+
+      it('événement disparu → 404', async () => {
+        prisma.tx.event.findUnique.mockResolvedValue(null);
+
+        await expect(service.cancelHosted(GRANT_E1, 'e1', jest.fn())).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+      });
+
+      it('événement d’une autre partie que celle de l’autorisation → 404, aucune transaction', async () => {
+        prisma.event.count.mockResolvedValue(0);
+
+        await expect(
+          service.cancelHosted(
+            testGrant({ id: 'p1', ownerId: 'mj1' }, 'member', { eventId: 'autre' }),
+            'e9',
+            jest.fn(),
+          ),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('plus aucune action sur une conjonction annulée', () => {
+      /** Séance relue sous le verrou : l'événement est annulé. */
+      function lockedCancelled() {
+        prisma.tx.seance.findUnique.mockImplementation(
+          (args: { select: Record<string, unknown> }) =>
+            Promise.resolve(
+              'eventId' in args.select
+                ? { eventId: 'e1' }
+                : {
+                    startDate: dayStart(inDays(3)),
+                    inscriptionMax: 4,
+                    event: { ownerId: 'hote', cancelledAt: new Date() },
+                  },
+            ),
+        );
+        prisma.tx.membership.findMany.mockResolvedValue([{ userId: 'cible' }]);
+      }
+
+      it.each([
+        ['s’inscrire', () => service.inscrireConjonction(GRANT_SE1, 'se1', 'u1')],
+        ['se désinscrire', () => service.desinscrireConjonction(GRANT_SE1, 'se1', 'u1')],
+        ['réserver une place', () => service.reserverPlace(GRANT_SE1, 'se1', 'cible')],
+        ['retirer une réservation', () => service.retirerReservation(GRANT_SE1, 'se1', 'cible')],
+        ['accepter une place', () => service.accepterReservation(GRANT_SE1, 'se1', 'u1')],
+      ])('%s est refusé (400), sans écriture ni émission', async (_label, act) => {
+        lockedCancelled();
+
+        const refusal = act();
+
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(CANCELLED_EVENT_MESSAGE);
+        expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+        expect(prisma.tx.inscription.deleteMany).not.toHaveBeenCalled();
+        expect(prisma.tx.inscription.updateMany).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      });
+
+      it('la modification par l’hôte est refusée (400), sous le verrou', async () => {
+        existing({ cancelledAt: new Date() });
+
+        await expect(
+          service.updateHosted(GRANT_E1, 'e1', {
+            title: 'X',
+            seance: {
+              date: dayStart(inDays(9)),
+              slot: 'EVENING',
+              lieu: null,
+              heureRdv: null,
+              notePratique: null,
+              capacity: null,
+            },
+          }),
+        ).rejects.toThrow(CANCELLED_EVENT_MESSAGE);
+        expect(prisma.tx.event.update).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      });
+
+      it('voter, fixer la date ou prolonger le vote (lockConjonction) est refusé (400)', async () => {
+        prisma.tx.seance.findUnique
+          .mockResolvedValueOnce({ event: { id: 'e1', partieId: 'p1' } })
+          .mockResolvedValueOnce({ startDate: null, event: { cancelledAt: new Date() } });
+
+        await expect(
+          service.lockConjonction(prisma.tx as never, { id: 'poll-1', partieId: 'p1' }),
+        ).rejects.toThrow(CANCELLED_EVENT_MESSAGE);
+      });
+
+      it('un vote est refusé en amont (assertCanVote, 400)', async () => {
+        prisma.seance.findUnique.mockResolvedValue({
+          startDate: null,
+          inscriptionMax: null,
+          inscriptions: [],
+          event: {
+            partieId: 'p1',
+            ownerId: 'hote',
+            cancelledAt: new Date(),
+            partie: {
+              id: 'p1',
+              kind: 'CAMPAGNE_EPISODIQUE',
+              gameSystemId: 'ralliement',
+              closedAt: null,
+            },
+          },
+        });
+
+        await expect(
+          service.assertCanVote(
+            { id: 'poll-1', partieId: 'p1', expiresAt: new Date(Date.now() + 86_400_000) },
+            { kind: 'CAMPAGNE_EPISODIQUE' },
+            'hote',
+          ),
+        ).rejects.toThrow(CANCELLED_EVENT_MESSAGE);
+      });
+    });
+
+    describe('la carte et les lectures', () => {
+      it('listCards() dit « annulée » et ne sert plus de sondage', async () => {
+        prisma.event.findMany.mockResolvedValue([
+          {
+            id: 'e1',
+            title: 'Catane',
+            ownerId: 'hote',
+            cancelledAt: new Date(),
+            owner: { displayName: 'Léa' },
+            seances: [
+              {
+                id: 'se1',
+                startDate: null,
+                startSlot: null,
+                lieu: null,
+                heureRdv: null,
+                notePratique: null,
+                inscriptionMax: null,
+                pollId: 'poll-1',
+              },
+            ],
+          },
+        ]);
+        prisma.sessionPoll.findMany.mockResolvedValue([
+          {
+            id: 'poll-1',
+            expiresAt: null,
+            status: 'CLOSED',
+            options: [],
+            votes: [],
+          },
+        ]);
+
+        const [card] = await service.listCards(GRANT_P1, 'viewer');
+
+        expect(card.cancelled).toBe(true);
+        expect(card.poll).toBeNull();
+      });
+
+      it('listCards() : une conjonction non annulée n’est pas « annulée »', async () => {
+        prisma.event.findMany.mockResolvedValue([
+          {
+            id: 'e1',
+            title: 'Catane',
+            ownerId: 'hote',
+            cancelledAt: null,
+            owner: { displayName: 'Léa' },
+            seances: [],
+          },
+        ]);
+
+        const [card] = await service.listCards(GRANT_P1, 'viewer');
+
+        expect(card.cancelled).toBe(false);
+      });
+
+      it('occupiedSpansOf() ne lit que les événements non annulés', async () => {
+        prisma.partie.findMany.mockResolvedValue([
+          { id: 'B', kind: 'ONE_SHOT', ownerId: 'mjB', memberships: [{ userId: 'u1' }] },
+        ]);
+        prisma.seance.findMany.mockResolvedValue([]);
+
+        await service.occupiedSpansOf(['u1']);
+
+        expect(callArg<{ where: unknown }>(prisma.seance.findMany).where).toEqual({
+          event: { partieId: { in: ['B'] }, cancelledAt: null },
+        });
+      });
+
+      it('ownEventsOf() ne lit que les événements non annulés', async () => {
+        prisma.partie.findMany.mockResolvedValue([
+          { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', gameSystemId: 'ralliement' },
+        ]);
+        prisma.seance.findMany.mockResolvedValue([]);
+
+        await service.ownEventsOf('me', jest.fn().mockResolvedValue(new Map()), {
+          fromMs: 0,
+          toMs: 1,
+        });
+
+        expect(callArg<{ where: unknown }>(prisma.seance.findMany).where).toEqual({
+          event: { partieId: { in: ['A'] }, cancelledAt: null },
+        });
+      });
+    });
+
+    describe('cancellationNotice()', () => {
+      const notice = (over: Record<string, unknown> = {}) =>
+        prisma.event.findUnique.mockResolvedValue({
+          title: 'Catane',
+          partieId: 'p1',
+          ownerId: 'hote',
+          cancelledAt: new Date(),
+          owner: { id: 'hote', email: 'hote@example.com' },
+          seances: [
+            {
+              startDate: new Date('2026-11-14T00:00:00Z'),
+              startSlot: 'EVENING',
+              inscriptions: [
+                { user: { id: 'a', email: 'a@example.com' } },
+                { user: { id: 'b', email: 'b@example.com' } },
+                { user: { id: 'a', email: 'a@example.com' } },
+              ],
+            },
+          ],
+          ...over,
+        });
+
+      it('quand l’hôte annule : inscrits confirmés et réservés, l’hôte exclu, dédoublonnés', async () => {
+        notice();
+        prisma.user.findUnique.mockResolvedValue({ displayName: 'Léa' });
+
+        const result = await service.cancellationNotice('e1', 'hote');
+
+        expect(result).toEqual({
+          partieId: 'p1',
+          eventTitle: 'Catane',
+          actorName: 'Léa',
+          startDate: new Date('2026-11-14T00:00:00Z'),
+          startSlot: 'EVENING',
+          recipients: [
+            { id: 'a', email: 'a@example.com' },
+            { id: 'b', email: 'b@example.com' },
+          ],
+        });
+      });
+
+      it('quand un administrateur annule : l’hôte est prévenu aussi, l’auteur jamais', async () => {
+        notice();
+        prisma.user.findUnique.mockResolvedValue({ displayName: 'Marc' });
+
+        const result = await service.cancellationNotice('e1', 'a');
+
+        expect(result?.actorName).toBe('Marc');
+        expect(result?.recipients.map((r) => r.id)).toEqual(['hote', 'b']);
+      });
+
+      it('conjonction disparue ou pas annulée → null', async () => {
+        prisma.event.findUnique.mockResolvedValue(null);
+        await expect(service.cancellationNotice('e1', 'hote')).resolves.toBeNull();
+
+        notice({ cancelledAt: null });
+        await expect(service.cancellationNotice('e1', 'hote')).resolves.toBeNull();
       });
     });
   });

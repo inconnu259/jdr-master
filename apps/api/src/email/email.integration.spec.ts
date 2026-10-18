@@ -92,6 +92,7 @@ describe('EmailModule (intégration réelle via Mailpit)', () => {
     ['conjonction-reservation', 'Répondre'],
     ['conjonction-date-fixee', 'Voir la rencontre'],
     ['conjonction-relance', 'Voter dans le calendrier'],
+    ['conjonction-annulee', 'Voir'],
     ['password-reset', 'Choisir un nouveau mot de passe'],
     ['level-up', 'Voir la fiche'],
     ['email-change-confirm', 'Confirmer cette nouvelle adresse'],
@@ -286,6 +287,47 @@ describe('EmailModule (intégration réelle via Mailpit)', () => {
       expect(message.HTML).toContain('samedi 24 octobre (soir) · Chez Léa');
       expect(message.HTML).toContain(`href="${link}"`);
       expect(message.HTML).toContain('>Voir la rencontre</a>');
+      for (const mot of ['partie', 'MJ', 'grimoire', 'campagne', 'joueur', 'séance']) {
+        expect(message.HTML).not.toContain(mot);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
+  // Story 42.1 : annulation d'une conjonction (e-mail n° 7) — sujet « Annulée : « Titre » », qui a annulé,
+  // « Vous n'avez rien à faire. », bouton « Voir », aucun mot de JDR.
+  it("conjonction-annulee : sujet interpolé, auteur de l'annulation, bouton « Voir », corps neutre", async () => {
+    if (!reachable) return;
+
+    const app = await NestFactory.createApplicationContext(TestAppModule, { logger: false });
+    const email = app.get(EmailService);
+    const to = `integration-test-${Date.now()}-annulee@example.com`;
+    const link = 'https://example.com/g/abc.def';
+
+    try {
+      expect(
+        await email.sendMail('conjonction-annulee', to, {
+          eventTitle: "Catane d'automne",
+          actorName: 'Léa',
+          sessionDate: 'samedi 24 octobre (soir)',
+          link,
+        }),
+      ).toEqual({ ok: true });
+
+      const searchRes = await fetch(
+        `${MAILPIT_API}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`,
+      );
+      const search = (await searchRes.json()) as { messages: Array<{ ID: string }> };
+      expect(search.messages.length).toBeGreaterThan(0);
+
+      const messageRes = await fetch(`${MAILPIT_API}/api/v1/message/${search.messages[0].ID}`);
+      const message = (await messageRes.json()) as { Subject: string; HTML: string };
+      expect(message.Subject).toBe("Annulée : « Catane d'automne »");
+      expect(message.HTML).toContain('Léa');
+      expect(message.HTML).toContain('rien à faire');
+      expect(message.HTML).toContain(`href="${link}"`);
+      expect(message.HTML).toContain('>Voir</a>');
       for (const mot of ['partie', 'MJ', 'grimoire', 'campagne', 'joueur', 'séance']) {
         expect(message.HTML).not.toContain(mot);
       }

@@ -338,6 +338,9 @@ export type PermissionAction =
   | 'EVENT_LIST'
   // Story 40.2 : modifier une conjonction — son hôte seul (règle décidée dans `PermissionService`).
   | 'EVENT_UPDATE'
+  // Story 42.1 : annuler une conjonction — son hôte OU un administrateur du groupe (règle décidée dans
+  // `PermissionService`). Fermée à tous en JDR.
+  | 'EVENT_CANCEL'
   // Invitations et liens d'invitation (couche 2, aucune capacité requise)
   | 'INVITATION_CREATE'
   | 'INVITATION_READ'
@@ -830,6 +833,8 @@ export interface EventCardDto {
   myInscription: InscriptionStatus | null;
   /** Story 40.5 : le sondage de dates de la conjonction (`null` pour une conjonction à date fixée). */
   poll: EventPollDto | null;
+  /** Story 42.1 : la conjonction est annulée (définitif) — plus aucune action, sondage clos. */
+  cancelled: boolean;
 }
 
 // ─── Epic 9 : Annonces MJ ──────────────────────────────────────────────────

@@ -57,4 +57,16 @@ describe('StatusBadge — rendu', () => {
       expect(el.classList.contains(`status-badge--${tone}`), tone).toBe(false);
     }
   });
+
+  // Story 42.1 : l'« annulé » est un mot écrit AVANT d'être une couleur — le badge porte son texte et sa teinte.
+  it('teinte annulée → classe dédiée, mot écrit (jamais la couleur seule)', async () => {
+    const el = await createComponent({
+      tone: 'cancelled',
+      labelKey: 'status.scenario_passe',
+      draft: false,
+      text: 'Annulée',
+    });
+    expect(el.textContent?.trim()).toBe('Annulée');
+    expect(el.classList).toContain('status-badge--cancelled');
+  });
 });

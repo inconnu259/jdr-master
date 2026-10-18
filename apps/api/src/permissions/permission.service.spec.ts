@@ -7,6 +7,7 @@ import {
   ADMIN_ONLY_MESSAGE,
   CAPABILITY_UNAVAILABLE_MESSAGE,
   HOST_ONLY_MESSAGE,
+  HOST_OR_ADMIN_ONLY_MESSAGE,
   JDR_POLICY,
   MJ_ONLY_MESSAGE,
   NO_ACCESS_MESSAGE,
@@ -180,6 +181,8 @@ const JDR_NOBODY: PermissionAction[] = [
   'EVENT_LIST',
   // Story 40.2 : modifier une conjonction — n'existe pas en JDR.
   'EVENT_UPDATE',
+  // Story 42.1 : annuler une conjonction — n'existe pas en JDR.
+  'EVENT_CANCEL',
   // Story 40.4 : réserver une place à un membre — n'existe pas en JDR.
   'SEANCE_RESERVE',
   // Story 40.7 : prolonger le vote d'une conjonction — n'existe pas en JDR.
@@ -506,6 +509,8 @@ describe('PermissionService', () => {
      *  événement (`{ eventId }`) et n'est accordée qu'à son hôte — testée à part, sur cette cible. */
     const RALLIEMENT_HOST_ONLY: PermissionAction[] = [
       'EVENT_UPDATE',
+      // Story 42.1 : annuler une conjonction — hôte OU administrateur (testé à part).
+      'EVENT_CANCEL',
       'SEANCE_RESERVE',
       // Story 40.6 : fixer la date d'une conjonction (testé à part, sur la cible `{ eventId }`).
       'POLL_CHOOSE',
@@ -663,6 +668,66 @@ describe('PermissionService', () => {
         prisma.event.findUnique.mockResolvedValue(null);
         await expect(
           service.assert(ADMIN, 'EVENT_UPDATE', { eventId: 'zzz' }),
+        ).rejects.toBeInstanceOf(NotFoundException);
+      });
+    });
+
+    // Story 42.1 — EVENT_CANCEL : cellule de rôle ouverte, règle « hôte OU administrateur » décidée dans assert().
+    describe('EVENT_CANCEL — hôte de la conjonction ou administrateur du groupe', () => {
+      const event = (ownerId: string | null) => ({ id: 'ev-1', ownerId, partie: RALLIEMENT });
+
+      it('accordé à l’hôte membre', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(MEMBRE));
+        await expect(service.assert(MEMBRE, 'EVENT_CANCEL', { eventId: 'ev-1' })).resolves.toEqual(
+          objectLike({ partieId: 'R', role: 'member' }),
+        );
+      });
+
+      it('accordé à un administrateur qui n’est pas l’hôte', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(MEMBRE));
+        await expect(service.assert(ADMIN, 'EVENT_CANCEL', { eventId: 'ev-1' })).resolves.toEqual(
+          objectLike({ partieId: 'R', role: 'admin' }),
+        );
+      });
+
+      it('accordé à un administrateur quand l’hôte a disparu (ownerId null)', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(null));
+        await expect(service.assert(ADMIN, 'EVENT_CANCEL', { eventId: 'ev-1' })).resolves.toEqual(
+          objectLike({ partieId: 'R', role: 'admin' }),
+        );
+      });
+
+      it('refusé à un membre qui n’est pas l’hôte — 403', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(ADMIN));
+        const refusal = service.assert(MEMBRE, 'EVENT_CANCEL', { eventId: 'ev-1' });
+        await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(refusal).rejects.toThrow(HOST_OR_ADMIN_ONLY_MESSAGE);
+      });
+
+      it('refusé à un membre quand l’hôte a disparu (ownerId null)', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(null));
+        await expect(service.assert(MEMBRE, 'EVENT_CANCEL', { eventId: 'ev-1' })).rejects.toThrow(
+          HOST_OR_ADMIN_ONLY_MESSAGE,
+        );
+      });
+
+      it('refusé à un membre sur une cible sans événement (partie)', async () => {
+        await expect(service.assert(MEMBRE, 'EVENT_CANCEL', { partieId: 'R' })).rejects.toThrow(
+          HOST_OR_ADMIN_ONLY_MESSAGE,
+        );
+      });
+
+      it('refusé à un étranger — 403 « pas accès » (avant la règle hôte ou administrateur)', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(MEMBRE));
+        await expect(service.assert(STRANGER, 'EVENT_CANCEL', { eventId: 'ev-1' })).rejects.toThrow(
+          NO_ACCESS_MESSAGE,
+        );
+      });
+
+      it('événement inconnu → 404', async () => {
+        prisma.event.findUnique.mockResolvedValue(null);
+        await expect(
+          service.assert(ADMIN, 'EVENT_CANCEL', { eventId: 'zzz' }),
         ).rejects.toBeInstanceOf(NotFoundException);
       });
     });

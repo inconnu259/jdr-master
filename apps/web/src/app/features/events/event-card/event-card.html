@@ -2,6 +2,7 @@
   class="event-card"
   [class.event-card--past]="past()"
   [class.event-card--imminent]="imminent()"
+  [class.event-card--cancelled]="cancelled()"
 >
   <!-- Bouton natif (nom accessible = titre) étiré sur toute la carte par son ::after : Entrée à
        l'appui, Espace au relâchement, et le reste de la carte (date, badge, chip) reste lu. -->
@@ -21,12 +22,14 @@
   @if (card().seance?.lieu; as lieu) {
     <p class="event-card__line event-card__place">{{ lieu }}</p>
   }
-  <p class="event-card__line event-card__situation">
-    <span class="event-card__situation-label">{{
-      theme.tone()['partie.ralliement_event_situation']
-    }}</span>
-    <span class="event-card__chip" [class.event-card__chip--dotted]="situation().dotted">{{
-      theme.tone()[situation().labelKey]
-    }}</span>
-  </p>
+  @if (!cancelled()) {
+    <p class="event-card__line event-card__situation">
+      <span class="event-card__situation-label">{{
+        theme.tone()['partie.ralliement_event_situation']
+      }}</span>
+      <span class="event-card__chip" [class.event-card__chip--dotted]="situation().dotted">{{
+        theme.tone()[situation().labelKey]
+      }}</span>
+    </p>
+  }
 </article>

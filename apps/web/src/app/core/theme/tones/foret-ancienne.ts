@@ -509,6 +509,15 @@ export const foretAncienne: Record<ToneKey, string> = {
     'La date sera scellée et les inscrits prévenus par e-mail. Elle ne pourra plus être rouverte ; les inscriptions tardives restent possibles.',
   'partie.ralliement_event_fix_date_error':
     'La date de cette halte n’a pas pu être fixée. Réessaie.',
+  /* — annuler une conjonction (Story 42.1) : mots du contrat identiques, vocabulaire et repli d’erreur selon le thème — */
+  'partie.ralliement_event_badge_cancelled': 'Annulée',
+  'partie.ralliement_event_cancelled_text': 'Cette halte est annulée. Il n’y a plus rien à faire.',
+  'partie.ralliement_event_cancel_event_btn': 'Annuler la halte',
+  'partie.ralliement_event_cancel_event_confirm_btn': 'Annuler la halte',
+  'partie.ralliement_event_cancel_event_heading': 'Annuler « {title} » ?',
+  'partie.ralliement_event_cancel_event_warning':
+    'Les inscrits seront prévenus par e-mail. Cette action est définitive.',
+  'partie.ralliement_event_cancel_event_error': 'Cette halte n’a pas pu être annulée. Réessaie.',
   /* — prolonger le vote d’une conjonction (Story 40.7) : mots du contrat identiques, repli d’erreur selon le thème — */
   'partie.ralliement_event_extend_btn': 'Prolonger le vote',
   'partie.ralliement_event_extend_confirm_btn': 'Prolonger',

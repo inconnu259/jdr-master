@@ -17,6 +17,7 @@ describe('EventsApiService (Story 40.1)', () => {
     seance: null,
     participants: [],
     myInscription: null,
+    cancelled: false,
     poll: null,
   };
 
@@ -59,6 +60,16 @@ describe('EventsApiService (Story 40.1)', () => {
     expect(req.request.body).toEqual(dto);
     req.flush(card);
     expect(await p).toEqual(card);
+  });
+
+  it('cancel → POST /parties/:id/events/:eventId/cancel, sans corps, avec withCredentials (Story 42.1)', async () => {
+    const p = service.cancel('p1', 'e1');
+    const req = http.expectOne(`${API}/parties/p1/events/e1/cancel`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toBeNull();
+    req.flush({ ...card, cancelled: true });
+    expect((await p).cancelled).toBe(true);
   });
 
   it('inscrire → POST /scenarios/seances/:id/inscription (route partagée), avec withCredentials (Story 40.3)', async () => {
