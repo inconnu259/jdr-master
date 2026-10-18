@@ -15,12 +15,13 @@ const STATUS_ORDER: Record<PartieDto['status'], number> = {
   A_VENIR: 0,
   EN_COURS: 1,
   TERMINEE: 2,
+  ANNULEE: 3,
 };
 
 function categoryRank(partie: PartieDto, signalsMap: Map<string, PartySignalsDto>): number {
   // Une partie terminée n'est jamais « urgente » (cf. party-signal-priority.ts, PARTIE_TERMINEE
   // toujours hors-catégorie/dernier) — classée après toute autre partie, quel que soit son signal.
-  if (partie.status === 'TERMINEE') return CATEGORY_ORDER.length;
+  if (partie.status === 'TERMINEE' || partie.status === 'ANNULEE') return CATEGORY_ORDER.length;
   const signals = signalsMap.get(partie.id)?.signals ?? [];
   const category = dominantCategory(signals);
   const idx = category ? CATEGORY_ORDER.indexOf(category) : -1;

@@ -277,6 +277,8 @@ export const atelierCuivre: Record<ToneKey, string> = {
   'dashboard.role_mj': 'Ingénieur',
   'dashboard.role_player': 'Mécanicien',
   'dashboard.status_closed_badge': 'Démantelée',
+  // Story 42.2 : état écrit d'une rencontre isolée annulée (tuile de la liste) — mot du contrat, identique.
+  'dashboard.status_cancelled_badge': 'Annulée',
   'dashboard.section_awaiting': 'À traiter',
   'dashboard.section_ongoing': 'En service',
   'dashboard.section_upcoming': 'En préparation',
@@ -400,6 +402,7 @@ export const atelierCuivre: Record<ToneKey, string> = {
   'partie.ralliement_soiree_participation': 'Sur invitation · pas de limite',
   'partie.ralliement_soiree_guests_empty': 'Aucun invité pour l’instant',
   'partie.ralliement_soiree_status_closed_label': 'Cette rencontre est terminée.',
+  'partie.ralliement_soiree_status_cancelled_label': 'Cette rencontre est annulée.',
   'dashboard.invitation_pending_chip': 'Invitation à accepter',
   'partie.ralliement_soiree_participation_form':
     'Sur invitation · pas de limite — vous invitez ensuite depuis l’onglet Invitations',

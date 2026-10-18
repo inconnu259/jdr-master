@@ -383,3 +383,13 @@ mat-tab-group {
     font-size: 1rem;
   }
 }
+
+// Story 42.2 : soirée annulée — le filet passe au rouge de l'annulé ; le mot « annulée » et le pictogramme
+// portent le sens (jamais la couleur seule), le pictogramme prend le rouge lisible (>= 4,5:1).
+.closed-banner--cancelled {
+  border-left-color: var(--color-unavailable, #e74c3c);
+
+  mat-icon {
+    color: var(--color-cancelled-text, #f26a5c);
+  }
+}

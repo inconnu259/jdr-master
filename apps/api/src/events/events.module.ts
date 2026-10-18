@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { EmailModule } from '../email/email.module';
 import { PermissionsModule } from '../permissions/permissions.module';
+import { InvitationCleanupService } from '../invitations/invitation-cleanup.service';
 import { PollModule } from '../poll/poll.module';
 import { EventCancellationMailer } from './event-cancellation-mailer.service';
 import { EventsController } from './events.controller';
@@ -31,6 +32,9 @@ import { GroupPollExtensionService } from './group-poll-extension.service';
  * Story 40.7 : `GroupPollExtensionService` (prolonger le vote) est exporté pour `PortsModule`, qui le lie à
  * `GroupPollExtendPort` — il ne dépend que de `PermissionsModule`, jamais de `poll/`.
  *
+ * Story 42.2 : `InvitationCleanupService` (code d'`invitations/`, sans dépendance) révoque les invitations d'une
+ * soirée isolée annulée — fourni ICI car `InvitationsModule` importe ce module (l'inverse ferait un cycle).
+ *
  * Story 42.3 : `EventCancellationMailer` (e-mail n° 7) est exporté — `PartiesService.leave()` l'appelle après le
  * commit du départ d'un hôte, sans passer par `GroupEventsService` (cycle de fournisseurs).
  *
@@ -43,6 +47,7 @@ import { GroupPollExtensionService } from './group-poll-extension.service';
   providers: [
     EventsService,
     EventCancellationMailer,
+    InvitationCleanupService,
     GroupEventsService,
     GroupPollChoiceService,
     GroupPollExtensionService,

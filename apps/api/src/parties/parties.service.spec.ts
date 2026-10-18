@@ -65,7 +65,7 @@ import type { AggregatedSlotDto, AvailableSlotDto, PartieKind } from '@master-jd
 import { GAME_SYSTEMS, isOpenForCreation, kindsOf } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import type { EventCancellationMailer } from '../events/event-cancellation-mailer.service';
-import { EventsService } from '../events/events.service';
+import { EVENING_CANCELLED_MESSAGE, EventsService } from '../events/events.service';
 import { PollVoteCleanupService } from '../poll/poll-vote-cleanup.service';
 import {
   ADMIN_ONLY_MESSAGE,
@@ -1461,6 +1461,77 @@ describe('PartiesService', () => {
         roles.admin2 = 'ADMIN';
       }
       expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // Story 42.2 : une rencontre isolée annulée a le statut ANNULEE et n'accepte plus aucune action.
+  describe('soirée isolée annulée (Story 42.2)', () => {
+    const soiree = {
+      ...partie,
+      kind: 'ONE_SHOT',
+      gameSystemId: 'ralliement',
+      ownerId: 'admin1',
+      closedAt: null,
+    };
+
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue(soiree);
+      prisma.membership.findUnique.mockResolvedValue({ userId: 'admin1', role: 'ADMIN' });
+    });
+
+    it('findOneDto : annulée → ANNULEE, même clôturée ; non annulée et close → TERMINEE', async () => {
+      prisma.event.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+      prisma.partie.findUnique.mockResolvedValue({ ...soiree, closedAt: new Date() });
+      await expect(service.findOneDto('p1', 'admin1')).resolves.toMatchObject({
+        status: 'ANNULEE',
+      });
+      expect(callArg<{ where: unknown }>(prisma.event.findMany).where).toEqual({
+        partieId: { in: ['p1'] },
+        cancelledAt: { not: null },
+      });
+
+      prisma.event.findMany.mockResolvedValue([]);
+      await expect(service.findOneDto('p1', 'admin1')).resolves.toMatchObject({
+        status: 'TERMINEE',
+      });
+    });
+
+    it('listForUser : le statut des soirées annulées vient d’UNE lecture groupée, jamais une par partie', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        { ...soiree, id: 'a', memberships: [{ role: 'ADMIN' }] },
+        { ...soiree, id: 'b', memberships: [{ role: 'ADMIN' }] },
+      ]);
+      prisma.membership.findMany.mockResolvedValue([]);
+      prisma.event.findMany.mockResolvedValue([{ partieId: 'a' }]);
+
+      const list = await service.listForUser('admin1');
+
+      expect(list.map((p) => [p.id, p.status])).toEqual([
+        ['a', 'ANNULEE'],
+        ['b', 'A_VENIR'],
+      ]);
+      expect(prisma.event.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['close', (svc: PartiesService) => svc.close('p1', 'admin1')],
+      ['reopen', (svc: PartiesService) => svc.reopen('p1', 'admin1')],
+      ['update (renommer)', (svc: PartiesService) => svc.update('p1', 'admin1', { name: 'Autre' })],
+    ])('%s est refusé (400) sur une soirée annulée, rien n’est écrit', async (_label, act) => {
+      prisma.event.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+
+      const refusal = act(service);
+
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(EVENING_CANCELLED_MESSAGE);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('close reste permis sur une soirée non annulée (Story 41.4 inchangée)', async () => {
+      prisma.event.findMany.mockResolvedValue([]);
+      prisma.partie.update.mockResolvedValue({ ...soiree, closedAt: new Date() });
+
+      await expect(service.close('p1', 'admin1')).resolves.toMatchObject({ status: 'TERMINEE' });
     });
   });
 

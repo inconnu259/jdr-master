@@ -11,6 +11,8 @@ import type { PartySignalCode } from '@master-jdr/shared';
  */
 const PRIORITY_ORDER: readonly PartySignalCode[] = [
   'PARTIE_TERMINEE',
+  // Story 42.2 : une rencontre isolée annulée — hors catégorie, comme une terminée.
+  'PARTIE_ANNULEE',
   // Bloque le démarrage.
   'AUCUN_MEMBRE_INVITE',
   'PERSONNAGE_A_CREER',

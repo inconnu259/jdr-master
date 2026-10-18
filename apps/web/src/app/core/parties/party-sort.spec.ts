@@ -55,6 +55,19 @@ describe('sortParties (Story 29.8)', () => {
     expect(sorted.map((p) => p.id)).toEqual(['a', 'b']);
   });
 
+  it('urgence : une rencontre ANNULEE (Story 42.2) passe après toute partie active, comme une terminée', () => {
+    const active = makeParty({ id: 'a', name: 'A', status: 'A_VENIR' });
+    const cancelled = makeParty({ id: 'b', name: 'B', status: 'ANNULEE' });
+    const map = signals({
+      a: { role: 'mj', status: 'A_VENIR', signals: [] },
+      b: { role: 'player', status: 'ANNULEE', signals: ['PARTIE_ANNULEE'] },
+    });
+
+    const sorted = sortParties([cancelled, active], 'urgence', map);
+
+    expect(sorted.map((p) => p.id)).toEqual(['a', 'b']);
+  });
+
   it('urgence : une partie sans entrée dans signalsMap se comporte comme « aucun signal » (chargement pas encore résolu)', () => {
     const blocking = makeParty({ id: 'a', name: 'A' });
     const missing = makeParty({ id: 'b', name: 'B' });

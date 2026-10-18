@@ -170,6 +170,7 @@
     <div
       class="row"
       [class.row--closed]="t.partie.status === 'TERMINEE'"
+      [class.row--cancelled]="t.partie.status === 'ANNULEE'"
       [routerLink]="['/parties', t.partie.id]"
     >
       <!-- Pastille d'état : équivalent exact de la bande verticale des modes moyen/grand
@@ -181,6 +182,7 @@
         [class.row__dot--live]="t.tint === 'live'"
         [class.row__dot--soon]="t.tint === 'soon'"
         [class.row__dot--closed]="t.tint === 'done'"
+        [class.row__dot--cancelled]="t.tint === 'cancelled'"
         aria-hidden="true"
       ></span>
       <span class="row__vignette">
@@ -222,6 +224,7 @@
   <mat-card
     class="tile"
     [class.tile--closed]="t.partie.status === 'TERMINEE'"
+    [class.tile--cancelled]="t.partie.status === 'ANNULEE'"
     [class.tile--awaiting]="t.tint === 'todo'"
     [class.tile--live]="t.tint === 'live'"
     [class.tile--soon]="t.tint === 'soon'"
@@ -291,6 +294,13 @@
           <span class="status-indicator" [attr.aria-label]="theme.tone()['dashboard.status_closed_badge']">
             <mat-icon aria-hidden="true" class="role-icon">flag</mat-icon>
             <span aria-hidden="true">{{ theme.tone()['dashboard.status_closed_badge'] }}</span>
+          </span>
+        }
+        @if (t.partie.status === 'ANNULEE') {
+          <!-- Story 42.2 : l'état « Annulée » est écrit (jamais le trait seul), avec son pictogramme. -->
+          <span class="status-indicator status-indicator--cancelled" [attr.aria-label]="theme.tone()['dashboard.status_cancelled_badge']">
+            <mat-icon aria-hidden="true" class="role-icon">event_busy</mat-icon>
+            <span aria-hidden="true">{{ theme.tone()['dashboard.status_cancelled_badge'] }}</span>
           </span>
         }
         @if ((t.tint === 'live' || t.tint === 'soon') && t.visibleSignals.length === 0) {

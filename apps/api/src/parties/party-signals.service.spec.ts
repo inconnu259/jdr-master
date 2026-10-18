@@ -469,6 +469,24 @@ describe('PartySignalsService', () => {
     );
   });
 
+  it('PARTIE_ANNULEE : une rencontre isolée annulée ne porte que ce signal (Story 42.2), pour son hôte comme pour un invité', async () => {
+    parties.listForUser.mockImplementation((_u: string, role?: string) =>
+      Promise.resolve(
+        role === undefined
+          ? [makePartie({ id: 'e1', role: 'admin', status: 'ANNULEE', gameSystemId: 'ralliement' })]
+          : [],
+      ),
+    );
+    // Son événement unique est annulé ; une place réservée n'y attend plus de réponse.
+    prisma.event.findMany.mockResolvedValue([{ partieId: 'e1' }]);
+    prisma.inscription.findMany.mockResolvedValue([{ seance: { event: { partieId: 'e1' } } }]);
+
+    const map = await service.getSignals('u1');
+
+    expect(map['e1'].status).toBe('ANNULEE');
+    expect(map['e1'].signals).toEqual(['PARTIE_ANNULEE']);
+  });
+
   it('PARTIE_TERMINEE (joueur) : garde explicite MJ-only — même si les requêtes groupées incluaient à tort une partie joueur, aucun signal de fin ne fuite (revue de code)', async () => {
     // Simule le scénario que la garde protège : les requêtes groupées renvoient p1 comme si elle
     // était dans le lot (elles sont normalement filtrées sur mjPartieIds) alors que l'utilisateur
@@ -516,7 +534,8 @@ describe('PartySignalsService', () => {
     expect(prisma.partie.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.membership.groupBy).toHaveBeenCalledTimes(1);
     expect(prisma.event.groupBy).toHaveBeenCalledTimes(1);
-    expect(prisma.event.findMany).toHaveBeenCalledTimes(1);
+    // Fin de rapport manquant (MJ) + rencontres isolées annulées (Story 42.2) : deux lectures groupées, jamais une par partie.
+    expect(prisma.event.findMany).toHaveBeenCalledTimes(2);
     expect(prisma.seance.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.sessionPoll.findMany).toHaveBeenCalledTimes(1);
     // Anti-spoil serveur : MJ → tous les votes ouverts ; joueur → sans le vote d'un brouillon caché

@@ -351,7 +351,7 @@ export type PermissionAction =
 
 /** Statut d'une partie — dérivé côté serveur à partir de `Partie.closedAt` et de la présence de
  *  scénarios (AD-8), jamais recalculé côté client (Story 29.6). */
-export type PartieStatus = 'A_VENIR' | 'EN_COURS' | 'TERMINEE';
+export type PartieStatus = 'A_VENIR' | 'EN_COURS' | 'TERMINEE' | 'ANNULEE';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Conversion du type d'une partie (Story 29.14)
@@ -511,6 +511,8 @@ export type PartySignalCode =
   | 'RAPPORT_FIN_MANQUANT'
   | 'PROCHAINE_SEANCE_CONNUE'
   | 'PARTIE_TERMINEE'
+  // Story 42.2 : la rencontre isolée (statut ANNULEE) a été annulée par son hôte — seul signal qu'elle porte.
+  | 'PARTIE_ANNULEE'
   // Story 40.4 : une place est réservée à l'utilisateur dans une conjonction à venir d'un groupe.
   | 'RESERVATION_A_CONFIRMER';
 

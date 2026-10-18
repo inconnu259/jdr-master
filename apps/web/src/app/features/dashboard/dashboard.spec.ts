@@ -337,7 +337,9 @@ describe('Dashboard — pastille « Invitation à accepter » (Story 41.3)', () 
       (fixture.nativeElement as HTMLElement).querySelectorAll('mat-card.tile'),
     );
     const chip = TONE_MAP['grimoire-emeraude']['dashboard.invitation_pending_chip'];
-    expect(cards[0].querySelector('.invitation-chip app-status-badge')?.textContent).toContain(chip);
+    expect(cards[0].querySelector('.invitation-chip app-status-badge')?.textContent).toContain(
+      chip,
+    );
     expect(cards[1].querySelector('.invitation-chip')).toBeNull();
     for (const card of cards.slice(0, 2)) {
       expect(card.querySelectorAll('mat-card-actions button')).toHaveLength(2);
@@ -456,6 +458,52 @@ describe('Dashboard — traitement « en retrait » des parties terminées (Stor
         TONE_MAP['grimoire-emeraude']['dashboard.status_closed_badge'],
       ),
     );
+  });
+});
+
+describe('Dashboard — rencontre isolée annulée (Story 42.2)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('une partie ANNULEE porte tile--cancelled, le mot « Annulée » et un pictogramme, reste cliquable ; jamais « terminée »', async () => {
+    const signals = new Map([
+      [
+        'p1',
+        {
+          role: 'player' as const,
+          status: 'ANNULEE' as const,
+          signals: ['PARTIE_ANNULEE'] as const,
+        },
+      ],
+    ]);
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'ANNULEE')],
+      signals as any,
+    );
+    const tile = fixture.nativeElement.querySelector('.tile') as HTMLElement;
+    expect(tile.classList.contains('tile--cancelled')).toBe(true);
+    expect(tile.classList.contains('tile--closed')).toBe(false);
+    const indicator = fixture.nativeElement.querySelector('.status-indicator--cancelled');
+    expect(indicator).not.toBeNull();
+    expect(indicator.querySelector('mat-icon')).not.toBeNull();
+    expect(indicator.textContent).toContain(
+      TONE_MAP['grimoire-emeraude']['dashboard.status_cancelled_badge'],
+    );
+    expect(indicator.textContent).not.toContain(
+      TONE_MAP['grimoire-emeraude']['dashboard.status_closed_badge'],
+    );
+    // Le signal PARTIE_ANNULEE est redondant avec l'état écrit : jamais rendu en badge.
+    expect(fixture.nativeElement.querySelector('.signal-badge')).toBeNull();
+  });
+
+  it('une partie ANNULEE est rangée avec les terminées, pas dans « ce qui t’attend »', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'player', 'ANNULEE'),
+      makeParty('p2', 'player', 'A_VENIR'),
+    ]);
+    const tiles = Array.from(fixture.nativeElement.querySelectorAll('.tile')) as HTMLElement[];
+    expect(tiles.filter((t) => t.classList.contains('tile--cancelled'))).toHaveLength(1);
   });
 });
 
@@ -1859,10 +1907,10 @@ describe('Dashboard — signal « place réservée » d’un groupe (Story 40.4)
 
   const reserved = (): Map<string, PartySignalsDto> =>
     new Map([
-      [
-        'grp',
-        { role: 'player', status: 'EN_COURS', signals: ['RESERVATION_A_CONFIRMER'] },
-      ] as [string, PartySignalsDto],
+      ['grp', { role: 'player', status: 'EN_COURS', signals: ['RESERVATION_A_CONFIRMER'] }] as [
+        string,
+        PartySignalsDto,
+      ],
     ]);
   const groupe = () => ({
     ...makeRalliement('grp', 'member', 'CAMPAGNE_EPISODIQUE'),

@@ -279,6 +279,8 @@ export const grimoireEmeraude = {
   'dashboard.role_mj': 'Maître',
   'dashboard.role_player': 'Héros',
   'dashboard.status_closed_badge': 'Close',
+  // Story 42.2 : état écrit d'une rencontre isolée annulée (tuile de la liste) — mot du contrat, identique.
+  'dashboard.status_cancelled_badge': 'Annulée',
   'dashboard.section_awaiting': 'Ce qui vous attend',
   'dashboard.section_ongoing': 'En cours',
   'dashboard.section_upcoming': 'À venir',
@@ -402,6 +404,7 @@ export const grimoireEmeraude = {
   'partie.ralliement_soiree_participation': 'Sur invitation · pas de limite',
   'partie.ralliement_soiree_guests_empty': 'Aucun invité pour l’instant',
   'partie.ralliement_soiree_status_closed_label': 'Cette rencontre est terminée.',
+  'partie.ralliement_soiree_status_cancelled_label': 'Cette rencontre est annulée.',
   'dashboard.invitation_pending_chip': 'Invitation à accepter',
   'partie.ralliement_soiree_participation_form':
     'Sur invitation · pas de limite — vous invitez ensuite depuis l’onglet Invitations',

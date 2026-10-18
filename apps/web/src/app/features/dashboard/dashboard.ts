@@ -58,6 +58,7 @@ import { fillTone } from '../../core/theme/tone-format';
 const NON_ACTIONABLE_SIGNALS: readonly PartySignalCode[] = [
   'PROCHAINE_SEANCE_CONNUE',
   'PARTIE_TERMINEE',
+  'PARTIE_ANNULEE',
 ];
 
 /** Au plus 2 badges visibles, le reste résumé par un compteur (AC3). */
@@ -76,7 +77,7 @@ const SLOT_LABELS: Record<DaySlot, string> = {
 /** Teinte de carte (DESIGN.md §7.2 StateRail) — les 4 mêmes teintes que la palette de statut du
  *  thème, quel que soit le mode d'affichage. Toujours renseignée : `tiles()` calcule une valeur
  *  pour chaque partie, il n'existe pas de cas « sans teinte ». */
-export type TileTint = 'todo' | 'live' | 'soon' | 'done';
+export type TileTint = 'todo' | 'live' | 'soon' | 'done' | 'cancelled';
 
 export interface PartieTileVm {
   partie: PartieDto;
@@ -275,7 +276,9 @@ export class Dashboard implements OnInit {
       const signals = signalsMap.get(partie.id)?.signals ?? [];
       // PARTIE_TERMINEE est exclu des badges affichés (revue utilisateur post-29.7) : redondant
       // avec .status-indicator, déjà affiché à côté du titre pour toute partie TERMINEE.
-      const displaySignals = signals.filter((s) => s !== 'PARTIE_TERMINEE');
+      const displaySignals = signals.filter(
+        (s) => s !== 'PARTIE_TERMINEE' && s !== 'PARTIE_ANNULEE',
+      );
       const sorted = sortByPriority(displaySignals);
       const visibleSignals = sorted.slice(0, MAX_VISIBLE_BADGES);
       const moreCount = Math.max(0, sorted.length - MAX_VISIBLE_BADGES);
@@ -285,15 +288,17 @@ export class Dashboard implements OnInit {
       // « en retard » partagent la teinte `soon`, distincte de `todo` réservée au blocage.
       const category = dominantCategory(displaySignals);
       const tint: TileTint =
-        partie.status === 'TERMINEE'
-          ? 'done'
-          : category === 'blocking'
-            ? 'todo'
-            : category === 'deadline' || category === 'overdue'
-              ? 'soon'
-              : partie.status === 'EN_COURS'
-                ? 'live'
-                : 'soon';
+        partie.status === 'ANNULEE'
+          ? 'cancelled'
+          : partie.status === 'TERMINEE'
+            ? 'done'
+            : category === 'blocking'
+              ? 'todo'
+              : category === 'deadline' || category === 'overdue'
+                ? 'soon'
+                : partie.status === 'EN_COURS'
+                  ? 'live'
+                  : 'soon';
       return {
         partie,
         signals,
@@ -337,7 +342,10 @@ export class Dashboard implements OnInit {
    *  Notes) : tout autre critère bascule sur `flatTiles`, une liste plate unique. */
   protected readonly awaitingTiles = computed(() =>
     this.orderedTiles().filter(
-      (t) => t.partie.status !== 'TERMINEE' && Dashboard.hasActionableSignal(t.signals),
+      (t) =>
+        t.partie.status !== 'TERMINEE' &&
+        t.partie.status !== 'ANNULEE' &&
+        Dashboard.hasActionableSignal(t.signals),
     ),
   );
   protected readonly ongoingTiles = computed(() =>
@@ -351,7 +359,9 @@ export class Dashboard implements OnInit {
     ),
   );
   protected readonly finishedTiles = computed(() =>
-    this.orderedTiles().filter((t) => t.partie.status === 'TERMINEE'),
+    this.orderedTiles().filter(
+      (t) => t.partie.status === 'TERMINEE' || t.partie.status === 'ANNULEE',
+    ),
   );
   /** Liste plate (Story 29.8) utilisée à la place des 4 intertitres dès que le tri s'écarte de
    *  'urgence' — trier par nom/date/type/statut à l'intérieur de 4 groupes n'aurait pas de sens
@@ -437,6 +447,7 @@ export class Dashboard implements OnInit {
   /** Icône du signal non chromatique accompagnant la teinte de carte pour les tuiles sans badge
    *  visible (AC9 : jamais la couleur seule) — cf. `tintLabel()`. */
   protected tintIcon(tint: TileTint): string {
+    if (tint === 'cancelled') return 'event_busy';
     return tint === 'live' ? 'play_circle' : tint === 'soon' ? 'schedule' : 'flag';
   }
 
@@ -446,6 +457,7 @@ export class Dashboard implements OnInit {
    *  besoin de ce fallback : elle n'existe que lorsqu'un signal actionnable est présent, donc au
    *  moins un badge est toujours visible. */
   protected tintLabel(tint: TileTint): string {
+    if (tint === 'cancelled') return this.theme.tone()['dashboard.status_cancelled_badge'];
     if (tint === 'done') return this.theme.tone()['dashboard.status_closed_badge'];
     if (tint === 'live') return this.theme.tone()['dashboard.section_ongoing'];
     return this.theme.tone()['dashboard.section_upcoming'];

@@ -10,6 +10,7 @@ import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realt
 import {
   CANCELLED_EVENT_MESSAGE,
   CANCEL_PAST_MESSAGE,
+  EVENING_CANCELLED_MESSAGE,
   DATE_FIXED_MESSAGE,
   EventsService,
   FULL_EVENT_MESSAGE,
@@ -3407,6 +3408,73 @@ describe('EventsService (Story 37.3)', () => {
       });
     });
 
+    describe('soirée isolée annulée (Story 42.2)', () => {
+      it('cancelHosted : le crochet s’exécute dans la transaction, ses invités sont émis après le commit et rendus', async () => {
+        existing();
+        const afterCancel = jest
+          .fn()
+          .mockResolvedValue({ userIds: ['i1', 'i2'], emails: ['a@x.fr'] });
+
+        const extras = await service.cancelHosted(GRANT_E1, 'e1', jest.fn(), afterCancel);
+
+        expect(afterCancel).toHaveBeenCalledWith(prisma.tx);
+        expect(extras).toEqual({ userIds: ['i1', 'i2'], emails: ['a@x.fr'] });
+        expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
+        expect(realtime.emit).toHaveBeenCalledWith(userTopic('i1'));
+        expect(realtime.emit).toHaveBeenCalledWith(userTopic('i2'));
+      });
+
+      it('cancelHosted sans crochet (groupe) : aucun invité, rien d’autre émis', async () => {
+        existing();
+
+        await expect(service.cancelHosted(GRANT_E1, 'e1', jest.fn())).resolves.toEqual({
+          userIds: [],
+          emails: [],
+        });
+        expect(realtime.emit).toHaveBeenCalledTimes(1);
+      });
+
+      it('cancelHosted : un refus (déjà annulée) n’exécute pas le crochet', async () => {
+        existing({ cancelledAt: new Date() });
+        const afterCancel = jest.fn();
+
+        await expect(service.cancelHosted(GRANT_E1, 'e1', jest.fn(), afterCancel)).rejects.toThrow(
+          CANCELLED_EVENT_MESSAGE,
+        );
+        expect(afterCancel).not.toHaveBeenCalled();
+      });
+
+      it('cancelledIsolatedPartieIds : UNE lecture groupée des événements annulés ; liste vide, aucune lecture', async () => {
+        prisma.event.findMany.mockResolvedValue([{ partieId: 'a' }, { partieId: 'c' }]);
+
+        const ids = await service.cancelledIsolatedPartieIds(['a', 'b', 'c']);
+
+        expect([...ids].sort()).toEqual(['a', 'c']);
+        expect(prisma.event.findMany).toHaveBeenCalledTimes(1);
+        expect(callArg<{ where: unknown }>(prisma.event.findMany).where).toEqual({
+          partieId: { in: ['a', 'b', 'c'] },
+          cancelledAt: { not: null },
+        });
+        prisma.event.findMany.mockClear();
+        await expect(service.cancelledIsolatedPartieIds([])).resolves.toEqual(new Set());
+        expect(prisma.event.findMany).not.toHaveBeenCalled();
+      });
+
+      it('assertIsolatedOpen refuse (400) une soirée annulée, même ni close ni passée', async () => {
+        prisma.event.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+
+        const refusal = service.assertIsolatedOpen({
+          id: 'p1',
+          kind: 'ONE_SHOT',
+          gameSystemId: 'ralliement',
+          closedAt: null,
+        });
+
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(EVENING_CANCELLED_MESSAGE);
+      });
+    });
+
     describe('plus aucune action sur une conjonction annulée', () => {
       /** Séance relue sous le verrou : l'événement est annulé. */
       function lockedCancelled() {
@@ -3596,6 +3664,7 @@ describe('EventsService (Story 37.3)', () => {
           ownerId: 'hote',
           cancelledAt: new Date(),
           owner: { id: 'hote', email: 'hote@example.com' },
+          partie: { kind: 'CAMPAGNE_EPISODIQUE', memberships: [] },
           seances: [
             {
               startDate: new Date('2026-11-14T00:00:00Z'),
@@ -3637,6 +3706,24 @@ describe('EventsService (Story 37.3)', () => {
 
         expect(result?.actorName).toBe('Marc');
         expect(result?.recipients.map((r) => r.id)).toEqual(['hote', 'b']);
+      });
+
+      it('soirée isolée : les membres de la soirée (pas d’inscriptions), l’hôte qui annule exclu', async () => {
+        notice({
+          partie: {
+            kind: 'ONE_SHOT',
+            memberships: [
+              { user: { id: 'hote', email: 'hote@example.com' } },
+              { user: { id: 'm1', email: 'm1@example.com' } },
+              { user: { id: 'm2', email: 'm2@example.com' } },
+            ],
+          },
+        });
+        prisma.user.findUnique.mockResolvedValue({ displayName: 'Léa' });
+
+        const result = await service.cancellationNotice('e1', 'hote');
+
+        expect(result?.recipients.map((r) => r.id)).toEqual(['m1', 'm2']);
       });
 
       it('conjonction disparue ou pas annulée → null', async () => {

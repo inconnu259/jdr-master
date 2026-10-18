@@ -5439,14 +5439,13 @@ describe('Ralliement — annuler une conjonction de groupe (Story 42.1)', () => 
       expect((await eventRow(other.id)).cancelledAt).toEqual(stamp);
     });
 
-    it('une rencontre isolée (ONE_SHOT) : 403 « indisponible », même à son administrateur (la Story 42.2 l’ouvrira)', async () => {
+    it('une rencontre isolée (ONE_SHOT) : son administrateur l’annule (Story 42.2), l’annulation d’un membre reste refusée', async () => {
       const event = await h.prisma.event.findFirstOrThrow({ where: { partieId: oneShotId } });
 
       const res = await cancel(admin, event.id, oneShotId);
 
-      expect(res.status).toBe(403);
-      expect(message(res)).toBe(UNAVAILABLE);
-      expect((await eventRow(event.id)).cancelledAt).toBeNull();
+      expect(res.status).toBe(201);
+      expect((await eventRow(event.id)).cancelledAt).not.toBeNull();
     });
   });
 
@@ -5702,5 +5701,244 @@ describe('Ralliement — annuler les conjonctions de qui quitte le groupe (Story
 
     expect(cancelMails(before, 'Groupe supprimé')).toEqual([]);
     expect(await h.prisma.partie.count({ where: { id: soloId } })).toBe(0);
+  });
+});
+
+describe('Ralliement — annuler une soirée isolée (Story 42.2)', () => {
+  let h: Harness;
+  let host: TestUser;
+  let guest: TestUser;
+  let invitee: TestUser;
+  let stranger: TestUser;
+
+  type PartieLike = { id: string; status: string };
+  type CardLike = { id: string; cancelled: boolean };
+
+  const CANCELLED = 'Cette soirée est annulée : plus rien ne peut y changer';
+  const FINISHED = 'Cette soirée est terminée : plus rien ne peut y changer';
+  const CANCEL_MAIL = 'conjonction-annulee';
+  const message = (res: { body: unknown }) => {
+    const m = (res.body as { message: string | string[] }).message;
+    return Array.isArray(m) ? m.join(' ') : m;
+  };
+  const newSoiree = async (name: string) => {
+    const { id } = await h.createPartie(host, 'ONE_SHOT', name, 'ralliement');
+    await h.addMember(id, guest);
+    const event = await h.prisma.event.findFirstOrThrow({ where: { partieId: id } });
+    const seance = await h.prisma.seance.findFirstOrThrow({ where: { eventId: event.id } });
+    return { id, eventId: event.id, seanceId: seance.id };
+  };
+  const cancel = (who: TestUser, partieId: string, eventId: string) =>
+    who.agent.post(`/parties/${partieId}/events/${eventId}/cancel`);
+  const statusOf = async (who: TestUser, id: string) =>
+    body<PartieLike>(await who.agent.get(`/parties/${id}`).expect(200)).status;
+  const listedStatus = async (who: TestUser, id: string) =>
+    body<PartieLike[]>(await who.agent.get('/parties').expect(200)).find((p) => p.id === id)
+      ?.status;
+  const signalsOf = async (who: TestUser, id: string) =>
+    body<Record<string, { status: string; signals: string[] }>>(
+      await who.agent.get('/me/party-signals').expect(200),
+    )[id];
+  const mails = (since: number) =>
+    h.email.calls.slice(since).filter((c) => c.template === CANCEL_MAIL);
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [host, guest, invitee, stranger] = await Promise.all([
+      h.createUser('annsoi-hote'),
+      h.createUser('annsoi-invite'),
+      h.createUser('annsoi-cible'),
+      h.createUser('annsoi-etranger'),
+    ]);
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it('l’hôte annule : événement annulé, statut ANNULEE pour tous, invitations et liens révoqués, e-mail n° 7 aux membres et aux invités sans réponse, signal PARTIE_ANNULEE', async () => {
+    const { id, eventId } = await newSoiree('annulee');
+    await host.agent
+      .post(`/parties/${id}/invitations`)
+      .send({ inviteeUserId: invitee.id })
+      .expect(201);
+    const unknown = `inconnu-annsoi-${h.suffix}@test.local`;
+    await host.agent
+      .post(`/parties/${id}/invitations/by-email`)
+      .send({ email: unknown })
+      .expect(201);
+    const open = body<{ token: string }>(
+      await host.agent.post(`/parties/${id}/invite-links`).send({}).expect(201),
+    );
+    const before = h.email.calls.length;
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    const notify = jest.spyOn(h.app.get(PartiesService), 'notifyPartieSignalsChanged');
+    let res: Response;
+    try {
+      res = await cancel(host, id, eventId);
+      expect(res.status).toBe(201);
+      expect(emit).toHaveBeenCalledWith(partieTopic(id));
+      expect(emit).toHaveBeenCalledWith(userTopic(invitee.id));
+      expect(notify).toHaveBeenCalledWith(id, expect.anything());
+    } finally {
+      emit.mockRestore();
+      notify.mockRestore();
+    }
+
+    expect(body<CardLike>(res).cancelled).toBe(true);
+    expect(
+      (await h.prisma.event.findUniqueOrThrow({ where: { id: eventId } })).cancelledAt,
+    ).not.toBeNull();
+    // Statut distinct de « terminée », au détail comme dans la liste, pour l'hôte comme pour l'invité.
+    expect(await statusOf(host, id)).toBe('ANNULEE');
+    expect(await statusOf(guest, id)).toBe('ANNULEE');
+    expect(await listedStatus(host, id)).toBe('ANNULEE');
+    expect(await listedStatus(guest, id)).toBe('ANNULEE');
+    // Invitations et liens révoqués.
+    const invitations = await h.prisma.invitation.findMany({ where: { partieId: id } });
+    expect(invitations.map((i) => i.status)).toEqual(['REVOKED']);
+    const links = await h.prisma.inviteLink.findMany({ where: { partieId: id } });
+    expect(links.length).toBeGreaterThanOrEqual(2);
+    expect(links.every((l) => l.revoked)).toBe(true);
+    expect(body<unknown[]>(await invitee.agent.get('/invitations').expect(200))).toEqual([]);
+    expect(
+      (await invitee.agent.post(`/invite-links/${open.token}/join`)).status,
+    ).toBeGreaterThanOrEqual(400);
+    // E-mail n° 7 : le membre, l'invité nominatif sans réponse, l'adresse invitée par e-mail — jamais l'hôte.
+    const sent = mails(before);
+    expect(sent.map((c) => c.to).sort()).toEqual([guest.email, invitee.email, unknown].sort());
+    expect(sent[0].data).toMatchObject({
+      actorName: host.displayName,
+      eventTitle: expect.stringContaining('annulee') as string,
+    });
+    // Signal d'accueil : seul PARTIE_ANNULEE, pour l'hôte comme pour le membre.
+    for (const who of [host, guest]) {
+      expect(await signalsOf(who, id)).toEqual({
+        role: 'player',
+        status: 'ANNULEE',
+        signals: ['PARTIE_ANNULEE'],
+      });
+    }
+  });
+
+  it('plus aucune action : invitation, e-mail, lien, acceptation, retrait d’un invité, modification, clore, rouvrir, renommer → 400 « annulée », rien d’écrit', async () => {
+    const { id, eventId } = await newSoiree('figee-annulee');
+    const nameBefore = (await h.prisma.partie.findUniqueOrThrow({ where: { id } })).name;
+    await host.agent
+      .post(`/parties/${id}/invitations`)
+      .send({ inviteeUserId: invitee.id })
+      .expect(201);
+    await cancel(host, id, eventId).expect(201);
+
+    const refusals = [
+      await host.agent.post(`/parties/${id}/invitations`).send({ inviteeUserId: stranger.id }),
+      await host.agent
+        .post(`/parties/${id}/invitations/by-email`)
+        .send({ email: `refus-annsoi-${h.suffix}@test.local` }),
+      await host.agent.post(`/parties/${id}/invite-links`).send({}),
+      await host.agent.delete(`/parties/${id}/members/${guest.id}`),
+      await host.agent
+        .patch(`/parties/${id}/events/${eventId}`)
+        .send({ title: 'Trop tard', date: isoDay(3), slot: 'EVENING' }),
+      await host.agent.patch(`/parties/${id}/close`),
+      await host.agent.patch(`/parties/${id}/reopen`),
+      await host.agent.patch(`/parties/${id}`).send({ name: 'Renommée' }),
+    ];
+    for (const res of refusals) {
+      expect(res.status).toBe(400);
+      expect(message(res)).toContain(CANCELLED);
+    }
+    expect(await h.prisma.membership.count({ where: { partieId: id, userId: guest.id } })).toBe(1);
+    expect((await h.prisma.event.findUniqueOrThrow({ where: { id: eventId } })).title).not.toBe(
+      'Trop tard',
+    );
+    expect((await h.prisma.partie.findUniqueOrThrow({ where: { id } })).name).toBe(nameBefore);
+    // La tentative d'acceptation d'une invitation révoquée est refusée aussi.
+    expect(await h.prisma.membership.count({ where: { partieId: id, userId: invitee.id } })).toBe(
+      0,
+    );
+  });
+
+  it('refus : un invité (simple membre) et un étranger → 403 ; rien n’est annulé, aucun e-mail', async () => {
+    const { id, eventId } = await newSoiree('intouchable-soiree');
+    const before = h.email.calls.length;
+
+    expect((await cancel(guest, id, eventId)).status).toBe(403);
+    expect((await cancel(stranger, id, eventId)).status).toBe(403);
+
+    expect(
+      (await h.prisma.event.findUniqueOrThrow({ where: { id: eventId } })).cancelledAt,
+    ).toBeNull();
+    expect(mails(before)).toEqual([]);
+    expect(await statusOf(host, id)).toBe('A_VENIR');
+  });
+
+  it('soirée passée, close ou déjà annulée : refusée (400) ; l’événement d’une autre partie par la route de celle-ci : 404', async () => {
+    const past = await newSoiree('passee-annulation');
+    const day = new Date(`${isoDay(-2)}T00:00:00.000Z`);
+    await h.prisma.seance.update({
+      where: { id: past.seanceId },
+      data: { startDate: day, endDate: day, startSlot: 'EVENING', endSlot: 'EVENING' },
+    });
+    const pastRes = await cancel(host, past.id, past.eventId);
+    expect(pastRes.status).toBe(400);
+    expect(message(pastRes)).toContain(FINISHED);
+
+    const closed = await newSoiree('close-annulation');
+    await host.agent.patch(`/parties/${closed.id}/close`).expect(200);
+    const closedRes = await cancel(host, closed.id, closed.eventId);
+    expect(closedRes.status).toBe(400);
+    expect(message(closedRes)).toContain(FINISHED);
+
+    const twice = await newSoiree('deux-fois');
+    await cancel(host, twice.id, twice.eventId).expect(201);
+    const again = await cancel(host, twice.id, twice.eventId);
+    expect(again.status).toBe(400);
+    expect(message(again)).toContain(CANCELLED);
+
+    const other = await newSoiree('autre-soiree');
+    expect((await cancel(host, other.id, twice.eventId)).status).toBe(404);
+    for (const s of [past, closed, other]) {
+      expect(
+        (await h.prisma.event.findUniqueOrThrow({ where: { id: s.eventId } })).cancelledAt,
+      ).toBeNull();
+    }
+  });
+
+  it('une soirée à sondage : le sondage est clos ; la soirée annulée sort du calendrier', async () => {
+    const { id, eventId } = await newSoiree('sondage-annule');
+    const card = body<{ poll: { id: string } | null }>(
+      await host.agent
+        .patch(`/parties/${id}/events/${eventId}`)
+        .send({
+          title: 'Sondage',
+          pollOptions: [
+            { date: isoDay(8), slot: 'EVENING' },
+            { date: isoDay(9), slot: 'MORNING' },
+          ],
+          pollDeadline: isoDay(5),
+        })
+        .expect(200),
+    );
+    expect(card.poll).not.toBeNull();
+
+    await cancel(host, id, eventId).expect(201);
+
+    const poll = await h.prisma.sessionPoll.findFirstOrThrow({ where: { partieId: id } });
+    expect(poll.status).toBe('CLOSED');
+    expect(await statusOf(guest, id)).toBe('ANNULEE');
+  });
+
+  it('un groupe et une quête de JDR gardent leurs statuts : aucun n’est jamais ANNULEE', async () => {
+    const { id: groupId } = await h.createPartie(
+      host,
+      'CAMPAGNE_EPISODIQUE',
+      'groupe-statut',
+      'ralliement',
+    );
+    expect(await statusOf(host, groupId)).toBe('A_VENIR');
+    const { id: jdrId } = await h.createPartie(host, 'ONE_SHOT', 'jdr-statut');
+    expect(await statusOf(host, jdrId)).not.toBe('ANNULEE');
   });
 });

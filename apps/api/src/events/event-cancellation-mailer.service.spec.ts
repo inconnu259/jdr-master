@@ -70,4 +70,23 @@ describe('EventCancellationMailer — e-mail n° 7 (Stories 42.1 et 42.3)', () =
 
     expect(email.sendMail).not.toHaveBeenCalled();
   });
+
+  it('Story 42.2 : les invités sans réponse s’ajoutent aux membres, une adresse n’est écrite qu’une fois', async () => {
+    await mailer.send('g1', 'e1', 'u1', ['u2@example.com', 'NEW@example.com', 'new@example.com']);
+
+    expect(email.sendMail.mock.calls.map((c) => c[1]).sort()).toEqual([
+      'NEW@example.com',
+      'u2@example.com',
+      'u3@example.com',
+    ]);
+  });
+
+  it('Story 42.2 : sans membre à prévenir mais avec des invités, les invités reçoivent l’e-mail', async () => {
+    events.cancellationNotice.mockResolvedValue({ ...NOTICE, recipients: [] });
+
+    await mailer.send('g1', 'e1', 'u1', ['guest@example.com']);
+
+    expect(email.sendMail).toHaveBeenCalledTimes(1);
+    expect(email.sendMail.mock.calls[0][1]).toBe('guest@example.com');
+  });
 });

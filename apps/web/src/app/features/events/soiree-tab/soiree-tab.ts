@@ -60,6 +60,8 @@ export class SoireeTab implements OnInit {
   readonly description = input<string | null>(null);
   /** Story 41.4 : soirée terminée (close ou passée) — le détail n'offre plus « Modifier ». */
   readonly frozen = input(false);
+  /** Story 42.2 : la personne est l'administrateur (l'hôte) de la soirée — elle peut l'annuler. */
+  readonly isAdmin = input(false);
 
   /** L'unique événement de la rencontre (`null` tant qu'il n'est pas lu). */
   protected readonly card = signal<EventCardDto | null>(null);

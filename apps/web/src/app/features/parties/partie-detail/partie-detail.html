@@ -19,6 +19,13 @@
           }}
         </p>
       }
+      @if (p.status === 'ANNULEE') {
+        <!-- Story 42.2 : la soirée annulée le dit en toutes lettres, avec un pictogramme (jamais la couleur seule). -->
+        <p class="closed-banner closed-banner--cancelled" role="status">
+          <mat-icon aria-hidden="true">event_busy</mat-icon>
+          {{ theme.tone()['partie.ralliement_soiree_status_cancelled_label'] }}
+        </p>
+      }
       @if (isDesktop() && !isRalliement()) {
         <app-roster-rail
           [members]="members()"
@@ -67,6 +74,7 @@
               [partieId]="p.id"
               [description]="p.description"
               [frozen]="isSoireeFinished()"
+              [isAdmin]="p.role === 'admin'"
             />
           </mat-tab>
         } @else {
@@ -595,10 +603,12 @@
              n'existe pas pour cette famille (Story 38.4 : un membre n'a aucune action). Story 39.1 :
              l'admin d'un groupe peut aussi le clore / rouvrir et le brûler (PARTIE_CLOSE / REOPEN /
              DELETE, admin seul côté serveur) ; la rencontre unique n'a pas ces actions avant l'epic 41. -->
-        <a mat-button class="icon-bar__btn" [routerLink]="['/parties', p.id, 'edit']">
-          <mat-icon aria-hidden="true">edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
-        </a>
-        @if (isSoiree()) {
+        @if (!isSoireeCancelled()) {
+          <a mat-button class="icon-bar__btn" [routerLink]="['/parties', p.id, 'edit']">
+            <mat-icon aria-hidden="true">edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
+          </a>
+        }
+        @if (isSoiree() && !isSoireeCancelled()) {
           <!-- Story 41.4 : l'hôte d'une soirée la clôt ou la rouvre (terminée aussi par sa date). Pas de
                « Brûler » : annuler une soirée est l'objet de l'epic 42. -->
           @if (p.status !== 'TERMINEE') {

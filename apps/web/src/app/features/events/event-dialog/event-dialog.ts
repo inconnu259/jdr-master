@@ -184,11 +184,11 @@ export class EventDialog {
       isHostOf(this.card(), this.currentUserId()) &&
       !this.past(),
   );
-  /** Story 42.1 : « Annuler la conjonction » — l'hôte ou un administrateur, avant la date, dans la fenêtre
-   *  d'un groupe seulement (l'annulation d'une soirée isolée est la Story 42.2). */
+  /** Story 42.1 : « Annuler la conjonction » — l'hôte ou un administrateur, avant la date. Story 42.2 : aussi
+   *  dans le détail en ligne d'une soirée isolée, sauf si elle est figée (terminée, annulée). */
   protected readonly canCancel = computed(
     () =>
-      !this.inline() &&
+      !this.frozen() &&
       canCancelEvent(this.card(), this.currentUserId(), this.viewerIsAdmin(), this.todayKey()),
   );
   /** Story 41.4 : « Ma situation » d'une soirée en pastille écrite (« Je participe », « J'y étais »…). */
@@ -202,7 +202,7 @@ export class EventDialog {
   });
   /** Pied en ligne : seulement quand il porte une action (modifier, enregistrer) ou une erreur. */
   protected readonly showInlineFooter = computed(
-    () => this.editing() || this.canEdit() || this.error() !== null,
+    () => this.editing() || this.canEdit() || this.canCancel() || this.error() !== null,
   );
   protected readonly badge = computed(() =>
     eventBadge(this.card(), this.todayKey(), this.theme.tone(), this.currentUserId()),

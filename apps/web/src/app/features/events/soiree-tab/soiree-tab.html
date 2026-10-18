@@ -11,6 +11,7 @@
       [inline]="true"
       [description]="description()"
       [frozen]="frozen()"
+      [viewerIsAdmin]="isAdmin()"
       (saved)="onSaved($event)"
       (refreshRequested)="refresh()"
       (calendarRequested)="openCalendar()"

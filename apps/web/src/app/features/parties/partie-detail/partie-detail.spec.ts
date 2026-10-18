@@ -6737,6 +6737,65 @@ describe('PartieDetail — une soirée isolée sur une seule page (Story 41.1)',
     });
   });
 
+  // Story 42.2 : une soirée annulée est figée, son état est écrit, et seul l'hôte d'une soirée ouverte l'annule.
+  describe('soirée annulée (Story 42.2)', () => {
+    const cancelled = (over: Partial<PartieDto> = {}) => soiree({ status: 'ANNULEE', ...over });
+
+    it('bandeau « annulée » propre à la rencontre (jamais « terminée »), détail annulé sans aucune action', async () => {
+      const { fixture, el } = await createFixture(cancelled(), MJ_ID, {
+        members,
+        events: [event({ cancelled: true })],
+      });
+      await settle(fixture);
+      const tone = TONE_MAP['grimoire-emeraude'];
+      const banner = el.querySelector('.closed-banner');
+      expect(banner?.textContent).toContain(tone['partie.ralliement_soiree_status_cancelled_label']);
+      expect(banner?.classList).toContain('closed-banner--cancelled');
+      expect(banner?.textContent).not.toContain(tone['partie.ralliement_soiree_status_closed_label']);
+      expect(el.querySelector('.ed__badge')?.textContent?.trim()).toBe('Annulée');
+      expect(el.querySelector('.ed__cancelled')).not.toBeNull();
+      expect(el.querySelector('.ed__edit')).toBeNull();
+      expect(el.querySelector('.ed__cancel-event')).toBeNull();
+    });
+
+    it('ni « Clore », ni « Rouvrir », ni « Modifier » dans la barre d’actions de l’hôte', async () => {
+      const { fixture, el } = await createFixture(cancelled(), MJ_ID, {
+        members,
+        events: [event({ cancelled: true })],
+      });
+      await settle(fixture);
+
+      expect(el.querySelector('.icon-bar button')).toBeNull();
+      expect(el.querySelector('.icon-bar a')).toBeNull();
+    });
+
+    it('l’hôte d’une soirée à venir voit « Annuler la conjonction » dans le détail en ligne ; un invité non', async () => {
+      const host = await createFixture(soiree(), MJ_ID, { members, events: [event()] });
+      await settle(host.fixture);
+      expect(host.el.querySelector('.ed__cancel-event')?.textContent?.trim()).toBe(
+        TONE_MAP['grimoire-emeraude']['partie.ralliement_event_cancel_event_btn'],
+      );
+      TestBed.resetTestingModule();
+
+      const guest = await createFixture(soiree({ role: 'member' }), OTHER_ID, {
+        members,
+        events: [event()],
+      });
+      await settle(guest.fixture);
+      expect(guest.el.querySelector('.ed__cancel-event')).toBeNull();
+    });
+
+    it('une soirée terminée (figée) n’offre plus l’annulation, même à l’hôte', async () => {
+      const { fixture, el } = await createFixture(soiree({ status: 'TERMINEE' }), MJ_ID, {
+        members,
+        events: [event()],
+      });
+      await settle(fixture);
+
+      expect(el.querySelector('.ed__cancel-event')).toBeNull();
+    });
+  });
+
   it('témoins : un groupe garde ses Conjonctions, une quête garde ses onglets', async () => {
     const tone = TONE_MAP['grimoire-emeraude'];
     const group = await createFixture(

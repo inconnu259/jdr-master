@@ -35,7 +35,7 @@ import {
 } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { EventCancellationMailer } from '../events/event-cancellation-mailer.service';
-import { EventsService } from '../events/events.service';
+import { EVENING_CANCELLED_MESSAGE, EventsService } from '../events/events.service';
 import {
   ADMIN_ONLY_MESSAGE,
   NO_ACCESS_MESSAGE,
@@ -183,7 +183,7 @@ export function coverImageVersion(coverImageUrl: string | null): string | null {
  * `TERMINEE` dès que `closedAt` est posé OU que sa plage de dates est passée (`'ended'`) ; sans date elle
  * reste `A_VENIR`. `progress` est la seule entrée de cette dérivation (cf. `isRalliementGroup`).
  */
-export type PartieProgress = 'none' | 'started' | 'ended';
+export type PartieProgress = 'none' | 'started' | 'ended' | 'cancelled';
 
 function toPartieDto(
   partie: Partie,
@@ -191,12 +191,15 @@ function toPartieDto(
   progress: PartieProgress,
   isFavorite: boolean,
 ): PartieDto {
+  // Story 42.2 (AD-18) : annulée l'emporte sur terminée (clôture ou date passée), distincte d'elle.
   const status: PartieStatus =
-    partie.closedAt || progress === 'ended'
-      ? 'TERMINEE'
-      : progress === 'started'
-        ? 'EN_COURS'
-        : 'A_VENIR';
+    progress === 'cancelled'
+      ? 'ANNULEE'
+      : partie.closedAt || progress === 'ended'
+        ? 'TERMINEE'
+        : progress === 'started'
+          ? 'EN_COURS'
+          : 'A_VENIR';
   return {
     id: partie.id,
     name: partie.name,
@@ -341,7 +344,7 @@ export class PartiesService implements PartieSignalsPort {
     // Story 41.4 : les rencontres isolées du lot, dont la plage de dates est passée (UNE lecture groupée,
     // seulement s'il y en a).
     const isolatedIds = parties.filter(isIsolatedRalliement).map((p) => p.id);
-    const [withScenario, withEvent, ended] = await Promise.all([
+    const [withScenario, withEvent, ended, cancelled] = await Promise.all([
       otherIds.length === 0
         ? []
         : this.prisma.event.groupBy({
@@ -357,13 +360,32 @@ export class PartiesService implements PartieSignalsPort {
             _count: { _all: true },
           }),
       this.events.endedIsolatedPartieIds(isolatedIds),
+      // Story 42.2 : les rencontres isolées annulées du lot (UNE lecture groupée, seulement s'il y en a).
+      this.events.cancelledIsolatedPartieIds(isolatedIds),
     ]);
     // `groupBy` ne renvoie jamais de groupe à compte zéro : chaque ligne retournée a au moins un
     // événement qui compte — porteur d'un scénario (première requête) ou, pour un groupe de
     // ralliement, n'importe lequel (seconde requête). Aucun filtre supplémentaire requis.
     const started = new Set([...withScenario, ...withEvent].map((c) => c.partieId));
     return (partieId) =>
-      ended.has(partieId) ? 'ended' : started.has(partieId) ? 'started' : 'none';
+      cancelled.has(partieId)
+        ? 'cancelled'
+        : ended.has(partieId)
+          ? 'ended'
+          : started.has(partieId)
+            ? 'started'
+            : 'none';
+  }
+
+  /** Story 42.2 : une soirée isolée annulée n'accepte plus aucune action — renommer, clore, rouvrir (400). Les
+   *  autres écritures (invitations, retrait d'invité, modification, vote) passent par `assertIsolatedOpen`. */
+  private async assertEveningNotCancelled(
+    partie: Pick<Partie, 'id' | 'kind' | 'gameSystemId'>,
+  ): Promise<void> {
+    if (!isIsolatedRalliement(partie)) return;
+    if ((await this.events.cancelledIsolatedPartieIds([partie.id])).has(partie.id)) {
+      throw new BadRequestException(EVENING_CANCELLED_MESSAGE);
+    }
   }
 
   /** Variante mono-partie de `progressByPartieId` — la lecture en lot (AD-3) ne s'applique pas
@@ -373,6 +395,10 @@ export class PartiesService implements PartieSignalsPort {
   ): Promise<PartieProgress> {
     // Story 41.4 : une rencontre isolée dont la plage de dates est passée est terminée.
     if (isIsolatedRalliement(partie)) {
+      // Story 42.2 : annulée l'emporte sur terminée.
+      if ((await this.events.cancelledIsolatedPartieIds([partie.id])).has(partie.id)) {
+        return 'cancelled';
+      }
       return (await this.events.endedIsolatedPartieIds([partie.id])).has(partie.id)
         ? 'ended'
         : 'none';
@@ -802,6 +828,7 @@ export class PartiesService implements PartieSignalsPort {
     const { partie, role } = await this.permissions.assert(userId, 'PARTIE_UPDATE', {
       partieId: id,
     });
+    await this.assertEveningNotCancelled(partie);
 
     // Story 38.2 : le type et le système d'un ralliement sont définitifs. Garde posée AVANT les
     // autres (leurs messages parleraient de conversion ou de famille) ; renvoyer les valeurs déjà
@@ -1054,6 +1081,7 @@ export class PartiesService implements PartieSignalsPort {
     const { partie, role } = await this.permissions.assert(userId, 'PARTIE_CLOSE', {
       partieId: id,
     });
+    await this.assertEveningNotCancelled(partie);
     const updated = await this.prisma.partie.update({
       where: { id },
       data: { closedAt: new Date() },
@@ -1073,6 +1101,7 @@ export class PartiesService implements PartieSignalsPort {
     const { partie, role } = await this.permissions.assert(userId, 'PARTIE_REOPEN', {
       partieId: id,
     });
+    await this.assertEveningNotCancelled(partie);
     const updated = await this.prisma.partie.update({
       where: { id },
       data: { closedAt: null },

@@ -10,6 +10,7 @@ import {
   type PollService,
 } from '../poll/poll.service';
 import type { CreateEventDto } from './dto/create-event.dto';
+import type { InvitationCleanupService } from '../invitations/invitation-cleanup.service';
 import type { EventCancellationMailer } from './event-cancellation-mailer.service';
 import { POLL_MODE_MESSAGE, type EventSeanceInput, type EventsService } from './events.service';
 import {
@@ -59,6 +60,7 @@ describe('GroupEventsService (Story 40.1)', () => {
   let signals: { notifyChanged: jest.Mock };
   let email: { sendMail: jest.Mock };
   let mailer: { send: jest.Mock };
+  let cleanup: { revokePendingInTx: jest.Mock };
   let polls: { createInTx: jest.Mock; updateInTx: jest.Mock; closeInTx: jest.Mock };
   let service: GroupEventsService;
   const order: string[] = [];
@@ -115,7 +117,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       // Story 42.1 : annulation d'une conjonction.
       cancelHosted: jest.fn(() => {
         order.push('cancel');
-        return Promise.resolve();
+        return Promise.resolve({ userIds: [], emails: [] });
       }),
       listCards: jest.fn().mockResolvedValue([CARD]),
     };
@@ -136,6 +138,11 @@ describe('GroupEventsService (Story 40.1)', () => {
       updateInTx: jest.fn().mockResolvedValue(undefined),
       closeInTx: jest.fn().mockResolvedValue(undefined),
     };
+    cleanup = {
+      revokePendingInTx: jest
+        .fn()
+        .mockResolvedValue({ userIds: ['i1'], emails: ['i1@example.com'] }),
+    };
     mailer = {
       send: jest.fn(() => {
         order.push('cancel-mail');
@@ -149,6 +156,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       email as unknown as EmailService,
       polls as unknown as PollService,
       mailer as unknown as EventCancellationMailer,
+      cleanup as unknown as InvitationCleanupService,
     );
   });
 
@@ -165,9 +173,11 @@ describe('GroupEventsService (Story 40.1)', () => {
         expect.objectContaining({ partieId: 'g1' }),
         'e1',
         expect.any(Function),
+        // Un groupe ne passe aucun crochet d'invitations (Story 42.2).
+        undefined,
       );
       // L'e-mail n° 7 est confié au service partagé (Story 42.3), l'auteur étant l'appelant.
-      expect(mailer.send).toHaveBeenCalledWith('g1', 'e1', 'u1');
+      expect(mailer.send).toHaveBeenCalledWith('g1', 'e1', 'u1', []);
       // Écriture validée, puis signaux de l'accueil, puis e-mail — jamais l'inverse.
       expect(order).toEqual(['cancel', 'signals', 'cancel-mail']);
       expect(card).toBe(CARD);
@@ -194,17 +204,45 @@ describe('GroupEventsService (Story 40.1)', () => {
       expect(events.cancelHosted).not.toHaveBeenCalled();
     });
 
-    it('rencontre isolée (ONE_SHOT) : 403 « indisponible », rien n’est écrit', async () => {
-      permissions.assert.mockResolvedValue(
-        testGrant({ ...GROUPE, kind: 'ONE_SHOT' }, 'admin', { eventId: 'e1' }),
-      );
+    describe('rencontre isolée (ONE_SHOT, Story 42.2)', () => {
+      const evening = () => testGrant({ ...GROUPE, kind: 'ONE_SHOT' }, 'admin', { eventId: 'e1' });
 
-      const refusal = service.cancel('g1', 'e1', 'u1');
+      it('s’annule aussi : soirée encore ouverte, invitations révoquées dans la transaction, invités prévenus', async () => {
+        permissions.assert.mockResolvedValue(evening());
+        events.cancelHosted.mockResolvedValue({ userIds: ['i1'], emails: ['i1@example.com'] });
 
-      await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
-      await expect(refusal).rejects.toThrow(RALLIEMENT_UNAVAILABLE_MESSAGE);
-      expect(events.cancelHosted).not.toHaveBeenCalled();
-      expect(mailer.send).not.toHaveBeenCalled();
+        const card = await service.cancel('g1', 'e1', 'u1');
+
+        expect(events.assertIsolatedOpen).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 'g1' }),
+        );
+        // Le crochet transmis à l'écriture révoque les invitations de la partie, dans la transaction.
+        const hook = callArg<(tx: unknown) => Promise<unknown>>(events.cancelHosted, 0, 3);
+        const tx = {};
+        await hook(tx);
+        expect(cleanup.revokePendingInTx).toHaveBeenCalledWith(tx, 'g1');
+        // Les adresses des invités sans réponse partent avec l'e-mail n° 7.
+        expect(mailer.send).toHaveBeenCalledWith('g1', 'e1', 'u1', ['i1@example.com']);
+        expect(card).toBe(CARD);
+      });
+
+      it('un groupe ne passe aucun crochet : ses invitations ne bougent pas', async () => {
+        permissions.assert.mockResolvedValue(grantE1());
+
+        await service.cancel('g1', 'e1', 'u1');
+
+        expect(callArg<unknown>(events.cancelHosted, 0, 3)).toBeUndefined();
+        expect(events.assertIsolatedOpen).not.toHaveBeenCalled();
+      });
+
+      it('soirée terminée, close ou déjà annulée : refusée (400), rien n’est écrit', async () => {
+        permissions.assert.mockResolvedValue(evening());
+        events.assertIsolatedOpen.mockRejectedValue(new BadRequestException('figée'));
+
+        await expect(service.cancel('g1', 'e1', 'u1')).rejects.toBeInstanceOf(BadRequestException);
+        expect(events.cancelHosted).not.toHaveBeenCalled();
+        expect(mailer.send).not.toHaveBeenCalled();
+      });
     });
 
     it('un refus de droit remonte tel quel, rien n’est écrit ni envoyé', async () => {

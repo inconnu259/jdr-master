@@ -165,6 +165,8 @@ export const DATE_FIXED_MESSAGE =
 /** Refus de toute action sur une conjonction annulée (Story 42.1) : l'annulation est définitive. */
 export const CANCELLED_EVENT_MESSAGE =
   'Cette conjonction est annulée : plus rien ne peut y changer';
+/** Refus de toute action sur une soirée isolée annulée (Story 42.2). */
+export const EVENING_CANCELLED_MESSAGE = 'Cette soirée est annulée : plus rien ne peut y changer';
 /** Refus d'annuler une conjonction dont le jour est passé (Story 42.1). */
 export const CANCEL_PAST_MESSAGE = 'Cette conjonction est passée : elle ne peut plus être annulée';
 
@@ -208,6 +210,14 @@ export interface VoteReminderPoll {
       partie: { memberships: { user: ReminderRecipient }[] };
     };
   };
+}
+
+/** Ce que le crochet d'annulation d'une soirée isolée (Story 42.2) a révoqué dans la transaction : les
+ *  invités nominatifs dont l'invitation attendait encore une réponse (leur accueil se rafraîchit) et les
+ *  adresses à prévenir (invités et liens par e-mail non utilisés). */
+export interface CancellationExtras {
+  userIds: string[];
+  emails: string[];
 }
 
 /** De quoi écrire l'e-mail d'annulation (Story 42.1, e-mail n° 7), lu après le commit. */
@@ -921,9 +931,10 @@ export class EventsService
     grant: PartieGrant,
     eventId: string,
     closePoll: (tx: Prisma.TransactionClient, pollId: string) => Promise<void>,
-  ): Promise<void> {
+    afterCancel?: (tx: Prisma.TransactionClient) => Promise<CancellationExtras>,
+  ): Promise<CancellationExtras> {
     await this.assertEventInGrant(grant, eventId);
-    await this.prisma.$transaction(async (tx) => {
+    const extras = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "Partie" WHERE "id" = ${grant.partieId} FOR UPDATE`;
       await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
       const event = await tx.event.findUnique({
@@ -946,8 +957,13 @@ export class EventsService
       await tx.event.update({ where: { id: eventId }, data: { cancelledAt: new Date() } });
       if (seance?.pollId) await closePoll(tx, seance.pollId);
       await this.recalculateNextSessionInTx(tx, grant.partieId);
+      // Story 42.2 : soirée isolée — invitations et liens révoqués dans la même transaction.
+      return afterCancel ? await afterCancel(tx) : { userIds: [], emails: [] };
     });
     this.realtimeEvents.emit(partieTopic(grant.partieId));
+    // Les invités dont l'invitation vient d'être révoquée voient leur accueil se rafraîchir.
+    for (const userId of extras.userIds) this.realtimeEvents.emit(userTopic(userId));
+    return extras;
   }
 
   /**
@@ -1013,6 +1029,16 @@ export class EventsService
         ownerId: true,
         cancelledAt: true,
         owner: { select: { id: true, email: true } },
+        // Story 42.2 : les membres d'une soirée isolée (elle n'a pas d'inscriptions).
+        partie: {
+          select: {
+            kind: true,
+            memberships: {
+              orderBy: [{ joinedAt: 'asc' }, { userId: 'asc' }],
+              select: { user: { select: { id: true, email: true } } },
+            },
+          },
+        },
         seances: {
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           take: 1,
@@ -1033,10 +1059,12 @@ export class EventsService
       select: { displayName: true },
     });
     const seance = event.seances[0];
-    const candidates = [
-      ...(event.owner ? [event.owner] : []),
-      ...(seance?.inscriptions ?? []).map((i) => i.user),
-    ];
+    // Soirée isolée : ses membres ; groupe : les inscrits (confirmés et places réservées).
+    const attendees =
+      event.partie.kind === 'ONE_SHOT'
+        ? event.partie.memberships.map((m) => m.user)
+        : (seance?.inscriptions ?? []).map((i) => i.user);
+    const candidates = [...(event.owner ? [event.owner] : []), ...attendees];
     const recipients = [...new Map(candidates.map((u) => [u.id, u])).values()].filter(
       (u) => u.id !== actorId,
     );
@@ -1568,6 +1596,20 @@ export class EventsService
   }
 
   /**
+   * Story 42.2 : parmi ces rencontres isolées, lesquelles sont ANNULÉES — leur événement unique porte
+   * `cancelledAt`. UNE lecture groupée ; liste vide : aucune lecture. L'appelant ne passe que des rencontres
+   * isolées (`ONE_SHOT` de la famille ralliement).
+   */
+  async cancelledIsolatedPartieIds(partieIds: string[]): Promise<Set<string>> {
+    if (partieIds.length === 0) return new Set();
+    const events = await this.prisma.event.findMany({
+      where: { partieId: { in: partieIds }, cancelledAt: { not: null } },
+      select: { partieId: true },
+    });
+    return new Set(events.map((e) => e.partieId));
+  }
+
+  /**
    * Story 41.4 : une soirée isolée est figée (400) quand elle est terminée — `closedAt` posé ou date passée,
    * la même règle que le statut `TERMINEE`. Sans effet pour tout autre type de partie.
    */
@@ -1578,6 +1620,10 @@ export class EventsService
     closedAt: Date | null;
   }): Promise<void> {
     if (partie.kind !== 'ONE_SHOT' || familyOf(partie.gameSystemId) !== 'ralliement') return;
+    // Story 42.2 : une soirée annulée est figée, plus encore qu'une soirée terminée.
+    if ((await this.cancelledIsolatedPartieIds([partie.id])).has(partie.id)) {
+      throw new BadRequestException(EVENING_CANCELLED_MESSAGE);
+    }
     if (
       partie.closedAt !== null ||
       (await this.endedIsolatedPartieIds([partie.id])).has(partie.id)

@@ -235,7 +235,12 @@ export class PartieDetail implements OnInit {
   /** Story 41.4 : une soirée terminée (close ou date passée, `status` du serveur) est figée — ni invitation,
    *  ni « Retirer », ni « Modifier » ; le serveur refuse aussi (400). */
   protected readonly isSoireeFinished = computed(
-    () => this.isSoiree() && this.partie()?.status === 'TERMINEE',
+    () => this.isSoiree() && ['TERMINEE', 'ANNULEE'].includes(this.partie()?.status ?? ''),
+  );
+  /** Story 42.2 : une soirée annulée (statut `ANNULEE` du serveur) est figée comme une terminée, et ne peut ni
+   *  être close, ni rouverte, ni renommée — le bandeau dit « annulée », jamais « terminée ». */
+  protected readonly isSoireeCancelled = computed(
+    () => this.isSoiree() && this.partie()?.status === 'ANNULEE',
   );
   protected readonly isSoireeOpen = computed(() => this.isSoiree() && !this.isSoireeFinished());
 

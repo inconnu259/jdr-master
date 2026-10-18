@@ -1035,6 +1035,9 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_event_fix_counts',
     'partie.ralliement_event_fix_past',
     'partie.ralliement_event_fix_warning',
+    // Story 42.2 : l'état « Annulée » de la tuile et la phrase du bandeau d'une rencontre annulée sont du contrat
+    'dashboard.status_cancelled_badge',
+    'partie.ralliement_soiree_status_cancelled_label',
     // Story 42.1 : annuler une conjonction — le mot « Annulée », la question et l’avertissement de la
     // confirmation sont verbatim du contrat d’UI ; le bouton, le constat et le repli d’erreur ont une voix
     'partie.ralliement_event_badge_cancelled',

@@ -304,3 +304,62 @@
 .tile__banner {
   position: relative;
 }
+
+// Story 42.2 (UX-DR16) : carte et ligne d'une rencontre annulée — contenu estompé, trait diagonal rouge
+// semi-transparent, filet rouge. Le mot « Annulée » (.status-indicator--cancelled, ou la sous-ligne en mode
+// liste) porte le sens : le trait ne le porte JAMAIS seul. La carte reste cliquable (`pointer-events: none`).
+.tile--cancelled {
+  position: relative;
+  border-left: 3px solid var(--color-unavailable, #e74c3c);
+
+  .tile__banner,
+  .tile__vignette,
+  mat-card-title,
+  .signal-badges {
+    opacity: 0.5;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      to top right,
+      transparent calc(50% - 1px),
+      color-mix(in srgb, var(--color-unavailable, #e74c3c) 60%, transparent) calc(50% - 1px),
+      color-mix(in srgb, var(--color-unavailable, #e74c3c) 60%, transparent) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    );
+  }
+}
+.status-indicator--cancelled {
+  color: var(--color-cancelled-text, #f26a5c);
+  font-weight: 600;
+}
+.row--cancelled {
+  position: relative;
+  border-left: 3px solid var(--color-unavailable, #e74c3c);
+
+  .row__vignette,
+  .row__name {
+    opacity: 0.5;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      to top right,
+      transparent calc(50% - 1px),
+      color-mix(in srgb, var(--color-unavailable, #e74c3c) 60%, transparent) calc(50% - 1px),
+      color-mix(in srgb, var(--color-unavailable, #e74c3c) 60%, transparent) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    );
+  }
+}
+.row__dot--cancelled {
+  background: var(--color-unavailable, #e74c3c);
+}

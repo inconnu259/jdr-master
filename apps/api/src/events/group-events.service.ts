@@ -21,6 +21,7 @@ import {
 } from '../poll/poll.service';
 import { PARTIE_SIGNALS_PORT, type PartieSignalsPort } from '../poll/ports/partie-signals.port';
 import { parseDayKey, todayKeyUtc } from './day-key';
+import { InvitationCleanupService } from '../invitations/invitation-cleanup.service';
 import { EventCancellationMailer } from './event-cancellation-mailer.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { EventsService, POLL_MODE_MESSAGE, type EventSeanceInput } from './events.service';
@@ -70,6 +71,8 @@ export class GroupEventsService {
     private readonly polls: PollService,
     // Story 42.3 : l'e-mail n° 7 est envoyé par un service partagé avec le départ d'un hôte.
     private readonly cancellationMailer: EventCancellationMailer,
+    // Story 42.2 : l'annulation d'une soirée isolée révoque ses invitations en attente et ses liens.
+    private readonly invitationCleanup: InvitationCleanupService,
   ) {}
 
   /**
@@ -150,24 +153,28 @@ export class GroupEventsService {
   /**
    * Story 42.1 : l'hôte de la conjonction, ou un administrateur du groupe, l'annule DÉFINITIVEMENT. Le droit
    * est décidé par `PermissionService` (`EVENT_CANCEL`, cible `{ eventId }`) ; la partie est celle de
-   * l'événement, jamais celle de la route (404 sinon). La rencontre isolée est refusée (403) : son
-   * annulation relève de la Story 42.2. L'écriture (verrous, sondage fermé, prochaine date) est dans
+   * l'événement, jamais celle de la route (404 sinon). La rencontre isolée (Story 42.2) s'annule aussi : son
+   * événement unique, ses invitations et ses liens sont révoqués dans la même transaction. L'écriture (verrous, sondage fermé, prochaine date) est dans
    * `EventsService.cancelHosted` ; ensuite, APRÈS validation, la liste d'accueil des membres est prévenue
    * puis l'e-mail n° 7 part (échec journalisé, jamais remonté). Renvoie la carte à jour.
    */
   async cancel(partieId: string, eventId: string, userId: string): Promise<EventCardDto> {
     const grant = await this.permissions.assert(userId, 'EVENT_CANCEL', { eventId });
     if (grant.partieId !== partieId) throw new NotFoundException('Conjonction introuvable');
-    if (grant.partie.kind !== 'CAMPAGNE_EPISODIQUE') {
-      throw new ForbiddenException(RALLIEMENT_UNAVAILABLE_MESSAGE);
-    }
+    // Story 42.2 : la soirée isolée (`ONE_SHOT`) s'annule aussi, par la même procédure ; terminée, close ou déjà
+    // annulée, elle est figée (400).
+    const isolated = grant.partie.kind === 'ONE_SHOT';
+    if (isolated) await this.events.assertIsolatedOpen(grant.partie);
 
-    await this.events.cancelHosted(grant, eventId, (tx, pollId) =>
-      this.polls.closeInTx(tx, pollId),
+    const extras = await this.events.cancelHosted(
+      grant,
+      eventId,
+      (tx, pollId) => this.polls.closeInTx(tx, pollId),
+      isolated ? (tx) => this.invitationCleanup.revokePendingInTx(tx, grant.partieId) : undefined,
     );
     // Après validation et après `partie:{id}` (émis par `EventsService.cancelHosted`) ; ne lève jamais.
     await this.partieSignals.notifyChanged(grant.partieId);
-    await this.cancellationMailer.send(grant.partieId, eventId, userId);
+    await this.cancellationMailer.send(grant.partieId, eventId, userId, extras.emails);
 
     const [card] = await this.events.listCards(grant, userId, [eventId]);
     return card;

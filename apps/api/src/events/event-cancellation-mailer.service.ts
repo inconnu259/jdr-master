@@ -23,17 +23,33 @@ export class EventCancellationMailer {
   ) {}
 
   /** Prévient les inscrits (confirmés ET places réservées) de la conjonction `eventId`, plus son hôte quand
-   *  c'est un autre qui annule ; jamais `actorId`, qui annule ou qui part. */
-  async send(partieId: string, eventId: string, actorId: string): Promise<void> {
+   *  c'est un autre qui annule — ou, pour une soirée isolée, ses membres plus `extraEmails` (invités sans
+   *  réponse) ; jamais `actorId`, qui annule ou qui part. */
+  async send(
+    partieId: string,
+    eventId: string,
+    actorId: string,
+    extraEmails: string[] = [],
+  ): Promise<void> {
     try {
       const notice = await this.events.cancellationNotice(eventId, actorId);
-      if (!notice || notice.recipients.length === 0) return;
+      if (!notice) return;
+      // Story 42.2 : les invités nominatifs sans réponse d'une soirée annulée s'ajoutent aux membres ; une
+      // adresse n'est écrite qu'une fois.
+      const seen = new Set<string>();
+      const addresses: string[] = [];
+      for (const address of [...notice.recipients.map((r) => r.email), ...extraEmails]) {
+        if (seen.has(address.toLowerCase())) continue;
+        seen.add(address.toLowerCase());
+        addresses.push(address);
+      }
+      if (addresses.length === 0) return;
       const link = `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${partieId}`;
       const sessionDate = notice.startDate
         ? formatSessionDate(notice.startDate, notice.startSlot)
         : null;
-      for (const recipient of notice.recipients) {
-        const result = await this.email.sendMail('conjonction-annulee', recipient.email, {
+      for (const address of addresses) {
+        const result = await this.email.sendMail('conjonction-annulee', address, {
           actorName: notice.actorName,
           eventTitle: notice.eventTitle,
           sessionDate,

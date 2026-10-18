@@ -57,6 +57,7 @@ export class PartySignalsService {
       seancesOfMjParties,
       openPolls,
       reservedRows,
+      cancelledRows,
     ] = await Promise.all([
       this.prisma.character.findMany({
         where: { userId, partieId: { in: playerPartieIds } },
@@ -133,6 +134,19 @@ export class PartySignalsService {
         },
         select: { seance: { select: { event: { select: { partieId: true } } } } },
       }),
+      // PARTIE_ANNULEE (Story 42.2) : les rencontres isolées de l'utilisateur dont l'événement unique est
+      // annulé — UNE lecture groupée, jamais une par partie. Le statut vient de `listForUser` ci-dessous.
+      this.prisma.event.findMany({
+        where: {
+          cancelledAt: { not: null },
+          partie: {
+            kind: 'ONE_SHOT',
+            // Le créateur d'une rencontre isolée y a toujours son adhésion (il ne peut pas la quitter).
+            memberships: { some: { userId } },
+          },
+        },
+        select: { partieId: true },
+      }),
     ]);
 
     const characterPartieIds = new Set(charactersOwned.map((c) => c.partieId));
@@ -177,6 +191,9 @@ export class PartySignalsService {
       // sont MJ-only (garde explicite, revue de code) : `partiesMissingCompteRendu`/
       // `partiesMissingResume` ne sont dérivés que sur `mjPartieIds`, mais le rester même si ces
       // requêtes étaient un jour élargies à toutes les parties.
+      // Story 42.2 : une rencontre isolée annulée ne porte que ce signal, aucun signal d'action.
+      if (partie.status === 'ANNULEE') return ['PARTIE_ANNULEE'];
+
       if (partie.status === 'TERMINEE') {
         if (role === 'mj' && partiesMissingCompteRendu.has(partie.id))
           signals.push('COMPTE_RENDU_NON_REDIGE');
@@ -236,9 +253,17 @@ export class PartySignalsService {
     // groupe vient de `listForUser` (une seule lecture, seulement s'il y a une réservation) ; un
     // groupe terminé ne porte plus de signal d'action (AC5 de la Story 29.7).
     const reservedPartieIds = new Set(reservedRows.map((r) => r.seance.event.partieId));
-    if (reservedPartieIds.size > 0) {
+    const cancelledPartieIds = new Set(cancelledRows.map((r) => r.partieId));
+    if (reservedPartieIds.size > 0 || cancelledPartieIds.size > 0) {
       const mine = await this.parties.listForUser(userId);
       for (const p of mine) {
+        // Story 42.2 : une rencontre isolée annulée ne porte que ce signal, pour tous ses membres.
+        if (p.status === 'ANNULEE') {
+          if (cancelledPartieIds.has(p.id)) {
+            result[p.id] = { role: 'player', status: p.status, signals: ['PARTIE_ANNULEE'] };
+          }
+          continue;
+        }
         if (!reservedPartieIds.has(p.id) || p.status === 'TERMINEE') continue;
         result[p.id] = { role: 'player', status: p.status, signals: ['RESERVATION_A_CONFIRMER'] };
       }
