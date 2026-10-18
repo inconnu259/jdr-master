@@ -9,6 +9,11 @@
             {{ invitationSystemLabel(inv) }} · {{ invitedByLabel(inv.inviterPseudo) }}
           </mat-card-subtitle>
         </mat-card-header>
+        @if (pendingInvitationChip(inv); as chip) {
+          <mat-card-content class="invitation-chip">
+            <app-status-badge [state]="chip" />
+          </mat-card-content>
+        }
         <mat-card-actions>
           <button mat-flat-button (click)="accept(inv)"><mat-icon>check</mat-icon> {{ theme.tone()['common.accepter'] }}</button>
           <button mat-button (click)="decline(inv)"><mat-icon>close</mat-icon> {{ theme.tone()['common.refuser'] }}</button>

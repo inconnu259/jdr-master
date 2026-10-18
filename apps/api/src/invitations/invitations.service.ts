@@ -2,11 +2,14 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type { InvitationDto } from '@master-jdr/shared';
 import { familyOf } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { EventsService } from '../events/events.service';
+import { formatSessionDate } from '../events/session-date';
 import { PartiesService } from '../parties/parties.service';
 import { PermissionService } from '../permissions/permission.service';
 import { InviteLinksService } from './invite-links.service';
@@ -15,6 +18,8 @@ import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realt
 
 @Injectable()
 export class InvitationsService {
+  private readonly logger = new Logger(InvitationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     // Signaux de la partie (`notifyPartieSignalsChanged`) : écriture de `parties/`,
@@ -24,6 +29,8 @@ export class InvitationsService {
     private readonly inviteLinks: InviteLinksService,
     private readonly email: EmailService,
     private readonly realtimeEvents: RealtimeEventsService,
+    // Story 41.3 : de quoi écrire l'e-mail d'invitation à une soirée isolée (lecture seule).
+    private readonly events: EventsService,
   ) {}
 
   /** Le MJ (JDR) ou l'administrateur (ralliement) invite un utilisateur déjà inscrit. Idempotent :
@@ -56,7 +63,61 @@ export class InvitationsService {
       update: { status: 'PENDING', inviterId, respondedAt: null },
     });
     this.realtimeEvents.emit(userTopic(inviteeUserId));
+    // Story 41.3 : l'invité d'une soirée isolée en est prévenu par e-mail (jamais bloquant) ; les autres
+    // invitations par pseudo gardent leur comportement (aucun e-mail).
+    if (partie.kind === 'ONE_SHOT' && familyOf(partie.gameSystemId) === 'ralliement') {
+      await this.sendSoireeInvitation(
+        partie,
+        inviterId,
+        invitee.email,
+        `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/`,
+      );
+    }
     return invitation;
+  }
+
+  /**
+   * Story 41.3 : e-mail n° 2 « *Marc* vous invite : « *Soirée* » » — titre, date (fixée, « à voter jusqu'au … »
+   * ou « à fixer »), lieu, bouton « Accepter ou décliner ». Envoyé APRÈS l'écriture ; un échec est journalisé
+   * et n'annule jamais l'invitation. Renvoie le résultat de l'envoi.
+   */
+  private async sendSoireeInvitation(
+    partie: { id: string; name: string },
+    inviterId: string,
+    to: string,
+    link: string,
+  ): Promise<{ ok: boolean }> {
+    try {
+      const [inviter, notice] = await Promise.all([
+        this.prisma.user.findUnique({
+          where: { id: inviterId },
+          select: { displayName: true, pseudo: true },
+        }),
+        this.events.invitationNotice(partie.id),
+      ]);
+      let dateLine = 'date à fixer';
+      if (notice?.startDate) dateLine = formatSessionDate(notice.startDate, notice.startSlot);
+      else if (notice?.deadline) {
+        dateLine = `date à voter jusqu'au ${formatSessionDate(notice.deadline, null)}`;
+      }
+      const result = await this.email.sendMail('soiree-invitation', to, {
+        inviterName: inviter?.displayName || inviter?.pseudo || 'Un ami',
+        eventTitle: notice?.eventTitle ?? partie.name,
+        dateLine,
+        lieu: notice?.lieu ?? null,
+        link,
+      });
+      if (!result.ok) {
+        this.logger.error(`Échec d'envoi de l'invitation à la soirée ${partie.id}`);
+      }
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Échec de l'invitation par e-mail à la soirée ${partie.id}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      return { ok: false };
+    }
   }
 
   /** Invitations émises pour une partie (vue MJ). */
@@ -160,14 +221,20 @@ export class InvitationsService {
     const origin = process.env.WEB_ORIGIN ?? 'http://localhost:4200';
     const user = await this.prisma.user.findUnique({ where: { email } });
 
+    const isSoiree = partie.kind === 'ONE_SHOT' && familyOf(partie.gameSystemId) === 'ralliement';
     let link: string;
     if (user) {
+      // Story 41.3 : pour une soirée, `invite()` envoie lui-même l'e-mail n° 2 (une seule fois).
       await this.invite(partieId, inviterId, user.id);
+      if (isSoiree) return { ok: true };
       link = `${origin}/`;
     } else {
       const inviteLink = await this.inviteLinks.findOrCreateForEmail(partieId, inviterId, email);
       link = `${origin}/join/${inviteLink.token}`;
     }
+
+    // Story 41.3 : adresse inconnue — le lien d'invitation à usage unique porte l'e-mail n° 2.
+    if (isSoiree) return this.sendSoireeInvitation(partie, inviterId, email, link);
 
     if (familyOf(partie.gameSystemId) === 'ralliement') {
       // Story 39.3 : e-mail neutre, au nom de l'invitant (l'invité peut ne pas avoir de compte).

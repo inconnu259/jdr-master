@@ -86,6 +86,8 @@ function makePrisma() {
       findMany: jest.fn().mockResolvedValue([]),
       // Story 40.4 : de quoi écrire l'e-mail d'une place réservée.
       findUnique: jest.fn(),
+      // Story 41.3 : de quoi écrire l'e-mail d'invitation à une soirée.
+      findFirst: jest.fn(),
     },
     user: { findMany: jest.fn().mockResolvedValue([]) },
     seance: {
@@ -2923,6 +2925,62 @@ describe('EventsService (Story 37.3)', () => {
         await expect(service.eventIdOfPoll('poll-1', 'autre')).resolves.toBeNull();
         prisma.seance.findUnique.mockResolvedValue(null);
         await expect(service.eventIdOfPoll('poll-1', 'p1')).resolves.toBeNull();
+      });
+    });
+
+    describe('invitationNotice() — Story 41.3', () => {
+      const event = (seance: Record<string, unknown> | null) => ({
+        title: 'Soirée',
+        seances: seance ? [seance] : [],
+      });
+
+      it('événement sans date ni sondage : titre seul', async () => {
+        prisma.event.findFirst.mockResolvedValue(
+          event({ startDate: null, startSlot: null, lieu: null, poll: null }),
+        );
+        await expect(service.invitationNotice('p1')).resolves.toEqual({
+          eventTitle: 'Soirée',
+          startDate: null,
+          startSlot: null,
+          deadline: null,
+          lieu: null,
+        });
+      });
+
+      it('date fixée : jour, créneau, lieu ; sondage ouvert : échéance du vote ; sondage clos : aucune échéance', async () => {
+        const day = new Date('2026-11-14T00:00:00.000Z');
+        prisma.event.findFirst.mockResolvedValue(
+          event({ startDate: day, startSlot: 'EVENING', lieu: 'Chez Léa', poll: null }),
+        );
+        await expect(service.invitationNotice('p1')).resolves.toEqual(
+          objectLike({ startDate: day, startSlot: 'EVENING', deadline: null, lieu: 'Chez Léa' }),
+        );
+
+        const deadline = new Date('2026-10-25T23:59:59.999Z');
+        prisma.event.findFirst.mockResolvedValue(
+          event({
+            startDate: null,
+            startSlot: null,
+            lieu: null,
+            poll: { status: 'OPEN', expiresAt: deadline },
+          }),
+        );
+        await expect(service.invitationNotice('p1')).resolves.toEqual(objectLike({ deadline }));
+
+        prisma.event.findFirst.mockResolvedValue(
+          event({
+            startDate: null,
+            startSlot: null,
+            lieu: null,
+            poll: { status: 'CLOSED', expiresAt: deadline },
+          }),
+        );
+        await expect(service.invitationNotice('p1')).resolves.toEqual(objectLike({ deadline: null }));
+      });
+
+      it('partie sans événement : null', async () => {
+        prisma.event.findFirst.mockResolvedValue(null);
+        await expect(service.invitationNotice('p1')).resolves.toBeNull();
       });
     });
 

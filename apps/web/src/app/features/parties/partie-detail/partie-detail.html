@@ -471,6 +471,15 @@
                   }
                 </div>
               }
+              @if (isSoiree() && canInviteMembers()) {
+                <!-- Story 41.3 : l'hôte d'une soirée invite (pseudo, e-mail, lien) sans limite ; sa liste
+                     d'invités (les membres autres que lui) est vide tant qu'il n'a eu aucune réponse. -->
+                @if (otherMembers().length === 0) {
+                  <p class="muted soiree-guests-empty">
+                    {{ theme.tone()['partie.ralliement_soiree_guests_empty'] }}
+                  </p>
+                }
+              }
               @if (canInviteMembers()) {
                 <ng-container [ngTemplateOutlet]="inviteTools" />
               }
@@ -538,7 +547,7 @@
          AUCUN EFFET en theming M3 (documenté par Angular Material, « supported in M2 themes only »)
          -- la teinte destructrice passe donc par la classe icon-bar__btn--danger, qui référence
          --mat-sys-error directement (cf. partie-detail.scss). -->
-    @if (isGroup() && notice()) {
+    @if (isRalliement() && notice()) {
       <!-- Story 39.4 : l'avis d'un groupe (invitation envoyée, refus de « Quitter l'office » ou, Story
            39.5, de « Quitter le groupe » lancé depuis le pied de page…) reste visible quel que soit
            l'onglet ouvert. -->

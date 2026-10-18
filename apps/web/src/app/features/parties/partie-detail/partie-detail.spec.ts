@@ -3522,10 +3522,9 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
     expect(member.el.querySelector('.icon-bar button')).toBeNull();
   });
 
-  it.each([
-    ['admin', MJ_ID, 'admin'],
-    ['membre', OTHER_ID, 'member'],
-  ] as const)(
+  // Story 41.3 : l'hôte (administrateur) d'une soirée a des outils d'invitation (describe dédié) ; seul un invité
+  // lit la liste sans aucune gestion.
+  it.each([['membre', OTHER_ID, 'member']] as const)(
     '%s : Missives liste chaque membre une fois (créateur compris), sans aucune gestion',
     async (_nom, userId, role) => {
       const { fixture, el } = await createFixture(ralliement({ role }), userId, {
@@ -3597,8 +3596,9 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
     },
   );
 
-  it('ni lien d’invitation chargé, ni recherche : la gestion des membres n’existe pas', async () => {
-    await createFixture(ralliement(), MJ_ID, { members });
+  it('ni lien d’invitation chargé, ni recherche : un invité n’a aucune gestion des membres', async () => {
+    // Story 41.3 : l'hôte (administrateur) d'une soirée invite ; seul un invité n'a aucune gestion.
+    await createFixture(ralliement({ role: 'member' }), OTHER_ID, { members });
     const partiesSvc = TestBed.inject(PartiesService) as unknown as {
       inviteLinks: ReturnType<typeof vi.fn>;
       searchUsers: ReturnType<typeof vi.fn>;
@@ -4027,15 +4027,25 @@ describe('PartieDetail — Missives d’un groupe : invitation et retrait (Story
     expect(services().inviteLinks).not.toHaveBeenCalled();
   });
 
-  it('une rencontre isolée n’a pas d’interface d’invitation, même pour son admin', async () => {
-    const { fixture, el } = await createFixture(groupe({ kind: 'ONE_SHOT' }), MJ_ID, {
+  it('une rencontre isolée : l’hôte a l’interface d’invitation (Story 41.3), un invité n’en a aucune', async () => {
+    const host = await createFixture(groupe({ kind: 'ONE_SHOT' }), MJ_ID, {
       members,
       noopAnimations: true,
     });
-    el.querySelectorAll<HTMLElement>('div[role="tab"]')[1].click();
-    fixture.detectChanges();
-    expect(panel(el).querySelector('button')).toBeNull();
-    expect(panel(el).querySelector('input')).toBeNull();
+    host.el.querySelectorAll<HTMLElement>('div[role="tab"]')[1].click();
+    host.fixture.detectChanges();
+    expect(panel(host.el).querySelector('input')).not.toBeNull();
+    expect(services().inviteLinks).toHaveBeenCalled();
+    TestBed.resetTestingModule();
+
+    const guest = await createFixture(groupe({ kind: 'ONE_SHOT', role: 'member' }), OTHER_ID, {
+      members,
+      noopAnimations: true,
+    });
+    guest.el.querySelectorAll<HTMLElement>('div[role="tab"]')[1].click();
+    guest.fixture.detectChanges();
+    expect(panel(guest.el).querySelector('button')).toBeNull();
+    expect(panel(guest.el).querySelector('input')).toBeNull();
     expect(services().inviteLinks).not.toHaveBeenCalled();
   });
 
@@ -4231,7 +4241,10 @@ describe('PartieDetail — admins d’un groupe : nommer et quitter l’office (
     el.querySelectorAll<HTMLElement>('div[role="tab"]')[1].click();
     fixture.detectChanges();
     expect(el.querySelector('.ralliement-members .admin-badge')).toBeNull();
-    expect(el.querySelector('.ralliement-members button')).toBeNull();
+    // Story 41.3 : l'hôte invite et retire, mais ne nomme ni ne quitte l'office (un seul administrateur).
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(el.textContent).not.toContain(tone['partie.ralliement_appoint_btn']);
+    expect(el.textContent).not.toContain(tone['partie.ralliement_step_down_btn']);
   });
 
   it('nommer : confirmation « Nommer … » puis appel ADMIN, liste rechargée', async () => {
@@ -6552,6 +6565,68 @@ describe('PartieDetail — une soirée isolée sur une seule page (Story 41.1)',
     tabs(el)[1].click();
     fixture.detectChanges();
     expect(NON_JDR_BANNED_WORDS.test(el.textContent ?? '')).toBe(false);
+  });
+
+  describe('l’hôte invite (Story 41.3)', () => {
+    const clickSecondTab = (el: HTMLElement, fixture: ComponentFixture<PartieDetail>) => {
+      tabs(el)[1].click();
+      fixture.detectChanges();
+    };
+
+    it('onglet Invitations de l’hôte : invités (membres autres que lui) avec « Retirer », outils d’invitation, aucune action de groupe', async () => {
+      const { fixture, el } = await createFixture(soiree(), MJ_ID, {
+        members,
+        events: [event()],
+        noopAnimations: true,
+      });
+      await settle(fixture);
+      clickSecondTab(el, fixture);
+
+      const rows = Array.from(el.querySelectorAll('.ralliement-members .result-row')).map((r) =>
+        (r.textContent ?? '').replace(/\s+/g, ' ').trim(),
+      );
+      expect(rows[0]).toContain('Créateur');
+      expect(rows[1]).toContain('Invité Deux');
+      const tone = TONE_MAP['grimoire-emeraude'];
+      // « Retirer » sur l'invité seulement ; ni « Nommer admin », ni « Quitter l'office », ni badge.
+      const removeButtons = Array.from(
+        el.querySelectorAll('.ralliement-members .result-row button'),
+      ).filter((b) => (b.textContent ?? '').includes(tone['partie.remove_member_btn']));
+      expect(removeButtons).toHaveLength(1);
+      expect(el.querySelector('.admin-badge')).toBeNull();
+      expect(el.textContent).not.toContain(tone['partie.ralliement_appoint_btn']);
+      expect(el.textContent).not.toContain(tone['partie.ralliement_step_down_btn']);
+      // Outils : recherche par pseudo, e-mail, lien.
+      expect(el.querySelector('.ralliement-members input')).not.toBeNull();
+      expect(el.querySelector('.ralliement-members .search-row')).not.toBeNull();
+      expect(el.querySelector('.soiree-guests-empty')).toBeNull();
+    });
+
+    it('sans invité : « Aucun invité pour l’instant » ; un invité n’a ni outils, ni « Retirer »', async () => {
+      const alone: PartieMemberDto[] = [members[0]];
+      const host = await createFixture(soiree(), MJ_ID, {
+        members: alone,
+        events: [event()],
+        noopAnimations: true,
+      });
+      await settle(host.fixture);
+      clickSecondTab(host.el, host.fixture);
+      expect(host.el.querySelector('.soiree-guests-empty')?.textContent?.trim()).toBe(
+        TONE_MAP['grimoire-emeraude']['partie.ralliement_soiree_guests_empty'],
+      );
+      TestBed.resetTestingModule();
+
+      const guest = await createFixture(soiree({ role: 'member' }), OTHER_ID, {
+        members,
+        events: [event()],
+        noopAnimations: true,
+      });
+      await settle(guest.fixture);
+      clickSecondTab(guest.el, guest.fixture);
+      expect(guest.el.querySelector('.ralliement-members input')).toBeNull();
+      expect(guest.el.querySelector('.ralliement-members button')).toBeNull();
+      expect(guest.el.querySelector('.soiree-guests-empty')).toBeNull();
+    });
   });
 
   it('témoins : un groupe garde ses Conjonctions, une quête garde ses onglets', async () => {

@@ -4766,3 +4766,176 @@ describe('Ralliement — poser la rencontre d’une soirée isolée (Story 41.2)
     expect(await h.prisma.event.count({ where: { partieId: soireeId } })).toBe(1);
   });
 });
+
+// ─── Inviter à une soirée isolée, accepter ou décliner (Story 41.3) ───────────────────────
+//
+// L'invitation est l'`Invitation` existante au niveau de la partie (sans limite), répondue depuis la liste
+// d'accueil. L'e-mail n° 2 prévient l'invité ; accepter crée le `Membership`, qui fait de lui un votant.
+describe('Ralliement — inviter à une soirée isolée (Story 41.3)', () => {
+  let h: Harness;
+  let host: TestUser;
+  let guest: TestUser;
+  let stranger: TestUser;
+  let soireeId: string;
+  let eventId: string;
+
+  type PollCard = { poll: { id: string; options: { id: string }[] } | null };
+  type InvitationLike = { id: string; partie: { id: string } };
+
+  const MAIL = 'soiree-invitation';
+  const invite = (who: TestUser, userId: string, partieId = soireeId) =>
+    who.agent.post(`/parties/${partieId}/invitations`).send({ inviteeUserId: userId });
+  const received = async (who: TestUser) =>
+    body<InvitationLike[]>(await who.agent.get('/invitations').expect(200));
+  const mailsTo = (to: string) => h.email.calls.filter((c) => c.to === to && c.template === MAIL);
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [host, guest, stranger] = await Promise.all([
+      h.createUser('inv-soiree-hote'),
+      h.createUser('inv-soiree-invite'),
+      h.createUser('inv-soiree-etranger'),
+    ]);
+    ({ id: soireeId } = await h.createPartie(host, 'ONE_SHOT', 'invitations', 'ralliement'));
+    eventId = (await h.prisma.event.findFirstOrThrow({ where: { partieId: soireeId } })).id;
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it('par pseudo : invitation en attente, e-mail n° 2 (titre, date à fixer), l’invité la voit dans ses invitations reçues', async () => {
+    await invite(host, guest.id).expect(201);
+
+    const sent = mailsTo(guest.email);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].data).toMatchObject({
+      inviterName: host.displayName,
+      dateLine: 'date à fixer',
+    });
+    expect(String(sent[0].data.eventTitle)).toBeTruthy();
+    expect((await received(guest)).map((i) => i.partie.id)).toEqual([soireeId]);
+    // L'invité n'a toujours aucun accès à la soirée avant d'accepter.
+    await guest.agent.get(`/parties/${soireeId}`).expect(403);
+    await guest.agent.get(`/parties/${soireeId}/events/list`).expect(403);
+  });
+
+  it('avant d’accepter, l’invité ne peut pas voter ; après avoir accepté il est membre, votant, et l’hôte le voit', async () => {
+    const date = new Date(Date.now() + 5 * 86_400_000).toISOString().substring(0, 10);
+    const later = new Date(Date.now() + 6 * 86_400_000).toISOString().substring(0, 10);
+    const deadline = new Date(Date.now() + 3 * 86_400_000).toISOString().substring(0, 10);
+    const card = body<PollCard>(
+      await host.agent
+        .patch(`/parties/${soireeId}/events/${eventId}`)
+        .send({
+          title: 'Soirée',
+          pollOptions: [
+            { date, slot: 'EVENING' },
+            { date: later, slot: 'MORNING' },
+          ],
+          pollDeadline: deadline,
+        })
+        .expect(200),
+    );
+    const vote = () =>
+      guest.agent
+        .post(`/parties/${soireeId}/poll/${card.poll!.id}/vote`)
+        .send({ optionId: card.poll!.options[0].id, answer: 'YES' });
+    expect((await vote()).status).toBe(403);
+
+    const [invitation] = await received(guest);
+    await guest.agent.post(`/invitations/${invitation.id}/accept`).expect(201);
+    expect(
+      await h.prisma.membership.count({ where: { partieId: soireeId, userId: guest.id } }),
+    ).toBe(1);
+    expect((await vote()).status).toBe(201);
+    const members = body<{ userId: string }[]>(
+      await host.agent.get(`/parties/${soireeId}/members`).expect(200),
+    );
+    expect(members.map((m) => m.userId)).toContain(guest.id);
+  });
+
+  it('retirer un invité accepté : son appartenance et ses votes ouverts disparaissent ; un invité ou un étranger ne retire personne', async () => {
+    const poll = await h.prisma.sessionPoll.findFirstOrThrow({ where: { partieId: soireeId } });
+    expect(await h.prisma.pollVote.count({ where: { pollId: poll.id, userId: guest.id } })).toBe(1);
+
+    await guest.agent.delete(`/parties/${soireeId}/members/${host.id}`).expect(403);
+    await stranger.agent.delete(`/parties/${soireeId}/members/${guest.id}`).expect(403);
+    expect(
+      await h.prisma.membership.count({ where: { partieId: soireeId, userId: guest.id } }),
+    ).toBe(1);
+
+    await host.agent.delete(`/parties/${soireeId}/members/${guest.id}`).expect(200);
+    expect(
+      await h.prisma.membership.count({ where: { partieId: soireeId, userId: guest.id } }),
+    ).toBe(0);
+    expect(await h.prisma.pollVote.count({ where: { pollId: poll.id, userId: guest.id } })).toBe(0);
+  });
+
+  it('refuser : l’invitation passe à DECLINED, aucune appartenance, plus de tuile dans la liste', async () => {
+    const decliner = await h.createUser('inv-soiree-refus');
+    await invite(host, decliner.id).expect(201);
+    const [invitation] = await received(decliner);
+    await decliner.agent.post(`/invitations/${invitation.id}/decline`).expect(201);
+
+    expect(await received(decliner)).toEqual([]);
+    expect(
+      await h.prisma.membership.count({ where: { partieId: soireeId, userId: decliner.id } }),
+    ).toBe(0);
+    // Un second refus (ou accepter après coup) est refusé.
+    await decliner.agent.post(`/invitations/${invitation.id}/accept`).expect(409);
+  });
+
+  it('seul l’hôte invite, liste, révoque et crée un lien : un invité, un membre et un étranger sont refusés (403)', async () => {
+    const member = await h.createUser('inv-soiree-membre');
+    await h.addMember(soireeId, member);
+    const target = await h.createUser('inv-soiree-cible');
+    for (const who of [member, stranger]) {
+      expect((await invite(who, target.id)).status).toBe(403);
+      await who.agent
+        .post(`/parties/${soireeId}/invitations/by-email`)
+        .send({ email: 'x@example.com' })
+        .expect(403);
+      await who.agent.get(`/parties/${soireeId}/invitations`).expect(403);
+      await who.agent.post(`/parties/${soireeId}/invite-links`).send({}).expect(403);
+    }
+    expect(await received(target)).toEqual([]);
+  });
+
+  it('par e-mail : adresse connue → invitation + un seul e-mail n° 2 ; adresse inconnue → lien d’invitation dans l’e-mail', async () => {
+    const known = await h.createUser('inv-soiree-connu');
+    await host.agent
+      .post(`/parties/${soireeId}/invitations/by-email`)
+      .send({ email: known.email })
+      .expect(201);
+    expect(mailsTo(known.email)).toHaveLength(1);
+    expect((await received(known)).map((i) => i.partie.id)).toEqual([soireeId]);
+
+    const unknown = 'inv-soiree-inconnu@example.com';
+    await host.agent
+      .post(`/parties/${soireeId}/invitations/by-email`)
+      .send({ email: unknown })
+      .expect(201);
+    const sent = mailsTo(unknown);
+    expect(sent).toHaveLength(1);
+    expect(String(sent[0].data.link)).toContain('/join/');
+  });
+
+  it('sans limite : douze invités de plus sont acceptés', async () => {
+    const guests = await Promise.all(
+      Array.from({ length: 12 }, (_, i) => h.createUser(`inv-soiree-nombre-${i}`)),
+    );
+    for (const g of guests) await invite(host, g.id).expect(201);
+    expect(
+      await h.prisma.invitation.count({ where: { partieId: soireeId, status: 'PENDING' } }),
+    ).toBeGreaterThanOrEqual(12);
+  });
+
+  it('un groupe ou une quête : l’invitation par pseudo n’envoie aucun e-mail (inchangé)', async () => {
+    const admin = await h.createUser('inv-soiree-admin-groupe');
+    const target = await h.createUser('inv-soiree-cible-groupe');
+    const { id } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'inv-groupe', 'ralliement');
+    await invite(admin, target.id, id).expect(201);
+    expect(h.email.calls.filter((c) => c.to === target.email)).toEqual([]);
+  });
+});

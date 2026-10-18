@@ -44,6 +44,24 @@ describe('EmailService', () => {
     );
   });
 
+  it('soiree-invitation : sujet « <invitant> vous invite : « <soirée> » » et bouton « Accepter ou décliner » (Story 41.3)', async () => {
+    const data = {
+      inviterName: 'Marc',
+      eventTitle: 'Marathon Pandémie',
+      dateLine: 'date à fixer',
+      link: 'https://example.com/',
+    };
+    await service.sendMail('soiree-invitation', 'ami@example.com', data);
+    expect(mailer.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'ami@example.com',
+        subject: '{{inviterName}} vous invite : « {{eventTitle}} »',
+        template: 'soiree-invitation',
+        context: { ...data, actionLabel: 'Accepter ou décliner' },
+      }),
+    );
+  });
+
   it('group-invitation : sujet neutre « <invitant> vous invite à rejoindre « <groupe> » » et bouton « Rejoindre le groupe » (Story 39.3)', async () => {
     await service.sendMail('group-invitation', 'ami@example.com', {
       inviterName: 'Marc',

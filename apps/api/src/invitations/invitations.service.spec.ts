@@ -11,6 +11,7 @@ import { PermissionService } from '../permissions/permission.service';
 import { testGrant } from '../common/test-utils/grant';
 import { InviteLinksService } from './invite-links.service';
 import { EmailService } from '../email/email.service';
+import type { EventsService } from '../events/events.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import { objectLike, stringLike } from '../common/test-utils/jest-typed';
 
@@ -32,6 +33,7 @@ describe('InvitationsService', () => {
   let inviteLinks: { findOrCreateForEmail: jest.Mock };
   let email: { sendMail: jest.Mock };
   let realtimeEvents: { emit: jest.Mock };
+  let events: { invitationNotice: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -63,6 +65,7 @@ describe('InvitationsService', () => {
     };
     email = { sendMail: jest.fn().mockResolvedValue({ ok: true }) };
     realtimeEvents = { emit: jest.fn() };
+    events = { invitationNotice: jest.fn().mockResolvedValue(null) };
     service = new InvitationsService(
       prisma as unknown as PrismaService,
       parties as unknown as PartiesService,
@@ -70,7 +73,151 @@ describe('InvitationsService', () => {
       inviteLinks as unknown as InviteLinksService,
       email as unknown as EmailService,
       realtimeEvents as unknown as RealtimeEventsService,
+      events as unknown as EventsService,
     );
+  });
+
+  describe('soirée isolée (ONE_SHOT, Story 41.3) — e-mail n° 2', () => {
+    const SOIREE = {
+      id: 's1',
+      ownerId: 'host',
+      name: 'Marathon',
+      kind: 'ONE_SHOT',
+      gameSystemId: 'ralliement',
+    };
+    beforeEach(() => {
+      permissions.assert.mockResolvedValue(testGrant(SOIREE, 'admin'));
+    });
+    const users = (known: boolean) =>
+      prisma.user.findUnique.mockImplementation(
+        ({ where }: { where: { email?: string; id?: string } }) => {
+          if (where.email) return Promise.resolve(known ? { id: 'u1', email: where.email } : null);
+          if (where.id === 'host') return Promise.resolve({ displayName: 'Marc', pseudo: 'marc' });
+          return Promise.resolve({ id: 'u1', email: 'u1@example.com' });
+        },
+      );
+
+    it('invite par pseudo : e-mail « soiree-invitation » à l’invité, titre, date à fixer, bouton vers l’accueil', async () => {
+      users(true);
+      prisma.membership.findUnique.mockResolvedValue(null);
+      prisma.invitation.upsert.mockResolvedValue({ id: 'inv1' });
+      events.invitationNotice.mockResolvedValue({
+        eventTitle: 'Marathon Pandémie',
+        startDate: null,
+        startSlot: null,
+        deadline: null,
+        lieu: null,
+      });
+
+      await service.invite('s1', 'host', 'u1');
+
+      expect(email.sendMail).toHaveBeenCalledTimes(1);
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'soiree-invitation',
+        'u1@example.com',
+        objectLike({
+          inviterName: 'Marc',
+          eventTitle: 'Marathon Pandémie',
+          dateLine: 'date à fixer',
+          lieu: null,
+          link: stringLike('/'),
+        }),
+      );
+    });
+
+    it('la ligne de date : date fixée écrite, ou « date à voter jusqu’au … » pour un sondage ouvert', async () => {
+      users(true);
+      prisma.membership.findUnique.mockResolvedValue(null);
+      prisma.invitation.upsert.mockResolvedValue({ id: 'inv1' });
+
+      events.invitationNotice.mockResolvedValue({
+        eventTitle: 'Soirée',
+        startDate: new Date('2026-11-14T00:00:00.000Z'),
+        startSlot: 'EVENING',
+        deadline: null,
+        lieu: 'Chez Léa',
+      });
+      await service.invite('s1', 'host', 'u1');
+      expect(email.sendMail).toHaveBeenLastCalledWith(
+        'soiree-invitation',
+        'u1@example.com',
+        objectLike({ dateLine: 'samedi 14 novembre (soir)', lieu: 'Chez Léa' }),
+      );
+
+      events.invitationNotice.mockResolvedValue({
+        eventTitle: 'Soirée',
+        startDate: null,
+        startSlot: null,
+        deadline: new Date('2026-10-25T23:59:59.999Z'),
+        lieu: null,
+      });
+      await service.invite('s1', 'host', 'u1');
+      expect(email.sendMail).toHaveBeenLastCalledWith(
+        'soiree-invitation',
+        'u1@example.com',
+        objectLike({ dateLine: "date à voter jusqu'au dimanche 25 octobre" }),
+      );
+    });
+
+    it('invite par e-mail, compte connu : un seul e-mail (celui de l’invitation), pas le gabarit de groupe', async () => {
+      users(true);
+      prisma.membership.findUnique.mockResolvedValue(null);
+      prisma.invitation.upsert.mockResolvedValue({ id: 'inv1' });
+
+      const result = await service.inviteByEmail('s1', 'host', 'Ami@Example.com');
+
+      expect(result).toEqual({ ok: true });
+      expect(email.sendMail).toHaveBeenCalledTimes(1);
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'soiree-invitation',
+        'u1@example.com',
+        expect.anything(),
+      );
+    });
+
+    it('invite par e-mail, adresse inconnue : lien d’invitation à usage unique dans l’e-mail n° 2', async () => {
+      users(false);
+
+      const result = await service.inviteByEmail('s1', 'host', 'ami@example.com');
+
+      expect(result).toEqual({ ok: true });
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'soiree-invitation',
+        'ami@example.com',
+        objectLike({ inviterName: 'Marc', link: stringLike('/join/tok123') }),
+      );
+    });
+
+    it('un échec d’envoi ne fait pas échouer l’invitation par pseudo (journalisé)', async () => {
+      users(true);
+      prisma.membership.findUnique.mockResolvedValue(null);
+      prisma.invitation.upsert.mockResolvedValue({ id: 'inv1' });
+      email.sendMail.mockResolvedValue({ ok: false });
+
+      await expect(service.invite('s1', 'host', 'u1')).resolves.toEqual({ id: 'inv1' });
+    });
+
+    it('un groupe ou une quête : aucun e-mail pour une invitation par pseudo, gabarit de groupe inchangé', async () => {
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'g1',
+            ownerId: 'admin1',
+            name: 'Groupe',
+            kind: 'CAMPAGNE_EPISODIQUE',
+            gameSystemId: 'ralliement',
+          },
+          'admin',
+        ),
+      );
+      users(true);
+      prisma.membership.findUnique.mockResolvedValue(null);
+      prisma.invitation.upsert.mockResolvedValue({ id: 'inv1' });
+
+      await service.invite('g1', 'admin1', 'u1');
+
+      expect(email.sendMail).not.toHaveBeenCalled();
+    });
   });
 
   it('invite : refuse de s’inviter soi-même', async () => {

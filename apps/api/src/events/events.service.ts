@@ -107,6 +107,17 @@ export interface NextSession {
   nextSessionSlot: DaySlot | null;
 }
 
+/** De quoi écrire l'e-mail d'invitation à une soirée isolée (Story 41.3), lu au moment de l'invitation :
+ *  titre de son événement unique, date fixée ou échéance du vote, lieu. */
+export interface InvitationNotice {
+  eventTitle: string;
+  startDate: Date | null;
+  startSlot: DaySlot | null;
+  /** Échéance du vote (sondage ouvert, séance sans date), sinon `null`. */
+  deadline: Date | null;
+  lieu: string | null;
+}
+
 /** Refus de modifier une conjonction dont le jour est passé (Story 40.2). */
 export const PAST_EVENT_MESSAGE = 'Cette conjonction est passée : elle ne peut plus être modifiée';
 
@@ -1364,6 +1375,41 @@ export class EventsService
       startSlot: seance?.startSlot ?? null,
       lieu: seance?.lieu ?? null,
       recipients: users,
+    };
+  }
+
+  /**
+   * Story 41.3 : de quoi écrire l'e-mail d'invitation à une soirée isolée — son événement unique (le
+   * premier de la partie), sa date ou l'échéance de son vote, son lieu. Lecture seule : l'invitation ne
+   * lit jamais les tables d'événements elle-même. `null` si la partie n'a aucun événement.
+   */
+  async invitationNotice(partieId: string): Promise<InvitationNotice | null> {
+    const event = await this.prisma.event.findFirst({
+      where: { partieId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: {
+        title: true,
+        seances: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: 1,
+          select: {
+            startDate: true,
+            startSlot: true,
+            lieu: true,
+            poll: { select: { status: true, expiresAt: true } },
+          },
+        },
+      },
+    });
+    if (!event) return null;
+    const seance = event.seances[0];
+    const openPoll = seance?.poll?.status === 'OPEN' ? seance.poll : null;
+    return {
+      eventTitle: event.title,
+      startDate: seance?.startDate ?? null,
+      startSlot: seance?.startSlot ?? null,
+      deadline: !seance?.startDate ? (openPoll?.expiresAt ?? null) : null,
+      lieu: seance?.lieu ?? null,
     };
   }
 

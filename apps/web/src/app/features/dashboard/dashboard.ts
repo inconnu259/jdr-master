@@ -12,6 +12,8 @@ import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
+import type { StatusBadgeState } from '../../core/status/status-derivation';
+import { StatusBadge } from '../../shared/status-badge/status-badge';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import type {
@@ -98,6 +100,7 @@ export interface PartieTileVm {
     PartyBanner,
     PartyCountdown,
     SystemBadge,
+    StatusBadge,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
@@ -377,6 +380,18 @@ export class Dashboard implements OnInit {
     return familyOf(inv.partie.gameSystemId) === 'ralliement'
       ? this.theme.tone()['partie.mode_ralliement']
       : gameSystemName(inv.partie.gameSystemId);
+  }
+
+  /** Story 41.3 : pastille « Invitation à accepter » (`todo`, écrite) d'une invitation à une rencontre
+   *  de ralliement — une quête garde sa carte telle quelle. */
+  protected pendingInvitationChip(inv: InvitationDto): StatusBadgeState | null {
+    if (familyOf(inv.partie.gameSystemId) !== 'ralliement') return null;
+    return {
+      tone: 'todo',
+      labelKey: 'status.scenario_a_venir',
+      draft: false,
+      text: this.theme.tone()['dashboard.invitation_pending_chip'],
+    };
   }
 
   /** Mention « invité par <pseudo> » d'une invitation reçue (gabarit lu dans le registre). */

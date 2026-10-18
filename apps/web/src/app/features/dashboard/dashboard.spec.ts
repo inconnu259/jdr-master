@@ -311,6 +311,40 @@ describe('Dashboard — carte d’invitation à un groupe (Story 39.3)', () => {
   });
 });
 
+describe('Dashboard — pastille « Invitation à accepter » (Story 41.3)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('une invitation à une rencontre de ralliement porte la pastille écrite, une quête non ; Accepter et Refuser restent', async () => {
+    const invitationsSvc = makeInvitationsService();
+    invitationsSvc.listReceived.mockResolvedValue([
+      {
+        id: 'inv-s',
+        partie: { id: 's1', name: 'Marathon Pandémie', gameSystemId: 'ralliement' },
+        inviterPseudo: 'Marc',
+        status: 'PENDING' as const,
+        createdAt: '2026-10-11T00:00:00.000Z',
+      },
+      {
+        id: 'inv-q',
+        partie: { id: 'q1', name: 'La Quête', gameSystemId: 'ryuutama' },
+        inviterPseudo: 'Léa',
+        status: 'PENDING' as const,
+        createdAt: '2026-10-11T00:00:00.000Z',
+      },
+    ]);
+    const { fixture } = await createFixture(new Map(), invitationsSvc);
+    const cards = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('mat-card.tile'),
+    );
+    const chip = TONE_MAP['grimoire-emeraude']['dashboard.invitation_pending_chip'];
+    expect(cards[0].querySelector('.invitation-chip app-status-badge')?.textContent).toContain(chip);
+    expect(cards[1].querySelector('.invitation-chip')).toBeNull();
+    for (const card of cards.slice(0, 2)) {
+      expect(card.querySelectorAll('mat-card-actions button')).toHaveLength(2);
+    }
+  });
+});
+
 describe('Dashboard — accept() rafraîchit la liste des parties (Story 38.5 : refreshAll)', () => {
   afterEach(() => TestBed.resetTestingModule());
 

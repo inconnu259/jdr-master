@@ -86,6 +86,7 @@ describe('EmailModule (intégration réelle via Mailpit)', () => {
   it.each([
     ['invitation', 'Rejoindre la partie'],
     ['group-invitation', 'Rejoindre le groupe'],
+    ['soiree-invitation', 'Accepter ou décliner'],
     ['session-reminder', 'Voir la partie'],
     ['conjonction-reminder', 'Voir la rencontre'],
     ['conjonction-reservation', 'Répondre'],

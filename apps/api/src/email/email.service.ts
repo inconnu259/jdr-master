@@ -8,6 +8,8 @@ const SUBJECTS: Record<EmailTemplate, string> = {
   invitation: 'Invitation à rejoindre {{partieName}}',
   // Story 39.3 : e-mail neutre (aucun mot de jeu de rôle, l'invité peut ne pas avoir de compte).
   'group-invitation': '{{inviterName}} vous invite à rejoindre « {{partieName}} »',
+  // Story 41.3 : invitation à une soirée isolée — vocabulaire neutre, l'invité peut n'avoir jamais vu de JDR.
+  'soiree-invitation': '{{inviterName}} vous invite : « {{eventTitle}} »',
   'session-reminder': 'Rappel : séance de {{partieName}} demain',
   // Story 40.3 : rappel de la veille d'une conjonction de groupe — vocabulaire neutre, aucun mot de JDR.
   'conjonction-reminder': 'Demain : « {{eventTitle}} »',
@@ -33,6 +35,7 @@ const SUBJECTS: Record<EmailTemplate, string> = {
 const ACTION_LABELS: Record<EmailTemplate, string | null> = {
   invitation: 'Rejoindre la partie',
   'group-invitation': 'Rejoindre le groupe',
+  'soiree-invitation': 'Accepter ou décliner',
   'session-reminder': 'Voir la partie',
   'conjonction-reminder': 'Voir la rencontre',
   'conjonction-reservation': 'Répondre',

@@ -252,13 +252,15 @@ export class PartieDetail implements OnInit {
    *  depuis « Missives ». Le rôle vient du serveur (`PartieDto.role`), jamais de `ownerId` : un groupe
    *  compte plusieurs administrateurs. La rencontre isolée n'a pas cette interface (epic 41). */
   protected readonly canInviteMembers = computed(
-    () => this.isGroup() && this.partie()?.role === 'admin',
+    () => (this.isGroup() || this.isSoiree()) && this.partie()?.role === 'admin',
   );
 
   /** Story 39.4 : l'utilisateur courant est administrateur de ce GROUPE (jamais d'une rencontre
    *  isolée, ni d'une quête). Même condition que `canInviteMembers`, nommée pour ce qu'elle dit ici :
    *  nommer un administrateur, quitter l'office. */
-  protected readonly isGroupAdmin = this.canInviteMembers;
+  protected readonly isGroupAdmin = computed(
+    () => this.isGroup() && this.partie()?.role === 'admin',
+  );
 
   /** Story 39.4 : nombre de conjonctions du groupe, pour l'avertissement du dernier administrateur.
    *  Story 40.1 : nombre RÉEL (passées comprises), remonté par l'onglet des conjonctions à chaque

@@ -402,3 +402,7 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-41-1-afficher-une-soiree-isolee-sur-une-seule-page.md`
   summary: Decide where the description of an isolated evening is shown now that its page has no "Détails" tab.
   evidence: The creation form still asks for a description (`partie.ralliement_no_description` exists), but the inline event detail only carries the event sheet; the text is now reachable only through the admin's "Modifier" form. A short line under the title of the inline detail, or in the sheet, would settle it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-41-3-inviter-a-une-soiree-accepter-ou-decliner.md`
+  summary: Fix the e-mail links built from `WEB_ORIGIN` when it holds a comma-separated list of origins.
+  evidence: In the dev setup `WEB_ORIGIN` is "http://localhost:4200,http://192.168.1.22:4200" and every mail builds its link as `${WEB_ORIGIN}/…`, so the href contains both origins; pick the first origin or a dedicated single-origin variable.

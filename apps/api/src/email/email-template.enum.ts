@@ -1,6 +1,7 @@
 export type EmailTemplate =
   | 'invitation'
   | 'group-invitation'
+  | 'soiree-invitation'
   | 'session-reminder'
   | 'conjonction-reminder'
   | 'conjonction-reservation'
