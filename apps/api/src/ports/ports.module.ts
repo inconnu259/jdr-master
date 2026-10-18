@@ -5,6 +5,8 @@ import { EventsModule } from '../events/events.module';
 import { EventsService } from '../events/events.service';
 import { PartiesModule } from '../parties/parties.module';
 import { PartiesService } from '../parties/parties.service';
+import { GroupPollChoiceService } from '../events/group-poll-choice.service';
+import { GROUP_POLL_CHOOSE_PORT } from '../poll/ports/group-poll-choose.port';
 import { GROUP_POLL_VOTE_PORT } from '../poll/ports/group-poll-vote.port';
 import { PARTIE_SIGNALS_PORT } from '../poll/ports/partie-signals.port';
 import { SEANCE_DATE_PORT } from '../poll/ports/seance-date.port';
@@ -19,6 +21,7 @@ import { SEANCE_DATE_PORT } from '../poll/ports/seance-date.port';
  *
  * - `OccupiedSpansPort`, `OwnEventsPort`, `SeanceDatePort`, `GroupPollVotePort` (Story 40.5) →
  *   `EventsService` ;
+ * - `GroupPollChoosePort` (Story 40.6) → `GroupPollChoiceService` ;
  * - `PartieSignalsPort` → `PartiesService`.
  */
 @Global()
@@ -29,6 +32,7 @@ import { SEANCE_DATE_PORT } from '../poll/ports/seance-date.port';
     { provide: OWN_EVENTS_PORT, useExisting: EventsService },
     { provide: SEANCE_DATE_PORT, useExisting: EventsService },
     { provide: GROUP_POLL_VOTE_PORT, useExisting: EventsService },
+    { provide: GROUP_POLL_CHOOSE_PORT, useExisting: GroupPollChoiceService },
     { provide: PARTIE_SIGNALS_PORT, useExisting: PartiesService },
   ],
   exports: [
@@ -36,6 +40,7 @@ import { SEANCE_DATE_PORT } from '../poll/ports/seance-date.port';
     OWN_EVENTS_PORT,
     SEANCE_DATE_PORT,
     GROUP_POLL_VOTE_PORT,
+    GROUP_POLL_CHOOSE_PORT,
     PARTIE_SIGNALS_PORT,
   ],
 })

@@ -216,7 +216,8 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
  * l'administrateur seul, et, depuis la Story 39.4, « nommer un administrateur / quitter l'office ».
  * Depuis la Story 39.5, « quitter le groupe » est ouvert à l'administrateur et aux membres, et depuis
  * la Story 40.1, « proposer une conjonction / lister celles du groupe » et, depuis la Story 40.3,
- * « s'inscrire à une conjonction / s'en désinscrire », puis, Story 40.4, « réserver une place ».
+ * « s'inscrire à une conjonction / s'en désinscrire », puis, Story 40.4, « réserver une place » et,
+ * Story 40.6, « fixer la date » (l'hôte seul, décidé dans `assert()`).
  * TOUTE autre action est refusée
  * à tous les rôles — le ralliement n'a ni scénario, ni personnage, ni XP. Table COMPLÈTE par
  * construction (`Record` sur l'union fermée) : une action ajoutée sans sa ligne ne compile pas.
@@ -275,7 +276,10 @@ export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly Parti
   // passe la cellule ; « éligible », « avant l'échéance », « date pas encore fixée » sont décidés par
   // le sondage lui-même, via le port des votes de groupe (`poll/ports/`), jamais ici.
   POLL_VOTE: ADMIN_AND_MEMBERS,
-  POLL_CHOOSE: NOBODY,
+  // Story 40.6 : fixer la date d'une conjonction (route partagée avec le JDR, `PATCH …/poll/:id/choose`).
+  // Tout membre passe la cellule ; la règle « hôte de l'événement » est décidée plus bas, dans
+  // `assert()` (HOST_ONLY_WHEN_EVENT_TARGETED), sur la cible `{ eventId }`.
+  POLL_CHOOSE: ADMIN_AND_MEMBERS,
   POLL_OPTIONS_SET: NOBODY,
   POLL_CLOSE: NOBODY,
   // Capacités JDR
@@ -348,6 +352,15 @@ const HOST_ONLY_ACTIONS: ReadonlySet<PermissionAction> = new Set<PermissionActio
   // Story 40.4 : réserver / retirer une réservation — cible `{ seanceId }` (l'hôte est celui de
   // l'événement de la séance).
   'SEANCE_RESERVE',
+]);
+
+/** Story 40.6 — actions réservées à l'hôte, mais seulement dans la famille `ralliement` et seulement
+ *  quand la cible désigne un événement (`{ eventId }`) : la route partagée avec le JDR (fixer la date
+ *  d'un vote) commence par une cible `{ partieId }` — cellule de rôle seule, qui ne dit encore rien du
+ *  sondage visé —, puis `PollService` re-décide sur l'événement du sondage pour un groupe. Dans la
+ *  famille `jdr`, la cellule du MJ suffit, comme avant. */
+const HOST_ONLY_WHEN_EVENT_TARGETED: ReadonlySet<PermissionAction> = new Set<PermissionAction>([
+  'POLL_CHOOSE',
 ]);
 
 /** Politique applicable à une famille. Un système inconnu du registre retombe sur la politique
@@ -440,7 +453,12 @@ export class PermissionService {
     // Story 40.2 : l'hôte de l'événement visé seul (cible `{ eventId }` ou, Story 40.4, `{ seanceId }`
     // obligatoire ; une cible sans événement, ou un événement sans hôte — compte supprimé —, n'ouvre
     // rien).
-    if (HOST_ONLY_ACTIONS.has(action) && (eventOwnerId == null || eventOwnerId !== userId)) {
+    const hostOnly =
+      HOST_ONLY_ACTIONS.has(action) ||
+      (family === 'ralliement' &&
+        HOST_ONLY_WHEN_EVENT_TARGETED.has(action) &&
+        resolved.eventId !== undefined);
+    if (hostOnly && (eventOwnerId == null || eventOwnerId !== userId)) {
       throw new ForbiddenException(HOST_ONLY_MESSAGE);
     }
     const capability = ACTION_CAPABILITY[action];

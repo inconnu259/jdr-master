@@ -1,6 +1,13 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { GROUP_POLL_OPTION_BOUNDS, POLL_DEADLINE_PAST_MESSAGE, PollService } from './poll.service';
+import {
+  DATE_ALREADY_FIXED_MESSAGE,
+  GROUP_POLL_OPTION_BOUNDS,
+  PAST_OPTION_MESSAGE,
+  POLL_DEADLINE_PAST_MESSAGE,
+  PollService,
+} from './poll.service';
+import { GROUP_POLL_CHOOSE_PORT } from './ports/group-poll-choose.port';
 import { GROUP_POLL_VOTE_PORT } from './ports/group-poll-vote.port';
 import { PARTIE_SIGNALS_PORT } from './ports/partie-signals.port';
 import { SEANCE_DATE_PORT } from './ports/seance-date.port';
@@ -111,7 +118,8 @@ describe('PollService', () => {
   let permissions: ReturnType<typeof makePermissions>;
   let realtimeEvents: ReturnType<typeof makeRealtimeEvents>;
   let seanceDate: ReturnType<typeof makeSeanceDate>;
-  let groupVotes: { assertCanVote: jest.Mock };
+  let groupVotes: { assertCanVote: jest.Mock; lockConjonction: jest.Mock };
+  let groupChoice: { assertCanChoose: jest.Mock; notifyDateFixed: jest.Mock };
 
   beforeEach(async () => {
     prisma = makePrisma();
@@ -119,7 +127,15 @@ describe('PollService', () => {
     permissions = makePermissions();
     realtimeEvents = makeRealtimeEvents();
     seanceDate = makeSeanceDate();
-    groupVotes = { assertCanVote: jest.fn().mockResolvedValue(undefined) };
+    groupVotes = {
+      assertCanVote: jest.fn().mockResolvedValue(undefined),
+      // Story 40.6 : verrou de la conjonction pris dans la transaction d'écriture d'un vote de groupe.
+      lockConjonction: jest.fn().mockResolvedValue({ dated: false }),
+    };
+    groupChoice = {
+      assertCanChoose: jest.fn().mockResolvedValue(undefined),
+      notifyDateFixed: jest.fn().mockResolvedValue(undefined),
+    };
     const module = await Test.createTestingModule({
       providers: [
         PollService,
@@ -129,6 +145,7 @@ describe('PollService', () => {
         { provide: RealtimeEventsService, useValue: realtimeEvents },
         { provide: SEANCE_DATE_PORT, useValue: seanceDate },
         { provide: GROUP_POLL_VOTE_PORT, useValue: groupVotes },
+        { provide: GROUP_POLL_CHOOSE_PORT, useValue: groupChoice },
       ],
     }).compile();
     service = module.get(PollService);
@@ -1093,6 +1110,52 @@ describe('PollService', () => {
       expect(groupVotes.assertCanVote).not.toHaveBeenCalled();
     });
 
+    it('castVote : l’écriture se fait dans UNE transaction, sous le verrou de la conjonction (Story 40.6)', async () => {
+      const order: string[] = [];
+      groupVotes.lockConjonction.mockImplementation(() => {
+        order.push('lock');
+        return Promise.resolve({ dated: false });
+      });
+      prisma.pollVote.upsert.mockImplementation(() => {
+        order.push('upsert');
+        return Promise.resolve({});
+      });
+
+      await service.castVote('g1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' });
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(groupVotes.lockConjonction).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ id: 'poll1', partieId: 'g1' }),
+      );
+      expect(order).toEqual(['lock', 'upsert']);
+    });
+
+    it('castVote / withdrawVote : date fixée entre-temps (sous le verrou) → 400, rien n’est écrit', async () => {
+      groupVotes.lockConjonction.mockResolvedValue({ dated: true });
+
+      await expect(
+        service.castVote('g1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' }),
+      ).rejects.toThrow(BadRequestException);
+      await expect(service.withdrawVote('g1', 'poll1', 'opt1', 'u1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.pollVote.upsert).not.toHaveBeenCalled();
+      expect(prisma.pollVote.deleteMany).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('castVote : sondage clos entre-temps (relu sous le verrou) → 400, rien n’est écrit', async () => {
+      prisma.sessionPoll.findUnique
+        .mockResolvedValueOnce(poll) // lecture initiale, ouvert
+        .mockResolvedValueOnce({ status: 'CLOSED' }); // relecture sous le verrou
+
+      await expect(
+        service.castVote('g1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' }),
+      ).rejects.toThrow('Poll introuvable ou fermé');
+      expect(prisma.pollVote.upsert).not.toHaveBeenCalled();
+    });
+
     it('JDR : le port n’est jamais consulté (règles de la Story 37.1 inchangées)', async () => {
       permissions.assert.mockResolvedValue(
         testGrant({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }, 'player'),
@@ -1103,6 +1166,211 @@ describe('PollService', () => {
       await service.withdrawVote('p1', 'poll1', 'opt1', 'u1');
 
       expect(groupVotes.assertCanVote).not.toHaveBeenCalled();
+      // Story 40.6 : ni verrou ni transaction pour un vote de JDR.
+      expect(groupVotes.lockConjonction).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  // Story 40.6 — fixer la date d'une conjonction : branche « groupe » de la route partagée `choose`.
+  describe('choose() — date d’une conjonction (Story 40.6)', () => {
+    const GROUPE = { id: 'g1', kind: 'CAMPAGNE_EPISODIQUE', gameSystemId: 'ralliement' };
+    // Un jour à venir (le créneau d'un sondage de groupe ne peut pas être déjà passé).
+    const d = new Date(
+      `${new Date(Date.now() + 30 * 86_400_000).toISOString().substring(0, 10)}T00:00:00.000Z`,
+    );
+    const poll = { id: 'poll1', partieId: 'g1', status: 'OPEN', expiresAt: new Date('2020-01-01') };
+    beforeEach(() => {
+      permissions.assert.mockResolvedValue(testGrant(GROUPE, 'member'));
+      prisma.sessionPoll.findUnique.mockResolvedValue(poll);
+      prisma.pollOption.findUnique.mockResolvedValue({
+        id: 'opt1',
+        pollId: 'poll1',
+        date: d,
+        slot: 'EVENING',
+      });
+      prisma.sessionPoll.update.mockResolvedValue({});
+    });
+
+    it('cellule de rôle sur la partie, droit d’hôte par le port, puis sondage clos + date écrite dans UNE transaction', async () => {
+      const order: string[] = [];
+      groupChoice.assertCanChoose.mockImplementation(() => {
+        order.push('droit');
+        return Promise.resolve();
+      });
+      groupVotes.lockConjonction.mockImplementation(() => {
+        order.push('verrou');
+        return Promise.resolve({ dated: false });
+      });
+      prisma.sessionPoll.update.mockImplementation(() => {
+        order.push('ferme');
+        return Promise.resolve({});
+      });
+      seanceDate.chooseDate.mockImplementation(() => {
+        order.push('date');
+        return Promise.resolve();
+      });
+
+      await service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' });
+
+      expect(permissions.assert).toHaveBeenCalledWith('hote', 'POLL_CHOOSE', { partieId: 'g1' });
+      expect(groupChoice.assertCanChoose).toHaveBeenCalledWith(
+        { id: 'poll1', partieId: 'g1' },
+        GROUPE,
+        'hote',
+      );
+      expect(prisma.sessionPoll.update).toHaveBeenCalledWith({
+        where: { id: 'poll1' },
+        data: { status: 'CLOSED', chosenDate: d, chosenSlot: 'EVENING' },
+      });
+      expect(seanceDate.chooseDate).toHaveBeenCalledWith(anyOf(Object), 'poll1', d, 'EVENING');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      // Le droit précède toute écriture ; le verrou précède la fermeture, elle-même suivie de la date.
+      expect(order).toEqual(['droit', 'verrou', 'ferme', 'date']);
+    });
+
+    it('après le commit : partie:{id}, signaux de l’accueil, puis l’e-mail — dans cet ordre', async () => {
+      const order: string[] = [];
+      realtimeEvents.emit.mockImplementation(() => order.push('emit'));
+      partieSignals.notifyChanged.mockImplementation(() => {
+        order.push('signaux');
+        return Promise.resolve();
+      });
+      groupChoice.notifyDateFixed.mockImplementation(() => {
+        order.push('mail');
+        return Promise.resolve();
+      });
+
+      await service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' });
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('g1'));
+      expect(groupChoice.notifyDateFixed).toHaveBeenCalledWith({ id: 'poll1', partieId: 'g1' });
+      expect(order).toEqual(['emit', 'signaux', 'mail']);
+    });
+
+    it('l’échéance dépassée ne bloque pas l’hôte', async () => {
+      await expect(
+        service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('droit refusé par le port (non-hôte, rencontre isolée) : rien n’est écrit, ni émis, ni envoyé', async () => {
+      groupChoice.assertCanChoose.mockRejectedValue(new ForbiddenException('hôte seul'));
+
+      await expect(service.choose('g1', 'poll1', 'autre', { optionId: 'opt1' })).rejects.toThrow(
+        'hôte seul',
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+      expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+    });
+
+    it('date déjà fixée (sous le verrou) → 400, rien n’est écrit ni envoyé', async () => {
+      groupVotes.lockConjonction.mockResolvedValue({ dated: true });
+
+      const refusal = service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' });
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(DATE_ALREADY_FIXED_MESSAGE);
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(seanceDate.chooseDate).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('sondage déjà fermé (relu sous le verrou) → 400', async () => {
+      prisma.sessionPoll.findUnique.mockResolvedValue({ ...poll, status: 'CLOSED' });
+
+      await expect(service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' })).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+    });
+
+    it('sondage d’une AUTRE partie ou inconnu → 404 (le port le refuse avant tout droit, la relecture sous verrou aussi)', async () => {
+      groupChoice.assertCanChoose.mockRejectedValue(new NotFoundException('Poll introuvable'));
+      await expect(service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' })).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+
+      groupChoice.assertCanChoose.mockResolvedValue(undefined);
+      prisma.sessionPoll.findUnique.mockResolvedValue({ ...poll, partieId: 'autre' });
+      await expect(service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' })).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+    });
+
+    it('option d’un AUTRE sondage ou inconnue → 404, sondage non fermé', async () => {
+      prisma.pollOption.findUnique.mockResolvedValue({ id: 'opt1', pollId: 'autre', date: d });
+      await expect(service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' })).rejects.toThrow(
+        NotFoundException,
+      );
+      prisma.pollOption.findUnique.mockResolvedValue(null);
+      await expect(service.choose('g1', 'poll1', 'hote', { optionId: 'zzz' })).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+    });
+
+    it('créneau dont le jour est passé → 400 français sous le verrou, rien n’est écrit ; aujourd’hui est accepté', async () => {
+      const day = (offset: number) =>
+        new Date(
+          `${new Date(Date.now() + offset * 86_400_000).toISOString().substring(0, 10)}T00:00:00.000Z`,
+        );
+      prisma.pollOption.findUnique.mockResolvedValue({
+        id: 'opt1',
+        pollId: 'poll1',
+        date: day(-1),
+        slot: 'EVENING',
+      });
+
+      const refusal = service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' });
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(PAST_OPTION_MESSAGE);
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(seanceDate.chooseDate).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+
+      prisma.pollOption.findUnique.mockResolvedValue({
+        id: 'opt1',
+        pollId: 'poll1',
+        date: day(0),
+        slot: 'EVENING',
+      });
+      await expect(
+        service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('échec de l’écriture de la date : tout est annulé, ni émission ni e-mail', async () => {
+      seanceDate.chooseDate.mockRejectedValue(new Error('boom'));
+
+      await expect(service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' })).rejects.toThrow(
+        'boom',
+      );
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+      expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+    });
+
+    it('JDR : le port de groupe n’est jamais consulté, chemin inchangé (Story 37.1)', async () => {
+      permissions.assert.mockResolvedValue(
+        testGrant({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }, 'mj'),
+      );
+      prisma.sessionPoll.findUnique.mockResolvedValue({ ...poll, partieId: 'p1' });
+
+      await service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' });
+
+      expect(groupChoice.assertCanChoose).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+      expect(groupVotes.lockConjonction).not.toHaveBeenCalled();
+      expect(seanceDate.chooseDate).toHaveBeenCalledWith(anyOf(Object), 'poll1', d, 'EVENING');
     });
   });
 });

@@ -2,6 +2,7 @@ import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { BreakpointObserver } from '@angular/cdk/layout';
+import { MatDialog } from '@angular/material/dialog';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 import type { EventCardDto, PartieMemberDto } from '@master-jdr/shared';
@@ -70,12 +71,14 @@ function pollCard(over: Partial<EventCardDto['poll'] & object> = {}, host = HOST
     todayKey="2026-10-17"
     [currentUserId]="userId()"
     (calendarRequested)="calendarRequests = calendarRequests + 1"
+    (refreshRequested)="refreshRequests = refreshRequests + 1"
   />`,
 })
 class Host {
   card = signal<EventCardDto>(pollCard());
   userId = signal<string | null>(ME);
   calendarRequests = 0;
+  refreshRequests = 0;
 }
 
 describe('EventDialog — sondage de dates (Story 40.5)', () => {
@@ -84,8 +87,12 @@ describe('EventDialog — sondage de dates (Story 40.5)', () => {
     document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
   });
 
-  async function mount(card: EventCardDto, userId: string | null = ME) {
-    const api = {};
+  async function mount(
+    card: EventCardDto,
+    userId: string | null = ME,
+    extra: { api?: object; dialog?: object } = {},
+  ) {
+    const api = extra.api ?? {};
     const parties = {
       members: vi
         .fn()
@@ -97,6 +104,7 @@ describe('EventDialog — sondage de dates (Story 40.5)', () => {
         provideNoopAnimations(),
         { provide: EventsApiService, useValue: api },
         { provide: PartiesService, useValue: parties },
+        ...(extra.dialog ? [{ provide: MatDialog, useValue: extra.dialog }] : []),
         { provide: ThemeToneService, useValue: { tone: signal(TONE) } },
         {
           provide: BreakpointObserver,
@@ -318,5 +326,81 @@ describe('EventDialog — sondage de dates (Story 40.5)', () => {
 
     const guest = await mount(pollCard(), ME);
     expect(guest.parties.members).not.toHaveBeenCalled();
+  });
+
+  // Story 40.6 — « Fixer la date… » : bouton du panneau de l'hôte, confirmation « Votre accord ».
+  describe('fixer la date (Story 40.6)', () => {
+    const openDialog = (fixed: boolean) =>
+      vi.fn().mockReturnValue({ afterClosed: () => of(fixed) });
+
+    it('l’hôte voit « Fixer la date… » actif ; un membre n’en voit pas', async () => {
+      const host = await mount(pollCard(), HOST);
+      const button = host.q<HTMLButtonElement>('.ed__poll-fix');
+      expect(button?.textContent?.trim()).toBe('Fixer la date…');
+      expect(button?.disabled).toBe(false);
+      TestBed.resetTestingModule();
+      document.body.querySelectorAll('app-detail-surface').forEach((n) => n.remove());
+
+      const member = await mount(pollCard(), ME);
+      expect(member.q('.ed__poll-fix')).toBeNull();
+    });
+
+    it('le vote terminé (échéance dépassée) ne bloque pas l’hôte : le bouton reste actif', async () => {
+      const { q } = await mount(pollCard({ expiresAt: '2026-10-16T23:59:59.999Z' }), HOST);
+      expect(q<HTMLButtonElement>('.ed__poll-fix')?.disabled).toBe(false);
+    });
+
+    it('ouvre la confirmation avec les créneaux du plus au moins plébiscité ; au succès, demande la relecture de la liste', async () => {
+      const open = openDialog(true);
+      const choose = vi.fn().mockResolvedValue(undefined);
+      const { fixture, q } = await mount(
+        pollCard({
+          votes: [
+            { optionId: 'o2', userId: HOST, answer: 'YES' },
+            { optionId: 'o2', userId: ME, answer: 'YES' },
+            { optionId: 'o1', userId: ME, answer: 'MAYBE' },
+          ],
+        }),
+        HOST,
+        { api: { choose }, dialog: { open } },
+      );
+
+      q<HTMLButtonElement>('.ed__poll-fix')!.click();
+
+      expect(open).toHaveBeenCalledTimes(1);
+      const data = open.mock.calls[0][1].data;
+      expect(data.title).toBe('Sondage plateaux');
+      expect(data.slots.map((s: { id: string }) => s.id)).toEqual(['o2', 'o1', 'o3']);
+      // La confirmation écrit la date sur la route partagée, avec le sondage de la carte.
+      await data.confirm('o2');
+      expect(choose).toHaveBeenCalledWith('g1', 'p1', 'o2');
+      expect(fixture.componentInstance.refreshRequests).toBe(1);
+    });
+
+    it('« Renoncer » (fermeture sans valider) ne demande aucune relecture', async () => {
+      const open = openDialog(false);
+      const { fixture, q } = await mount(pollCard(), HOST, { dialog: { open } });
+      q<HTMLButtonElement>('.ed__poll-fix')!.click();
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(fixture.componentInstance.refreshRequests).toBe(0);
+    });
+
+    it('la carte vivante datée remplace le panneau : plus de sondage ni de « Fixer la date… », la date en grand', async () => {
+      const { fixture, settle, q, text } = await mount(pollCard(), HOST);
+      expect(q('.ed__poll-fix')).not.toBeNull();
+
+      fixture.componentInstance.card.set({
+        ...pollCard(),
+        poll: null,
+        seance: { ...pollCard().seance!, date: '2026-10-25', slot: 'MORNING', lieu: 'Chez Léa' },
+      });
+      await settle();
+
+      expect(q('.ed__poll')).toBeNull();
+      expect(q('.ed__poll-fix')).toBeNull();
+      expect(text('.ed__big--date')).toBe('Dim. 25 oct. · matin');
+      expect(text('.ed__big--place')).toBe('Chez Léa');
+      expect(q('.ed__slots')).toBeNull();
+    });
   });
 });

@@ -10,13 +10,16 @@ import {
   viewChild,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import type { EventCardDto, EventParticipantDto, PartieMemberDto } from '@master-jdr/shared';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { fillTone } from '../../../core/theme/tone-format';
 import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
 import { StatusBadge } from '../../../shared/status-badge/status-badge';
+import { DateFixDialog, type DateFixData } from '../date-fix-dialog/date-fix-dialog';
 import {
+  canFixDate,
   canManageReservations,
   canRespondToReservation,
   canSignUp,
@@ -33,6 +36,7 @@ import {
   participationLine,
   pollPanel,
   pollSlotRows,
+  rankedPollSlots,
 } from '../event-card.util';
 import { EventForm } from '../event-form/event-form';
 import { EventsApiService } from '../events-api.service';
@@ -69,6 +73,12 @@ let nextUid = 0;
  * sondage ouvert. Ni l'un ni l'autre ne vote ni ne compose ici : la fenêtre demande à l'onglet
  * (`calendarRequested`) d'ouvrir la page, sans viser un vote en particulier (c'est le Palier 10.4).
  *
+ * Story 40.6 : l'hôte d'un sondage voit « Fixer la date… » dans son panneau (actif tant que le sondage est
+ * ouvert et propose au moins un créneau). Il ouvre la confirmation « Votre accord » (`DateFixDialog`) : les
+ * créneaux du plus au moins plébiscité, le meilleur présélectionné. Au succès, la fenêtre demande à l'onglet
+ * de relire la liste (`refreshRequested`) et suit la carte vivante : le panneau du sondage cède la place à la
+ * date, l'heure et le lieu en grand, comme pour toute conjonction datée.
+ *
  * La carte vient de la liste vivante de l'onglet (lue par identifiant) : toute mise à jour reçue en
  * temps réel se reflète ici sans rechargement. « Modifier » bascule la MÊME fenêtre en mode édition
  * (les champs de la création, via `EventForm`), pied « Renoncer » · « Enregistrer » ; le refus du
@@ -85,6 +95,7 @@ export class EventDialog {
   protected readonly theme = inject(ThemeToneService);
   private readonly api = inject(EventsApiService);
   private readonly parties = inject(PartiesService);
+  private readonly dialog = inject(MatDialog);
 
   readonly partieId = input.required<string>();
   readonly card = input.required<EventCardDto>();
@@ -97,6 +108,8 @@ export class EventDialog {
   readonly closed = output<void>();
   /** Story 40.5b : la personne veut voter ou composer ses créneaux dans le calendrier du groupe. */
   readonly calendarRequested = output<void>();
+  /** Story 40.6 : la date vient d'être fixée — l'onglet relit la liste pour montrer la conjonction datée. */
+  readonly refreshRequested = output<void>();
 
   protected readonly uid = `event-dialog-${++nextUid}`;
   private readonly form = viewChild(EventForm);
@@ -173,6 +186,8 @@ export class EventDialog {
   protected readonly showComposeInCalendar = computed(
     () => this.poll()?.kind === 'host' && this.card().poll?.status === 'OPEN',
   );
+  /** Story 40.6 : « Fixer la date… » — l'hôte, sondage ouvert avec au moins un créneau. */
+  protected readonly canFix = computed(() => canFixDate(this.card(), this.currentUserId()));
   /** Créneaux candidats de la fiche, avec le nombre d'inscrits libres sur chacun. */
   protected readonly slotRows = computed(() => pollSlotRows(this.card(), this.theme.tone()));
   protected readonly dateLabel = computed(() => eventDateLabel(this.card(), this.theme.tone()));
@@ -193,6 +208,26 @@ export class EventDialog {
     this.editing() ? this.theme.tone()['partie.ralliement_event_edit_title'] : this.card().title,
   );
   protected readonly canSave = computed(() => !this.busy() && !!this.form()?.valid());
+
+  /** Story 40.6 : ouvre la confirmation « Votre accord » ; le serveur est seul juge (hôte, date déjà fixée). */
+  protected openFixDate(): void {
+    const poll = this.card().poll;
+    if (!poll || !this.canFix()) return;
+    const data: DateFixData = {
+      title: this.card().title,
+      slots: rankedPollSlots(this.card(), this.todayKey()),
+      confirm: (optionId) => this.api.choose(this.partieId(), poll.id, optionId),
+    };
+    const ref = this.dialog.open<DateFixDialog, DateFixData, boolean>(DateFixDialog, {
+      data,
+      width: 'min(560px, 96vw)',
+      autoFocus: 'first-tabbable',
+      restoreFocus: true,
+    });
+    ref.afterClosed().subscribe((fixed) => {
+      if (fixed) this.refreshRequested.emit();
+    });
+  }
 
   protected startEdit(): void {
     this.error.set(null);

@@ -145,6 +145,11 @@ export const VOTE_ENDED_MESSAGE = 'Le vote est terminé : l’échéance est dé
 /** Refus de voter quand on n'est pas un votant éligible de la conjonction (Story 40.5). */
 export const VOTE_NOT_ELIGIBLE_MESSAGE = 'Vous ne pouvez pas voter sur cette conjonction';
 
+/** Refus de changer le jour ou le créneau d'une conjonction dont la date a été fixée depuis son sondage
+ *  (Story 40.6) : la date ne se rouvre jamais. */
+export const DATE_FIXED_MESSAGE =
+  'La date de cette conjonction est fixée : le jour et le créneau ne peuvent plus changer';
+
 /** Destinataire d'un rappel : identité minimale, jamais plus que l'adresse à qui écrire. */
 export interface ReminderRecipient {
   id: string;
@@ -194,6 +199,11 @@ export function isRalliementGroup(partie: { kind: PartieKind; gameSystemId: stri
  *  réservée. Un statut absent (lignes du JDR, qui ne connaît pas la réservation) compte comme confirmé. */
 function isConfirmed(inscription: { status?: InscriptionStatus }): boolean {
   return inscription.status !== 'RESERVED';
+}
+
+/** Story 40.6 : le sondage n'est servi que tant qu'il est ouvert (un sondage clos n'a plus de bloc). */
+function openPollOf(poll: EventPollDto | undefined): EventPollDto | undefined {
+  return poll?.status === 'OPEN' ? poll : undefined;
 }
 
 /** Inscrits d'une séance tels que lus pour les cartes (Story 40.2/40.4), plus — Story 40.5 — les lignes
@@ -460,7 +470,9 @@ export class EventsService
     });
 
     const rosterBySeance = await this.rosterOf(grant.partieId, viewerId, events);
-    const pollBySeance = await this.pollsOf(grant.partieId, events, rosterBySeance);
+    // Story 40.6 : seules les conjonctions encore sans date ont un bloc de sondage (une date fixée le retire).
+    const undated = events.filter((e) => !e.seances[0]?.startDate);
+    const pollBySeance = await this.pollsOf(grant.partieId, undated, rosterBySeance);
 
     const cards = events.map((e): EventCardDto => {
       const s = e.seances[0];
@@ -484,7 +496,9 @@ export class EventsService
           : null,
         participants: roster?.participants ?? [],
         myInscription: roster?.myInscription ?? null,
-        poll: s ? (pollBySeance.get(s.id) ?? null) : null,
+        // Story 40.6 : une fois la date fixée (séance datée, sondage clos), la carte n'a plus de bloc de
+        // sondage — elle montre la date normale et les badges habituels.
+        poll: s && !s.startDate ? (openPollOf(pollBySeance.get(s.id)) ?? null) : null,
       };
     });
     // Tri stable (création déjà ordonnée par la requête) : par date puis créneau (matin <
@@ -752,8 +766,12 @@ export class EventsService
       // Story 40.5 : le mode (date fixée / sondage de dates) ne change pas à la modification — une
       // conjonction à sondage garde ses créneaux et sa séance sans date, une conjonction datée garde
       // son jour. La modification d'une conjonction à sondage ne pose jamais de date de séance.
+      // Story 40.6 : une conjonction dont la date a été fixée depuis son sondage (`pollId` posé ET séance
+      // datée) est désormais une conjonction datée : on la modifie en mode « date fixée », sans
+      // pouvoir changer le jour ni le créneau.
+      const undatedPoll = Boolean(seance.pollId) && seance.startDate === null;
       const pollMode = input.seance.date === null;
-      if (pollMode !== Boolean(seance.pollId)) throw new BadRequestException(POLL_MODE_MESSAGE);
+      if (pollMode !== undatedPoll) throw new BadRequestException(POLL_MODE_MESSAGE);
 
       const currentDay = seance.startDate?.toISOString().substring(0, 10) ?? null;
       if (currentDay !== null && currentDay < todayKeyUtc()) {
@@ -796,6 +814,9 @@ export class EventsService
         const dateChanged =
           currentDay !== input.seance.date!.toISOString().substring(0, 10) ||
           seance.startSlot !== input.seance.slot;
+        // Story 40.6 : la date fixée depuis un sondage ne bouge plus (elle ne se rouvre jamais) ; les
+        // autres champs restent modifiables.
+        if (dateChanged && seance.pollId) throw new BadRequestException(DATE_FIXED_MESSAGE);
         await tx.seance.update({
           where: { id: seance.id },
           data: {
@@ -1346,6 +1367,79 @@ export class EventsService
       memberIds,
     });
     if (!voters.includes(userId)) throw new ForbiddenException(VOTE_NOT_ELIGIBLE_MESSAGE);
+  }
+
+  /**
+   * `GroupPollVotePort` (Story 40.6) : prend, DANS la transaction de l'appelant, le verrou de ligne de la
+   * partie PUIS celui de l'événement du sondage (même ordre que `updateHosted`, `createInTx`, `leave` :
+   * jamais l'inverse), et dit si la date de la conjonction est déjà fixée. Le vote, son retrait et
+   * l'arrêt de la date relisent leur état APRÈS ce verrou : un vote et une fixation simultanés sont
+   * sérialisés, le perdant voit le sondage fermé. Refuse (400) un sondage sans conjonction de sa partie.
+   */
+  async lockConjonction(
+    tx: Prisma.TransactionClient,
+    poll: { id: string; partieId: string },
+  ): Promise<{ dated: boolean }> {
+    const ref = await tx.seance.findUnique({
+      where: { pollId: poll.id },
+      select: { event: { select: { id: true, partieId: true } } },
+    });
+    if (!ref || ref.event.partieId !== poll.partieId) {
+      throw new BadRequestException('Poll introuvable ou fermé');
+    }
+    await tx.$queryRaw`SELECT "id" FROM "Partie" WHERE "id" = ${poll.partieId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${ref.event.id} FOR UPDATE`;
+    const seance = await tx.seance.findUnique({
+      where: { pollId: poll.id },
+      select: { startDate: true },
+    });
+    if (!seance) throw new BadRequestException('Poll introuvable ou fermé');
+    return { dated: seance.startDate !== null };
+  }
+
+  /** Événement de la conjonction qui porte le sondage `pollId` dans la partie `partieId` (Story 40.6) :
+   *  de quoi décider du droit « hôte » sur la cible `{ eventId }`. `null` si le sondage n'est rattaché
+   *  à aucune conjonction de cette partie. */
+  async eventIdOfPoll(pollId: string, partieId: string): Promise<string | null> {
+    const seance = await this.prisma.seance.findUnique({
+      where: { pollId },
+      select: { event: { select: { id: true, partieId: true } } },
+    });
+    return seance && seance.event.partieId === partieId ? seance.event.id : null;
+  }
+
+  /**
+   * De quoi écrire l'e-mail « C'est fixé » (Story 40.6), lu APRÈS le commit : titre, date, lieu et les
+   * destinataires — les inscrits CONFIRMÉS, l'hôte exclu, une adresse chacun. `null` si la conjonction
+   * n'existe plus ou n'est pas datée.
+   */
+  async dateFixedNotice(
+    pollId: string,
+  ): Promise<(Omit<ReservationNotice, 'hostName'> & { partieId: string }) | null> {
+    const seance = await this.prisma.seance.findUnique({
+      where: { pollId },
+      select: {
+        startDate: true,
+        startSlot: true,
+        lieu: true,
+        event: { select: { title: true, partieId: true, ownerId: true } },
+        inscriptions: {
+          where: { status: 'CONFIRMED' },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: { user: { select: { id: true, email: true } } },
+        },
+      },
+    });
+    if (!seance || !seance.startDate) return null;
+    const hostId = seance.event.ownerId;
+    return {
+      partieId: seance.event.partieId,
+      eventTitle: seance.event.title,
+      startDate: seance.startDate,
+      startSlot: seance.startSlot,
+      lieu: seance.lieu,
+      recipients: seance.inscriptions.map((i) => i.user).filter((user) => user.id !== hostId),
+    };
   }
 
   // ─── Destinataires du rappel de la veille ───────────────────────────────────────────────────

@@ -1017,6 +1017,14 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'partie.ralliement_event_poll_ends_today',
     'partie.ralliement_event_poll_ends_tomorrow',
     'partie.ralliement_event_poll_ends_in_days',
+    // Story 40.6 : fixer la date — libellés, décompte et avertissement verbatim du contrat d’UI (« Fixer la
+    // date… », « n oui · n peut-être · n non », « La date sera scellée… ») ; seul le repli d’erreur a une voix
+    'partie.ralliement_event_fix_date_btn',
+    'partie.ralliement_event_fix_confirm_btn',
+    'partie.ralliement_event_fix_heading',
+    'partie.ralliement_event_fix_counts',
+    'partie.ralliement_event_fix_past',
+    'partie.ralliement_event_fix_warning',
     // Story 40.5b : calendrier du groupe — liens et boutons verbatim du contrat d’UI (« Calendrier du
     // groupe », « Choisir les créneaux dans le calendrier », « Voter dans le calendrier », « Composer
     // les créneaux »), titre du panneau des votes et unités de l’avertissement de retrait de créneaux
@@ -1688,6 +1696,39 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
           'partie.ralliement_event_vote_in_calendar_btn',
           'partie.ralliement_event_compose_in_calendar_btn',
         ].includes(k),
+    )) {
+      for (const theme of THEMES) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).not.toMatch(NON_JDR_BANNED_WORDS);
+      }
+    }
+  });
+
+  // Story 40.6 : fixer la date d'une conjonction. Les mots du contrat d'UI (« Fixer la date… », le décompte
+  // « n oui · n peut-être · n non », l'avertissement de sceau) sont identiques dans les trois thèmes ; le
+  // repli d'erreur nomme la rencontre à la manière du thème. Aucun mot de JDR.
+  it('Story 40.6 : « Fixer la date » garde les mots du contrat et prend la voix du thème pour l’erreur, sans mot de JDR', () => {
+    const neutres: Record<string, string> = {
+      'partie.ralliement_event_fix_date_btn': 'Fixer la date…',
+      'partie.ralliement_event_fix_confirm_btn': 'Fixer la date',
+      'partie.ralliement_event_fix_heading':
+        'Fixer la date — « {title} » : les créneaux, du plus au moins plébiscité',
+      'partie.ralliement_event_fix_counts': '{yes} oui · {maybe} peut-être · {no} non',
+      'partie.ralliement_event_fix_past': 'Jour passé : ce créneau ne peut plus être retenu',
+      'partie.ralliement_event_fix_warning':
+        'La date sera scellée et les inscrits prévenus par e-mail. Elle ne pourra plus être rouverte ; les inscriptions tardives restent possibles.',
+    };
+    for (const [key, attendu] of Object.entries(neutres)) {
+      for (const theme of THEMES) expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(attendu);
+    }
+    const erreurs = THEMES.map((theme) => TONE_MAP[theme]['partie.ralliement_event_fix_date_error']);
+    expect(new Set(erreurs).size).toBe(THEMES.length);
+    // « Renoncer » (annulation) et « Votre accord » (titre) existent déjà dans chaque thème.
+    for (const theme of THEMES) {
+      expect(TONE_MAP[theme]['partie.ralliement_event_cancel_btn'], theme).toBe('Renoncer');
+      expect(TONE_MAP[theme]['parties.confirm_title'], theme).toBeTruthy();
+    }
+    for (const key of Object.keys(TONE_MAP['grimoire-emeraude']).filter((k) =>
+      k.startsWith('partie.ralliement_event_fix_'),
     )) {
       for (const theme of THEMES) {
         expect(TONE_MAP[theme][key], `${theme} / ${key}`).not.toMatch(NON_JDR_BANNED_WORDS);

@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import type { PartieKind } from '@master-jdr/shared';
 
 /**
@@ -22,6 +23,18 @@ export interface GroupPollVotePort {
     partie: { kind: PartieKind },
     userId: string,
   ): Promise<void>;
+
+  /**
+   * Story 40.6 : dans la transaction de l'appelant, prend le verrou de ligne de la partie PUIS celui de
+   * l'événement du sondage, et dit si la date de la conjonction est déjà fixée. Un vote (ou son retrait)
+   * et la fixation de la date relisent leur état après ce verrou : l'un des deux gagne, l'autre voit le
+   * sondage fermé. Lève 400 si le sondage n'est rattaché à aucune conjonction de cette partie. Jamais
+   * appelé pour une partie de JDR.
+   */
+  lockConjonction(
+    tx: Prisma.TransactionClient,
+    poll: { id: string; partieId: string },
+  ): Promise<{ dated: boolean }>;
 }
 
 /** Jeton d'injection de `GroupPollVotePort`. */

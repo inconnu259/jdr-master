@@ -435,6 +435,52 @@ describe('Droits sur une partie et ses événements (Story 37.6)', () => {
     expect(await h.prisma.pollVote.count({ where: { pollId: pollA, userId: mjB.id } })).toBe(0);
   });
 
+  // Story 40.6 : fixer la date est ouvert aux membres d'un groupe de ralliement par la cellule de rôle,
+  // mais l'hôte de la conjonction seul la fixe, et le sondage d'une famille ne s'atteint pas par l'autre.
+  it('fixer la date : le MJ et le joueur du JDR n’ont aucun rôle dans un groupe (403), l’administrateur du groupe ne choisit pas la date du JDR (403), sondage croisé inconnu (404), sans écriture', async () => {
+    const { id: groupe } = await h.createPartie(
+      mjB,
+      'CAMPAGNE_EPISODIQUE',
+      'droits groupe 40-6',
+      'ralliement',
+    );
+    const created = await mjB.agent
+      .post(`/parties/${groupe}/events`)
+      .send({
+        title: 'Une conjonction à trancher',
+        pollOptions: [
+          { date: isoDay(10), slot: 'EVENING' },
+          { date: isoDay(11), slot: 'MORNING' },
+        ],
+        pollDeadline: isoDay(5),
+      })
+      .expect(201);
+    const groupPoll = body<{ poll: { id: string; options: { id: string }[] } }>(created).poll;
+    const groupOption = groupPoll.options[0].id;
+    const chooseUrl = (partieId: string, pollId: string) =>
+      `/parties/${partieId}/poll/${pollId}/choose`;
+
+    for (const who of [mjA, joueurA, etranger]) {
+      const res = await who.agent
+        .patch(chooseUrl(groupe, groupPoll.id))
+        .send({ optionId: groupOption })
+        .expect(403);
+      expect(body<ErrorLike>(res).message).toBe(NO_ACCESS_MESSAGE);
+    }
+    // L'administrateur du groupe n'a aucun rôle dans la partie de JDR.
+    const asGroupAdmin = await mjB.agent
+      .patch(chooseUrl(partieA, pollA))
+      .send({ optionId: optionA })
+      .expect(403);
+    expect(body<ErrorLike>(asGroupAdmin).message).toBe(NO_ACCESS_MESSAGE);
+    // Par la route de SON groupe, le sondage du JDR n'est pas celui d'une conjonction (404).
+    await mjB.agent.patch(chooseUrl(groupe, pollA)).send({ optionId: optionA }).expect(404);
+
+    const poll = await h.prisma.sessionPoll.findUniqueOrThrow({ where: { id: groupPoll.id } });
+    expect(poll.status).toBe('OPEN');
+    expect((await openPollA()).id).toBe(pollA);
+  });
+
   describe('capacités JDR, invitations et favoris (Story 37.7)', () => {
     let joueurB: TestUser;
     let ami: TestUser;

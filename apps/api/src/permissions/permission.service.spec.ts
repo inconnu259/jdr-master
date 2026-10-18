@@ -502,7 +502,12 @@ describe('PermissionService', () => {
     ];
     /** Story 40.2 : la cellule de rôle est ouverte à l'admin ET au membre, mais l'action vise un
      *  événement (`{ eventId }`) et n'est accordée qu'à son hôte — testée à part, sur cette cible. */
-    const RALLIEMENT_HOST_ONLY: PermissionAction[] = ['EVENT_UPDATE', 'SEANCE_RESERVE'];
+    const RALLIEMENT_HOST_ONLY: PermissionAction[] = [
+      'EVENT_UPDATE',
+      'SEANCE_RESERVE',
+      // Story 40.6 : fixer la date d'une conjonction (testé à part, sur la cible `{ eventId }`).
+      'POLL_CHOOSE',
+    ];
     /** Modifier la partie, la clore, la rouvrir, la brûler (Story 39.1), inviter et retirer un
      *  membre (Story 39.3) : admin seul. */
     const RALLIEMENT_ADMIN_ONLY: PermissionAction[] = [
@@ -732,6 +737,78 @@ describe('PermissionService', () => {
         await expect(
           service.assert(MJ, 'SEANCE_RESERVE', { seanceId: 'se-1' }),
         ).rejects.toBeInstanceOf(ForbiddenException);
+      });
+    });
+
+    // Story 40.6 — POLL_CHOOSE : cellule de rôle ouverte aux membres, règle « hôte » décidée dans assert()
+    // sur la cible `{ eventId }` (l'événement du sondage). Cible `{ partieId }` : cellule seule.
+    describe('POLL_CHOOSE — hôte de la conjonction seul, cible événement', () => {
+      const event = (ownerId: string | null) => ({ id: 'ev-1', ownerId, partie: RALLIEMENT });
+
+      it('accordé à l’hôte, qu’il soit membre ou administrateur', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(MEMBRE));
+        await expect(service.assert(MEMBRE, 'POLL_CHOOSE', { eventId: 'ev-1' })).resolves.toEqual(
+          objectLike({ partieId: 'R', role: 'member' }),
+        );
+        prisma.event.findUnique.mockResolvedValue(event(ADMIN));
+        await expect(service.assert(ADMIN, 'POLL_CHOOSE', { eventId: 'ev-1' })).resolves.toEqual(
+          objectLike({ partieId: 'R', role: 'admin' }),
+        );
+      });
+
+      it('refusé à un autre membre — 403 « réservée à l’hôte »', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(ADMIN));
+        const refusal = service.assert(MEMBRE, 'POLL_CHOOSE', { eventId: 'ev-1' });
+        await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(refusal).rejects.toThrow(HOST_ONLY_MESSAGE);
+      });
+
+      it('refusé à un administrateur qui n’est pas l’hôte — 403 « réservée à l’hôte »', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(MEMBRE));
+        await expect(service.assert(ADMIN, 'POLL_CHOOSE', { eventId: 'ev-1' })).rejects.toThrow(
+          HOST_ONLY_MESSAGE,
+        );
+      });
+
+      it('refusé à tous quand l’hôte a disparu (ownerId null)', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(null));
+        await expect(service.assert(ADMIN, 'POLL_CHOOSE', { eventId: 'ev-1' })).rejects.toThrow(
+          HOST_ONLY_MESSAGE,
+        );
+      });
+
+      it('refusé à un étranger — 403 « pas accès » (avant la règle hôte)', async () => {
+        prisma.event.findUnique.mockResolvedValue(event(MEMBRE));
+        await expect(service.assert(STRANGER, 'POLL_CHOOSE', { eventId: 'ev-1' })).rejects.toThrow(
+          NO_ACCESS_MESSAGE,
+        );
+      });
+
+      it('événement inconnu → 404', async () => {
+        prisma.event.findUnique.mockResolvedValue(null);
+        await expect(
+          service.assert(ADMIN, 'POLL_CHOOSE', { eventId: 'zzz' }),
+        ).rejects.toBeInstanceOf(NotFoundException);
+      });
+
+      it('cible { partieId } : cellule de rôle seule (premier contrôle de la route partagée), étranger refusé', async () => {
+        await expect(service.assert(MEMBRE, 'POLL_CHOOSE', { partieId: 'R' })).resolves.toEqual(
+          objectLike({ partieId: 'R', role: 'member' }),
+        );
+        await expect(service.assert(STRANGER, 'POLL_CHOOSE', { partieId: 'R' })).rejects.toThrow(
+          NO_ACCESS_MESSAGE,
+        );
+      });
+
+      it('JDR : le propriétaire (MJ) décide, quelle que soit la cible — la règle « hôte » ne s’y applique pas', async () => {
+        prisma.event.findUnique.mockResolvedValue({
+          id: 'ev-1',
+          ownerId: 'quelquun-d-autre',
+          partie: PARTIE_A,
+        });
+        await expect(service.assert(MJ, 'POLL_CHOOSE', { eventId: 'ev-1' })).resolves.toEqual(
+          objectLike({ partieId: 'A', role: 'mj' }),
+        );
       });
     });
 

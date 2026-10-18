@@ -183,6 +183,12 @@ export class ConjonctionsTab implements OnInit {
     void this.router.navigate(['/parties', this.partieId(), 'guild-calendar'], { replaceUrl: true });
   }
 
+  /** Story 40.6 : la date d'une conjonction vient d'être fixée — la liste est relue tout de suite (les autres
+   *  membres la reçoivent par le signal temps réel). */
+  protected refresh(): void {
+    void this.reload(this.partieId());
+  }
+
   private dismiss(): void {
     window.removeEventListener('popstate', this.onPopState);
     const id = this.selectedId();

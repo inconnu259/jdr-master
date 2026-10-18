@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import {
+  DATE_FIXED_MESSAGE,
   EventsService,
   FULL_EVENT_MESSAGE,
   POLL_MODE_MESSAGE,
@@ -2665,6 +2666,239 @@ describe('EventsService (Story 37.3)', () => {
         await expect(
           service.assertCanVote(POLL, { kind: 'ONE_SHOT' }, 'hote'),
         ).rejects.toBeInstanceOf(ForbiddenException);
+      });
+    });
+  });
+
+  // Story 40.6 — fixer la date d'une conjonction depuis son sondage.
+  describe('fixer la date d’une conjonction (Story 40.6)', () => {
+    const POLL = { id: 'poll-1', partieId: 'p1' };
+
+    describe('lockConjonction() — verrou partie puis événement', () => {
+      it('prend le verrou de la partie PUIS celui de l’événement du sondage, et dit si la date est fixée', async () => {
+        const order: string[] = [];
+        prisma.tx.$queryRaw.mockImplementation((strings: TemplateStringsArray) => {
+          order.push(strings.join('?').includes('"Partie"') ? 'partie' : 'event');
+          return Promise.resolve([]);
+        });
+        prisma.tx.seance.findUnique
+          .mockResolvedValueOnce({ event: { id: 'e1', partieId: 'p1' } })
+          .mockResolvedValueOnce({ startDate: null });
+
+        await expect(service.lockConjonction(prisma.tx as never, POLL)).resolves.toEqual({
+          dated: false,
+        });
+        expect(order).toEqual(['partie', 'event']);
+
+        prisma.tx.seance.findUnique
+          .mockResolvedValueOnce({ event: { id: 'e1', partieId: 'p1' } })
+          .mockResolvedValueOnce({ startDate: new Date('2026-11-14T00:00:00.000Z') });
+        await expect(service.lockConjonction(prisma.tx as never, POLL)).resolves.toEqual({
+          dated: true,
+        });
+      });
+
+      it('sondage rattaché à aucune conjonction de cette partie → 400, aucun verrou pris', async () => {
+        prisma.tx.seance.findUnique.mockResolvedValueOnce(null);
+        await expect(service.lockConjonction(prisma.tx as never, POLL)).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+        prisma.tx.seance.findUnique.mockResolvedValueOnce({
+          event: { id: 'e1', partieId: 'autre' },
+        });
+        await expect(service.lockConjonction(prisma.tx as never, POLL)).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+        expect(prisma.tx.$queryRaw).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('eventIdOfPoll()', () => {
+      it('renvoie l’événement du sondage s’il est de cette partie, sinon null', async () => {
+        prisma.seance.findUnique.mockResolvedValue({ event: { id: 'e1', partieId: 'p1' } });
+        await expect(service.eventIdOfPoll('poll-1', 'p1')).resolves.toBe('e1');
+        await expect(service.eventIdOfPoll('poll-1', 'autre')).resolves.toBeNull();
+        prisma.seance.findUnique.mockResolvedValue(null);
+        await expect(service.eventIdOfPoll('poll-1', 'p1')).resolves.toBeNull();
+      });
+    });
+
+    describe('dateFixedNotice()', () => {
+      const day = new Date('2026-11-14T00:00:00.000Z');
+      const seanceRow = (over: Record<string, unknown> = {}) => ({
+        startDate: day,
+        startSlot: 'EVENING',
+        lieu: 'Chez Léa',
+        event: { title: 'Catane', partieId: 'p1', ownerId: 'hote' },
+        inscriptions: [
+          { user: { id: 'a', email: 'a@example.com' } },
+          { user: { id: 'b', email: 'b@example.com' } },
+        ],
+        ...over,
+      });
+
+      it('destinataires = inscrits CONFIRMÉS (requête filtrée), hôte exclu, une adresse chacun', async () => {
+        prisma.seance.findUnique.mockResolvedValue(
+          seanceRow({
+            inscriptions: [
+              { user: { id: 'hote', email: 'hote@example.com' } },
+              { user: { id: 'a', email: 'a@example.com' } },
+            ],
+          }),
+        );
+
+        const notice = await service.dateFixedNotice('poll-1');
+
+        expect(notice).toEqual({
+          partieId: 'p1',
+          eventTitle: 'Catane',
+          startDate: day,
+          startSlot: 'EVENING',
+          lieu: 'Chez Léa',
+          recipients: [{ id: 'a', email: 'a@example.com' }],
+        });
+        expect(callArg(prisma.seance.findUnique)).toEqual(
+          objectLike({
+            where: { pollId: 'poll-1' },
+            select: objectLike({
+              inscriptions: objectLike({ where: { status: 'CONFIRMED' } }),
+            }),
+          }),
+        );
+      });
+
+      it('aucun inscrit : liste vide (aucun e-mail) ; séance sans date ou introuvable : null', async () => {
+        prisma.seance.findUnique.mockResolvedValue(seanceRow({ inscriptions: [] }));
+        expect((await service.dateFixedNotice('poll-1'))?.recipients).toEqual([]);
+
+        prisma.seance.findUnique.mockResolvedValue(seanceRow({ startDate: null }));
+        await expect(service.dateFixedNotice('poll-1')).resolves.toBeNull();
+        prisma.seance.findUnique.mockResolvedValue(null);
+        await expect(service.dateFixedNotice('poll-1')).resolves.toBeNull();
+      });
+    });
+
+    describe('listCards() — le bloc de sondage disparaît une fois la date fixée', () => {
+      const day = (key: string) => new Date(`${key}T00:00:00.000Z`);
+      const row = (seance: Record<string, unknown>) => ({
+        id: 'e1',
+        title: 'Catane',
+        ownerId: 'hote',
+        owner: { displayName: 'Léa' },
+        seances: [
+          {
+            id: 'se1',
+            startDate: null,
+            startSlot: null,
+            lieu: null,
+            heureRdv: null,
+            notePratique: null,
+            inscriptionMax: null,
+            pollId: 'poll-1',
+            ...seance,
+          },
+        ],
+      });
+      const pollRow = (status: string) => ({
+        id: 'poll-1',
+        expiresAt: new Date('2026-11-10T23:59:59.999Z'),
+        status,
+        options: [{ id: 'o1', date: day('2026-11-14'), slot: 'EVENING' }],
+        votes: [],
+      });
+
+      it('séance datée par le sondage (pollId posé, sondage clos) : poll null, date normale, aucune lecture de sondage', async () => {
+        prisma.event.findMany.mockResolvedValue([
+          row({ startDate: day('2026-11-14'), startSlot: 'EVENING' }),
+        ]);
+        prisma.sessionPoll.findMany.mockResolvedValue([pollRow('CLOSED')]);
+
+        const [card] = await service.listCards(GRANT_P1, 'viewer');
+
+        expect(card.poll).toBeNull();
+        expect(card.seance).toEqual(objectLike({ date: '2026-11-14', slot: 'EVENING' }));
+        expect(prisma.sessionPoll.findMany).not.toHaveBeenCalled();
+      });
+
+      it('sondage fermé mais séance sans date : poll null ; sondage ouvert : bloc servi', async () => {
+        prisma.event.findMany.mockResolvedValue([row({})]);
+        prisma.sessionPoll.findMany.mockResolvedValue([pollRow('CLOSED')]);
+        expect((await service.listCards(GRANT_P1, 'viewer'))[0].poll).toBeNull();
+
+        prisma.sessionPoll.findMany.mockResolvedValue([pollRow('OPEN')]);
+        expect((await service.listCards(GRANT_P1, 'viewer'))[0].poll?.status).toBe('OPEN');
+      });
+    });
+
+    describe('updateHosted() — une date fixée depuis un sondage ne bouge plus', () => {
+      const GRANT_E1 = testGrant({ id: 'p1', ownerId: 'mj1' }, 'member', { eventId: 'e1' });
+      const fixedDay = new Date(Date.now() + 5 * 86_400_000);
+      fixedDay.setUTCHours(0, 0, 0, 0);
+      const fixedSeance = (over: Record<string, unknown> = {}) =>
+        prisma.tx.event.findUnique.mockResolvedValue({
+          ownerId: 'hote',
+          seances: [
+            { id: 'se1', startDate: fixedDay, startSlot: 'EVENING', pollId: 'poll-1', ...over },
+          ],
+        });
+      const input = (over: Record<string, unknown> = {}) => ({
+        title: 'Catane v2',
+        seance: {
+          date: fixedDay,
+          slot: 'EVENING' as const,
+          lieu: 'Nouveau lieu',
+          heureRdv: '20:30',
+          notePratique: null,
+          capacity: null,
+          ...over,
+        },
+      });
+
+      it('lieu, heure, infos et capacité restent modifiables ; la date n’est pas réécrite en base', async () => {
+        fixedSeance();
+        prisma.tx.inscription.count.mockResolvedValue(0);
+
+        await service.updateHosted(GRANT_E1, 'e1', input({ capacity: 6 }));
+
+        const data = callArg<{ data: Record<string, unknown> }>(prisma.tx.seance.update).data;
+        expect(data).toEqual(
+          objectLike({ lieu: 'Nouveau lieu', heureRdv: '20:30', inscriptionMax: 6 }),
+        );
+        // Jour et créneau inchangés : le rappel de la veille n'est pas ré-armé.
+        expect(data).not.toHaveProperty('reminderSentAt');
+        expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      });
+
+      it('changer le jour ou le créneau → 400 français, rien n’est écrit ni émis', async () => {
+        fixedSeance();
+        const otherDay = new Date(fixedDay.getTime() + 86_400_000);
+
+        const refusal = service.updateHosted(GRANT_E1, 'e1', input({ date: otherDay }));
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(DATE_FIXED_MESSAGE);
+        await expect(
+          service.updateHosted(GRANT_E1, 'e1', input({ slot: 'MORNING' })),
+        ).rejects.toThrow(DATE_FIXED_MESSAGE);
+        expect(prisma.tx.seance.update).not.toHaveBeenCalled();
+        expect(realtime.emit).not.toHaveBeenCalled();
+      });
+
+      it('envoyer des champs de sondage pour une conjonction datée → 400 (le mode ne change pas)', async () => {
+        fixedSeance();
+        await expect(
+          service.updateHosted(GRANT_E1, 'e1', input({ date: null, slot: null })),
+        ).rejects.toThrow(POLL_MODE_MESSAGE);
+        expect(prisma.tx.seance.update).not.toHaveBeenCalled();
+      });
+
+      it('une conjonction proposée à date fixée (sans sondage) garde sa modification de jour (Story 40.2)', async () => {
+        fixedSeance({ pollId: null });
+        prisma.tx.inscription.count.mockResolvedValue(0);
+        const otherDay = new Date(fixedDay.getTime() + 86_400_000);
+
+        await service.updateHosted(GRANT_E1, 'e1', input({ date: otherDay }));
+
+        expect(prisma.tx.seance.update).toHaveBeenCalledTimes(1);
       });
     });
   });

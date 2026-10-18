@@ -2,6 +2,7 @@ import type { EventCardDto } from '@master-jdr/shared';
 import { TONE_MAP } from '../../core/theme/tones';
 import {
   answeredSlotCount,
+  canFixDate,
   canManageReservations,
   canRespondToReservation,
   canSignUp,
@@ -25,11 +26,13 @@ import {
   isPollOpen,
   needsVote,
   pollBestSlot,
+  pollCountsLabel,
   pollPanel,
   pollRangeLabel,
   pollSlotLabel,
   pollSlotRows,
   pollSummaryLabel,
+  rankedPollSlots,
   respondentIds,
   shortDayLabel,
   splitEvents,
@@ -598,6 +601,109 @@ describe('event-card.util (Story 40.1)', () => {
         { id: 'o1', label: 'sam. 24 oct. · soir', available: '2 inscrits disponibles' },
         { id: 'o2', label: 'dim. 25 oct. · matin', available: '1 inscrit disponible' },
       ]);
+    });
+  });
+
+  describe('fixer la date (Story 40.6)', () => {
+    const HOST = 'hote';
+    const slots = [
+      { id: 'o1', date: '2026-10-24', slot: 'EVENING' as const, availableCount: 0 },
+      { id: 'o2', date: '2026-10-25', slot: 'MORNING' as const, availableCount: 0 },
+      { id: 'o3', date: '2026-10-25', slot: 'EVENING' as const, availableCount: 0 },
+      { id: 'o4', date: '2026-10-31', slot: 'EVENING' as const, availableCount: 0 },
+    ];
+    const answer = (optionId: string, userId: string, a: 'YES' | 'MAYBE' | 'NO') => ({
+      optionId,
+      userId,
+      answer: a,
+    });
+    const pollCard = (
+      votes: { optionId: string; userId: string; answer: 'YES' | 'MAYBE' | 'NO' }[],
+      over: Partial<NonNullable<EventCardDto['poll']>> = {},
+    ): EventCardDto =>
+      card('p', null, {
+        poll: {
+          id: 'poll-1',
+          expiresAt: '2026-10-20T23:59:59.999Z',
+          status: 'OPEN',
+          eligibleVoterIds: [HOST, 'a', 'b', 'c'],
+          options: slots,
+          votes,
+          ...over,
+        },
+      });
+
+    it('créneaux du plus au moins plébiscité : oui décroissant, puis peut-être décroissant, puis non croissant, puis date', () => {
+      const ranked = rankedPollSlots(
+        pollCard([
+          // o2 : 2 oui · 0 peut-être · 1 non
+          answer('o2', HOST, 'YES'),
+          answer('o2', 'a', 'YES'),
+          answer('o2', 'b', 'NO'),
+          // o3 : 2 oui · 1 peut-être · 0 non — devant o2 (plus de peut-être)
+          answer('o3', HOST, 'YES'),
+          answer('o3', 'a', 'YES'),
+          answer('o3', 'b', 'MAYBE'),
+          // o4 : 1 oui
+          answer('o4', 'c', 'YES'),
+          // o1 : aucune réponse
+        ]),
+        TODAY,
+      );
+      expect(ranked.map((r) => [r.id, r.yes, r.maybe, r.no])).toEqual([
+        ['o3', 2, 1, 0],
+        ['o2', 2, 0, 1],
+        ['o4', 1, 0, 0],
+        ['o1', 0, 0, 0],
+      ]);
+      expect(ranked[0].label).toBe('dim. 25 oct. · soir');
+    });
+
+    it('à égalité parfaite : le plus proche d’abord, le matin avant le soir d’un même jour ; sans réponse, ordre chronologique', () => {
+      expect(rankedPollSlots(pollCard([]), TODAY).map((r) => r.id)).toEqual(['o1', 'o2', 'o3', 'o4']);
+      // Moins de « non » l’emporte sur la date.
+      const fewerNo = rankedPollSlots(
+        pollCard([answer('o4', HOST, 'YES'), answer('o1', HOST, 'YES'), answer('o1', 'a', 'NO')]),
+        TODAY,
+      );
+      expect(fewerNo.map((r) => r.id).slice(0, 2)).toEqual(['o4', 'o1']);
+    });
+
+    it('seules les réponses des votants éligibles comptent (comme le meilleur créneau du panneau)', () => {
+      const ranked = rankedPollSlots(
+        pollCard([answer('o4', 'parti', 'YES'), answer('o4', 'autre', 'YES'), answer('o1', 'a', 'YES')]),
+        TODAY,
+      );
+      expect(ranked[0]).toMatchObject({ id: 'o1', yes: 1 });
+      expect(ranked.find((r) => r.id === 'o4')).toMatchObject({ yes: 0 });
+      expect(rankedPollSlots(card('d', '2026-10-24'), TODAY)).toEqual([]);
+    });
+
+    it('un créneau dont le jour est avant aujourd’hui est marqué passé (aujourd’hui ne l’est pas), sans changer l’ordre', () => {
+      const ranked = rankedPollSlots(pollCard([answer('o1', HOST, 'YES')]), '2026-10-25');
+      expect(ranked.map((r) => [r.id, r.past])).toEqual([
+        ['o1', true],
+        ['o2', false],
+        ['o3', false],
+        ['o4', false],
+      ]);
+    });
+
+    it('décompte écrit : « n oui · n peut-être · n non »', () => {
+      expect(pollCountsLabel({ id: 'x', label: 'x', yes: 4, maybe: 0, no: 1, past: false }, TONE)).toBe(
+        '4 oui · 0 peut-être · 1 non',
+      );
+    });
+
+    it('« Fixer la date… » : l’hôte seul, sondage ouvert (même échéance dépassée) avec au moins un créneau, séance sans date', () => {
+      expect(canFixDate(pollCard([]), HOST)).toBe(true);
+      // L'échéance dépassée ne bloque pas l'hôte (le sondage reste ouvert côté serveur).
+      expect(canFixDate(pollCard([], { expiresAt: '2026-10-01T23:59:59.999Z' }), HOST)).toBe(true);
+      expect(canFixDate(pollCard([]), 'a')).toBe(false);
+      expect(canFixDate(pollCard([]), null)).toBe(false);
+      expect(canFixDate(pollCard([], { status: 'CLOSED' }), HOST)).toBe(false);
+      expect(canFixDate(pollCard([], { options: [] }), HOST)).toBe(false);
+      expect(canFixDate(card('d', '2026-10-24'), HOST)).toBe(false);
     });
   });
 });

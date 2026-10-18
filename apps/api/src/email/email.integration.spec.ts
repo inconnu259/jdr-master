@@ -89,6 +89,7 @@ describe('EmailModule (intégration réelle via Mailpit)', () => {
     ['session-reminder', 'Voir la partie'],
     ['conjonction-reminder', 'Voir la rencontre'],
     ['conjonction-reservation', 'Répondre'],
+    ['conjonction-date-fixee', 'Voir la rencontre'],
     ['password-reset', 'Choisir un nouveau mot de passe'],
     ['level-up', 'Voir la fiche'],
     ['email-change-confirm', 'Confirmer cette nouvelle adresse'],
@@ -243,6 +244,46 @@ describe('EmailModule (intégration réelle via Mailpit)', () => {
       expect(message.HTML).toContain('samedi 24 octobre (soir) · Chez Léa');
       expect(message.HTML).toContain(`href="${link}"`);
       expect(message.HTML).toContain('>Répondre</a>');
+      for (const mot of ['partie', 'MJ', 'grimoire', 'campagne', 'joueur', 'séance']) {
+        expect(message.HTML).not.toContain(mot);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
+  // Story 40.6 : date fixée par l'hôte — sujet « C'est fixé : « Titre », <date> », date · lieu, bouton
+  // « Voir la rencontre » vers la page du groupe, aucun mot de JDR.
+  it('conjonction-date-fixee : sujet interpolé, date · lieu, bouton « Voir la rencontre », corps neutre', async () => {
+    if (!reachable) return;
+
+    const app = await NestFactory.createApplicationContext(TestAppModule, { logger: false });
+    const email = app.get(EmailService);
+    const to = `integration-test-${Date.now()}-date-fixee@example.com`;
+    const link = 'https://example.com/g/abc.def';
+
+    try {
+      expect(
+        await email.sendMail('conjonction-date-fixee', to, {
+          eventTitle: "Catane d'automne",
+          sessionDate: 'samedi 24 octobre (soir)',
+          lieu: 'Chez Léa',
+          link,
+        }),
+      ).toEqual({ ok: true });
+
+      const searchRes = await fetch(
+        `${MAILPIT_API}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`,
+      );
+      const search = (await searchRes.json()) as { messages: Array<{ ID: string }> };
+      expect(search.messages.length).toBeGreaterThan(0);
+
+      const messageRes = await fetch(`${MAILPIT_API}/api/v1/message/${search.messages[0].ID}`);
+      const message = (await messageRes.json()) as { Subject: string; HTML: string };
+      expect(message.Subject).toBe("C'est fixé : « Catane d'automne », samedi 24 octobre (soir)");
+      expect(message.HTML).toContain('samedi 24 octobre (soir) · Chez Léa');
+      expect(message.HTML).toContain(`href="${link}"`);
+      expect(message.HTML).toContain('>Voir la rencontre</a>');
       for (const mot of ['partie', 'MJ', 'grimoire', 'campagne', 'joueur', 'séance']) {
         expect(message.HTML).not.toContain(mot);
       }

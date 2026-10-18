@@ -92,6 +92,20 @@ export class EventsApiService {
     );
   }
 
+  /** Story 40.6 : l'hôte fixe la date de sa conjonction depuis son sondage
+   *  (`PATCH /parties/:id/poll/:pollId/choose`, route partagée avec le JDR — la famille de la partie décide).
+   *  Rien n'est renvoyé : la carte à jour arrive par la relecture de la liste. Refus en français (pas
+   *  l'hôte 403, date déjà fixée 400…). */
+  choose(partieId: string, pollId: string, optionId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.patch<void>(
+        `${API_BASE}/parties/${partieId}/poll/${pollId}/choose`,
+        { optionId },
+        { withCredentials: true },
+      ),
+    );
+  }
+
   /** Story 40.2 : l'hôte remplace sa conjonction (`PATCH /parties/:id/events/:eventId`) — renvoie
    *  la carte à jour, participants compris. */
   update(partieId: string, eventId: string, dto: UpdateEventDto): Promise<EventCardDto> {

@@ -3317,3 +3317,481 @@ describe('Ralliement — proposer une conjonction par sondage de dates (Story 40
     }
   });
 });
+
+// Story 40.6 — fixer la date d'une conjonction : l'hôte choisit un créneau du sondage ; sous le verrou de
+// l'événement, la séance est datée, le sondage clos et la prochaine date de la partie recalculée, puis
+// les inscrits confirmés sont prévenus par e-mail. La date ne se rouvre jamais.
+describe("Ralliement — fixer la date d'une conjonction (Story 40.6)", () => {
+  let h: Harness;
+  let admin: TestUser;
+  let host: TestUser;
+  let guest: TestUser;
+  let third: TestUser;
+  let invited: TestUser;
+  let stranger: TestUser;
+  let otherAdmin: TestUser;
+  let groupId: string;
+  let otherGroupId: string;
+
+  type PollLike = {
+    id: string;
+    status: string;
+    options: { id: string; date: string; slot: string }[];
+    votes: { optionId: string; userId: string; answer: string }[];
+  };
+  type CardLike = {
+    id: string;
+    title: string;
+    seance: { id: string; date: string | null; slot: string | null; lieu: string | null } | null;
+    myInscription: string | null;
+    poll: PollLike | null;
+  };
+  type ErrorLike = { statusCode: number; message: string | string[] };
+  type DatedPartieLike = PartieDtoLike & { nextSessionDate: string | null };
+
+  const DATE_MAIL = 'conjonction-date-fixee';
+  const HOST_ONLY = "Action réservée à l'hôte de la conjonction";
+  const ALREADY_FIXED = 'La date de cette conjonction est déjà fixée';
+  const POLL_CLOSED = 'Poll introuvable ou fermé';
+  const DATE_FIXED =
+    'La date de cette conjonction est fixée : le jour et le créneau ne peuvent plus changer';
+  const MODE =
+    'Une conjonction se propose à date fixée OU par sondage de dates, et son mode ne change pas';
+
+  const message = (res: { body: unknown }) => (res.body as ErrorLike).message;
+  const create = async (who: TestUser, over: Record<string, unknown> = {}) => {
+    const res = await who.agent.post(`/parties/${groupId}/events`).send({
+      title: 'Sondage à trancher',
+      pollOptions: [
+        { date: isoDay(8), slot: 'EVENING' },
+        { date: isoDay(9), slot: 'MORNING' },
+        { date: isoDay(12), slot: 'EVENING' },
+      ],
+      pollDeadline: isoDay(5),
+      ...over,
+    });
+    expect(res.status).toBe(201);
+    return body<CardLike>(res);
+  };
+  const choose = (who: TestUser, pollId: string, optionId: string, partieId = groupId) =>
+    who.agent.patch(`/parties/${partieId}/poll/${pollId}/choose`).send({ optionId });
+  const vote = (who: TestUser, pollId: string, optionId: string, answer = 'YES') =>
+    who.agent.post(`/parties/${groupId}/poll/${pollId}/vote`).send({ optionId, answer });
+  const withdraw = (who: TestUser, pollId: string, optionId: string) =>
+    who.agent.delete(`/parties/${groupId}/poll/${pollId}/vote/${optionId}`);
+  const signUp = (who: TestUser, seanceId: string) =>
+    who.agent.post(`/scenarios/seances/${seanceId}/inscription`);
+  const reserve = (who: TestUser, seanceId: string, userId: string) =>
+    who.agent.post(`/scenarios/seances/${seanceId}/reservations`).send({ userId });
+  const edit = (who: TestUser, eventId: string, sent: Record<string, unknown>) =>
+    who.agent.patch(`/parties/${groupId}/events/${eventId}`).send(sent);
+  const cardFor = async (who: TestUser, eventId: string) =>
+    body<CardLike[]>(await who.agent.get(`/parties/${groupId}/events/list`).expect(200)).find(
+      (c) => c.id === eventId,
+    )!;
+  const seanceRow = (seanceId: string) =>
+    h.prisma.seance.findUniqueOrThrow({ where: { id: seanceId } });
+  const pollRow = (pollId: string) =>
+    h.prisma.sessionPoll.findUniqueOrThrow({ where: { id: pollId } });
+  const dateMails = (since: number) =>
+    h.email.calls.slice(since).filter((c) => c.template === DATE_MAIL);
+  const nextDate = async (who: TestUser) =>
+    body<DatedPartieLike>(await who.agent.get(`/parties/${groupId}`).expect(200)).nextSessionDate;
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, host, guest, third, invited, stranger, otherAdmin] = await Promise.all([
+      h.createUser('fixe-admin'),
+      h.createUser('fixe-hote'),
+      h.createUser('fixe-invite'),
+      h.createUser('fixe-tiers'),
+      h.createUser('fixe-reserve'),
+      h.createUser('fixe-etranger'),
+      h.createUser('fixe-autre-admin'),
+    ]);
+    ({ id: groupId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'fixe', 'ralliement'));
+    for (const who of [host, guest, third, invited]) await h.addMember(groupId, who);
+    ({ id: otherGroupId } = await h.createPartie(
+      otherAdmin,
+      'CAMPAGNE_EPISODIQUE',
+      'fixe-autre',
+      'ralliement',
+    ));
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  it("l'hôte fixe la date : séance datée, sondage clos, prochaine date recalculée, rappel ré-armé, carte vivante, e-mail aux seuls inscrits confirmés", async () => {
+    const card = await create(host, { capacity: 5 });
+    const [, o2] = card.poll!.options;
+    const seanceId = card.seance!.id;
+    await signUp(guest, seanceId).expect(201);
+    await signUp(third, seanceId).expect(201);
+    // Une place seulement réservée n'est pas une participation : aucun e-mail.
+    await reserve(host, seanceId, invited.id).expect(201);
+    await vote(guest, card.poll!.id, o2.id, 'YES').expect(201);
+    // Le rappel de la veille (d'une date précédente) est ré-armé par la nouvelle date.
+    await h.prisma.seance.update({
+      where: { id: seanceId },
+      data: { reminderSentAt: new Date() },
+    });
+    expect(await nextDate(guest)).toBeNull();
+
+    const mailsBefore = h.email.calls.length;
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    const notify = jest.spyOn(h.app.get(PartiesService), 'notifyPartieSignalsChanged');
+    try {
+      await choose(host, card.poll!.id, o2.id).expect(200);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(notify).toHaveBeenCalledWith(groupId, expect.anything());
+    } finally {
+      emit.mockRestore();
+      notify.mockRestore();
+    }
+
+    // Séance : plage d'un seul créneau (start = end), jamais FULL_DAY, rappel ré-armé.
+    const seance = await seanceRow(seanceId);
+    expect(seance.startDate?.toISOString().substring(0, 10)).toBe(o2.date);
+    expect(seance.endDate?.toISOString().substring(0, 10)).toBe(o2.date);
+    expect([seance.startSlot, seance.endSlot]).toEqual([o2.slot, o2.slot]);
+    expect(seance.reminderSentAt).toBeNull();
+    // Sondage : clos, date et créneau choisis.
+    const poll = await pollRow(card.poll!.id);
+    expect(poll.status).toBe('CLOSED');
+    expect(poll.chosenDate?.toISOString().substring(0, 10)).toBe(o2.date);
+    expect(poll.chosenSlot).toBe(o2.slot);
+    // Prochaine date de la partie recalculée, visible de tous.
+    expect((await nextDate(third))?.substring(0, 10)).toBe(o2.date);
+
+    // Carte : date normale, plus de bloc de sondage — pour chaque membre.
+    for (const who of [admin, host, guest, third, invited]) {
+      const seen = await cardFor(who, card.id);
+      expect(seen.poll).toBeNull();
+      expect(seen.seance).toMatchObject({ date: o2.date, slot: o2.slot });
+    }
+    // Calendrier personnel : l'hôte et l'inscrit la voient, la place seulement réservée non.
+    const inWindow = async (who: TestUser) =>
+      body<{ 'mes-seances': { seanceId: string }[] }>(
+        await who.agent
+          .get('/me/calendar')
+          .query({ from: isoDay(0), to: isoDay(30) })
+          .expect(200),
+      )['mes-seances'].map((s) => s.seanceId);
+    expect(await inWindow(host)).toContain(seanceId);
+    expect(await inWindow(guest)).toContain(seanceId);
+    expect(await inWindow(invited)).not.toContain(seanceId);
+
+    // E-mail n°4 : une fois chacun, inscrits confirmés seulement, hôte et place réservée exclus.
+    const sent = dateMails(mailsBefore);
+    expect(sent.map((c) => c.to).sort()).toEqual([guest.email, third.email].sort());
+    expect(sent[0].data).toMatchObject({ eventTitle: 'Sondage à trancher' });
+    expect(String(sent[0].data.sessionDate)).toContain(o2.slot === 'MORNING' ? 'matin' : 'soir');
+    expect(String(sent[0].data.link)).toContain(`/parties/${groupId}`);
+  });
+
+  it("aucun inscrit : la date est fixée, aucun e-mail n'est envoyé", async () => {
+    const card = await create(host);
+    const before = h.email.calls.length;
+
+    await choose(host, card.poll!.id, card.poll!.options[0].id).expect(200);
+
+    expect((await seanceRow(card.seance!.id)).startDate).not.toBeNull();
+    expect(dateMails(before)).toEqual([]);
+  });
+
+  it("l'échéance dépassée ne bloque pas l'hôte", async () => {
+    const card = await create(host);
+    await h.prisma.sessionPoll.update({
+      where: { id: card.poll!.id },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    await choose(host, card.poll!.id, card.poll!.options[1].id).expect(200);
+
+    expect((await pollRow(card.poll!.id)).status).toBe('CLOSED');
+  });
+
+  it("l'échec de l'envoi est journalisé, jamais remonté : la date reste fixée", async () => {
+    const card = await create(host);
+    await signUp(guest, card.seance!.id).expect(201);
+    const send = jest.spyOn(h.email, 'sendMail').mockRejectedValue(new Error('SMTP indisponible'));
+    try {
+      await choose(host, card.poll!.id, card.poll!.options[0].id).expect(200);
+      expect(send).toHaveBeenCalled();
+    } finally {
+      send.mockRestore();
+    }
+    expect((await seanceRow(card.seance!.id)).startDate).not.toBeNull();
+  });
+
+  describe('refus de droit (rien n’est écrit, aucun e-mail)', () => {
+    it("tout autre membre, administrateur compris, est refusé (403 « réservée à l'hôte »), comme un étranger ou un membre d'un autre groupe", async () => {
+      const card = await create(host);
+      await signUp(guest, card.seance!.id).expect(201);
+      const optionId = card.poll!.options[0].id;
+      const mailsBefore = h.email.calls.length;
+
+      for (const who of [admin, guest, third]) {
+        const res = await choose(who, card.poll!.id, optionId);
+        expect(res.status).toBe(403);
+        expect(message(res)).toBe(HOST_ONLY);
+      }
+      for (const who of [stranger, otherAdmin]) {
+        const res = await choose(who, card.poll!.id, optionId);
+        expect(res.status).toBe(403);
+        expect(message(res)).toBe(NO_ACCESS);
+      }
+      // Par la route de SON groupe, le sondage d'un autre groupe est inconnu (404).
+      expect((await choose(otherAdmin, card.poll!.id, optionId, otherGroupId)).status).toBe(404);
+
+      expect((await seanceRow(card.seance!.id)).startDate).toBeNull();
+      expect((await pollRow(card.poll!.id)).status).toBe('OPEN');
+      expect(dateMails(mailsBefore)).toEqual([]);
+    });
+
+    it('la rencontre isolée (ONE_SHOT) ne fixe aucune date : 403 « indisponible »', async () => {
+      const { id: oneShot } = await h.createPartie(admin, 'ONE_SHOT', 'fixe-solo', 'ralliement');
+      const res = await choose(admin, randomUUID(), randomUUID(), oneShot);
+      expect(res.status).toBe(403);
+      expect(message(res)).toBe(UNAVAILABLE);
+    });
+  });
+
+  describe('cible invalide (400/404, rien n’est écrit)', () => {
+    it("option d'un autre sondage, option inconnue, sondage inconnu", async () => {
+      const a = await create(host);
+      const b = await create(host);
+      const mailsBefore = h.email.calls.length;
+
+      expect((await choose(host, a.poll!.id, b.poll!.options[0].id)).status).toBe(404);
+      expect((await choose(host, a.poll!.id, randomUUID())).status).toBe(404);
+      expect((await choose(host, randomUUID(), a.poll!.options[0].id)).status).toBe(404);
+      await host.agent
+        .patch(`/parties/${groupId}/poll/${a.poll!.id}/choose`)
+        .send({ optionId: 'pas-un-uuid' })
+        .expect(400);
+
+      for (const c of [a, b]) {
+        expect((await seanceRow(c.seance!.id)).startDate).toBeNull();
+        expect((await pollRow(c.poll!.id)).status).toBe('OPEN');
+      }
+      expect(dateMails(mailsBefore)).toEqual([]);
+    });
+
+    it('date déjà fixée ou sondage déjà fermé : 400 français, la date ne change pas, un seul e-mail', async () => {
+      const card = await create(host);
+      await signUp(guest, card.seance!.id).expect(201);
+      const [o1, o2] = card.poll!.options;
+      const mailsBefore = h.email.calls.length;
+      await choose(host, card.poll!.id, o1.id).expect(200);
+
+      const again = await choose(host, card.poll!.id, o2.id);
+      expect(again.status).toBe(400);
+      expect(message(again)).toBe(ALREADY_FIXED);
+      expect((await seanceRow(card.seance!.id)).startDate?.toISOString().substring(0, 10)).toBe(
+        o1.date,
+      );
+      expect(dateMails(mailsBefore)).toHaveLength(1);
+
+      // Sondage fermé par ailleurs, séance encore sans date : refusé aussi.
+      const other = await create(host);
+      await h.prisma.sessionPoll.update({
+        where: { id: other.poll!.id },
+        data: { status: 'CLOSED' },
+      });
+      expect((await choose(host, other.poll!.id, other.poll!.options[0].id)).status).toBe(400);
+      expect((await seanceRow(other.seance!.id)).startDate).toBeNull();
+    });
+  });
+
+  it('deux fixations simultanées : une seule gagne sous le verrou, l’autre est refusée (400), un seul e-mail par inscrit', async () => {
+    const card = await create(host);
+    await signUp(guest, card.seance!.id).expect(201);
+    const [o1, o2] = card.poll!.options;
+    const mailsBefore = h.email.calls.length;
+
+    const results = await Promise.all([
+      choose(host, card.poll!.id, o1.id),
+      choose(host, card.poll!.id, o2.id),
+    ]);
+
+    expect(results.map((r) => r.status).sort()).toEqual([200, 400]);
+    const winner = results[0].status === 200 ? o1 : o2;
+    const seance = await seanceRow(card.seance!.id);
+    expect(seance.startDate?.toISOString().substring(0, 10)).toBe(winner.date);
+    expect(seance.startSlot).toBe(winner.slot);
+    expect(dateMails(mailsBefore)).toHaveLength(1);
+  });
+
+  it('une fois la date fixée : vote et retrait refusés (400), inscription tardive et réservation acceptées, la date ne bouge pas', async () => {
+    const card = await create(host, { capacity: 5 });
+    const [o1, o2] = card.poll!.options;
+    await signUp(guest, card.seance!.id).expect(201);
+    await vote(guest, card.poll!.id, o1.id, 'YES').expect(201);
+    await choose(host, card.poll!.id, o2.id).expect(200);
+
+    const lateVote = await vote(guest, card.poll!.id, o2.id);
+    expect(lateVote.status).toBe(400);
+    expect(message(lateVote)).toBe(POLL_CLOSED);
+    const lateWithdraw = await withdraw(guest, card.poll!.id, o1.id);
+    expect(lateWithdraw.status).toBe(400);
+    expect(await h.prisma.pollVote.count({ where: { pollId: card.poll!.id } })).toBe(1);
+
+    // Inscription tardive et réservation par l'hôte : la conjonction est datée, rien de plus.
+    await signUp(third, card.seance!.id).expect(201);
+    await reserve(host, card.seance!.id, invited.id).expect(201);
+    const rows = await h.prisma.inscription.findMany({ where: { seanceId: card.seance!.id } });
+    expect(rows.map((r) => [r.userId, r.status]).sort()).toEqual(
+      [
+        [guest.id, 'CONFIRMED'],
+        [third.id, 'CONFIRMED'],
+        [invited.id, 'RESERVED'],
+      ].sort(),
+    );
+    expect((await seanceRow(card.seance!.id)).startDate?.toISOString().substring(0, 10)).toBe(
+      o2.date,
+    );
+    expect((await cardFor(third, card.id)).myInscription).toBe('CONFIRMED');
+  });
+
+  it("modification d'une conjonction dont la date est fixée : lieu, heure et infos passent, le jour et le créneau sont refusés (400)", async () => {
+    const card = await create(host);
+    const [o1] = card.poll!.options;
+    await choose(host, card.poll!.id, o1.id).expect(200);
+    const same = { title: 'Renommée', date: o1.date, slot: o1.slot };
+
+    const ok = await edit(host, card.id, {
+      ...same,
+      lieu: 'Chez Léa',
+      heureRdv: '20:30',
+      notePratique: 'Apportez des jeux',
+    }).expect(200);
+    expect(body<CardLike>(ok).seance).toMatchObject({ lieu: 'Chez Léa', date: o1.date });
+    expect(body<CardLike>(ok).poll).toBeNull();
+
+    const otherDay = await edit(host, card.id, { ...same, date: isoDay(15) });
+    expect(otherDay.status).toBe(400);
+    expect(message(otherDay)).toBe(DATE_FIXED);
+    const otherSlot = await edit(host, card.id, {
+      ...same,
+      slot: o1.slot === 'MORNING' ? 'EVENING' : 'MORNING',
+    });
+    expect(otherSlot.status).toBe(400);
+    expect(message(otherSlot)).toBe(DATE_FIXED);
+    // Les champs de sondage ne rouvrent rien.
+    const asPoll = await edit(host, card.id, {
+      title: 'X',
+      pollOptions: [
+        { date: isoDay(20), slot: 'EVENING' },
+        { date: isoDay(21), slot: 'EVENING' },
+      ],
+      pollDeadline: isoDay(10),
+    });
+    expect(asPoll.status).toBe(400);
+    expect(message(asPoll)).toBe(MODE);
+
+    const seance = await seanceRow(card.seance!.id);
+    expect(seance.startDate?.toISOString().substring(0, 10)).toBe(o1.date);
+    expect(seance.lieu).toBe('Chez Léa');
+    expect((await pollRow(card.poll!.id)).status).toBe('CLOSED');
+  });
+
+  it('un créneau dont le jour est déjà passé est refusé (400 français) : la conjonction n’est pas scellée, aucun e-mail', async () => {
+    const card = await create(host);
+    await signUp(guest, card.seance!.id).expect(201);
+    const [o1, o2] = card.poll!.options;
+    // Le jour du créneau passe avant que l'hôte tranche.
+    await h.prisma.pollOption.update({
+      where: { id: o1.id },
+      data: { date: new Date(`${isoDay(-1)}T00:00:00.000Z`) },
+    });
+    const mailsBefore = h.email.calls.length;
+
+    const res = await choose(host, card.poll!.id, o1.id);
+
+    expect(res.status).toBe(400);
+    expect(message(res)).toBe('Ce créneau est déjà passé : choisissez un jour à venir');
+    expect((await seanceRow(card.seance!.id)).startDate).toBeNull();
+    expect((await pollRow(card.poll!.id)).status).toBe('OPEN');
+    expect(dateMails(mailsBefore)).toEqual([]);
+    // Un créneau à venir reste fixable ; aujourd'hui est accepté.
+    await h.prisma.pollOption.update({
+      where: { id: o2.id },
+      data: { date: new Date(`${isoDay(0)}T00:00:00.000Z`) },
+    });
+    await choose(host, card.poll!.id, o2.id).expect(200);
+  });
+
+  it('vote et retrait qui attendent le verrou de l’événement sont refusés (400) quand la date est fixée entre-temps, sans rien écrire', async () => {
+    const card = await create(host);
+    const [o1, o2] = card.poll!.options;
+    await vote(guest, card.poll!.id, o1.id, 'YES').expect(201);
+    const eventId = card.id;
+
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let locked!: () => void;
+    const lockTaken = new Promise<void>((resolve) => {
+      locked = resolve;
+    });
+    // Autre connexion : elle tient le verrou de la ligne Event, puis écrit ce que la fixation de la date
+    // validerait (séance datée, sondage clos) avant de le relâcher.
+    const holder = h.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
+        locked();
+        await released;
+        await tx.seance.update({
+          where: { id: card.seance!.id },
+          data: {
+            startDate: new Date(`${o2.date}T00:00:00.000Z`),
+            startSlot: o2.slot as 'MORNING' | 'AFTERNOON' | 'EVENING',
+            endDate: new Date(`${o2.date}T00:00:00.000Z`),
+            endSlot: o2.slot as 'MORNING' | 'AFTERNOON' | 'EVENING',
+          },
+        });
+        await tx.sessionPoll.update({
+          where: { id: card.poll!.id },
+          data: { status: 'CLOSED', chosenDate: new Date(`${o2.date}T00:00:00.000Z`) },
+        });
+      },
+      { timeout: 30_000, maxWait: 10_000 },
+    );
+
+    const done = { vote: false, withdraw: false };
+    let voteRes: Response | undefined;
+    let withdrawRes: Response | undefined;
+    try {
+      await lockTaken;
+      const voting = vote(third, card.poll!.id, o2.id, 'YES').then((r) => {
+        done.vote = true;
+        voteRes = r;
+      });
+      const withdrawing = withdraw(guest, card.poll!.id, o1.id).then((r) => {
+        done.withdraw = true;
+        withdrawRes = r;
+      });
+      // Tant que le verrou est tenu, ni le vote ni le retrait n'aboutissent.
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      expect(done).toEqual({ vote: false, withdraw: false });
+      expect(await h.prisma.pollVote.count({ where: { pollId: card.poll!.id } })).toBe(1);
+
+      release();
+      await holder;
+      await Promise.all([voting, withdrawing]);
+    } finally {
+      release();
+      await holder.catch(() => undefined);
+    }
+
+    expect(voteRes?.status).toBe(400);
+    expect(withdrawRes?.status).toBe(400);
+    // Rien n'a été écrit ni retiré : seule la réponse d'avant la fixation subsiste.
+    const rows = await h.prisma.pollVote.findMany({ where: { pollId: card.poll!.id } });
+    expect(rows.map((r) => [r.userId, r.optionId, r.answer])).toEqual([[guest.id, o1.id, 'YES']]);
+  });
+});

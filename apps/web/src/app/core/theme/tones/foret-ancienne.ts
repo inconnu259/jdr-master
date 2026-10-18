@@ -488,6 +488,17 @@ export const foretAncienne: Record<ToneKey, string> = {
     'Tu es l’hôte. Le vote se termine {when} — {n} créneaux proposés.',
   'partie.ralliement_event_poll_not_eligible':
     'Seuls les inscrits à cette halte votent pour la date.',
+  /* — fixer la date d’une conjonction (Story 40.6) : mots du contrat identiques, repli d’erreur selon le thème — */
+  'partie.ralliement_event_fix_date_btn': 'Fixer la date…',
+  'partie.ralliement_event_fix_confirm_btn': 'Fixer la date',
+  'partie.ralliement_event_fix_heading':
+    'Fixer la date — « {title} » : les créneaux, du plus au moins plébiscité',
+  'partie.ralliement_event_fix_past': 'Jour passé : ce créneau ne peut plus être retenu',
+  'partie.ralliement_event_fix_counts': '{yes} oui · {maybe} peut-être · {no} non',
+  'partie.ralliement_event_fix_warning':
+    'La date sera scellée et les inscrits prévenus par e-mail. Elle ne pourra plus être rouverte ; les inscriptions tardives restent possibles.',
+  'partie.ralliement_event_fix_date_error':
+    'La date de cette halte n’a pas pu être fixée. Réessaie.',
   /* — calendrier du groupe pour un sondage de dates (Story 40.5b) : mots du contrat identiques, noms de la rencontre et tutoiement selon le thème — */
   'partie.ralliement_calendar_link': 'Calendrier du groupe',
   'partie.ralliement_event_poll_calendar_btn': 'Choisir les créneaux dans le calendrier',

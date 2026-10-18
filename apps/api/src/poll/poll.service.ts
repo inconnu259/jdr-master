@@ -27,11 +27,18 @@ import { ChooseDateDto } from './dto/choose-date.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
 import { Prisma } from '@prisma/client';
 import { SetPollOptionsDto } from './dto/set-poll-options.dto';
+import { GROUP_POLL_CHOOSE_PORT, type GroupPollChoosePort } from './ports/group-poll-choose.port';
 import { GROUP_POLL_VOTE_PORT, type GroupPollVotePort } from './ports/group-poll-vote.port';
 import { PARTIE_SIGNALS_PORT, type PartieSignalsPort } from './ports/partie-signals.port';
 import { SEANCE_DATE_PORT, type SeanceDatePort } from './ports/seance-date.port';
 
 const DEFAULT_POLL_TTL_MS = 14 * 24 * 60 * 60 * 1000; // défaut 14 jours
+
+/** Refus de fixer la date d'une conjonction dont la date est déjà fixée (Story 40.6). */
+export const DATE_ALREADY_FIXED_MESSAGE = 'La date de cette conjonction est déjà fixée';
+
+/** Refus de fixer la date d'une conjonction sur un créneau dont le jour est déjà passé (Story 40.6). */
+export const PAST_OPTION_MESSAGE = 'Ce créneau est déjà passé : choisissez un jour à venir';
 
 /** Bornes d'un sondage du JDR (Story 36.10) : de 2 à 40 créneaux. */
 export const JDR_POLL_OPTION_BOUNDS = { min: 2, max: 40 } as const;
@@ -83,6 +90,9 @@ export class PollService {
     // Story 40.5 : les règles d'un vote de GROUPE (votants éligibles, échéance, date déjà fixée) sont
     // celles de `events/`, jointes par un port — `poll/` ne connaît pas la conjonction.
     @Inject(GROUP_POLL_VOTE_PORT) private readonly groupVotes: GroupPollVotePort,
+    // Story 40.6 : fixer la date d'une conjonction — le droit d'hôte et l'e-mail « C'est fixé » sont ceux
+    // de `events/`, derrière ce port ; `poll/` garde l'écriture du sondage.
+    @Inject(GROUP_POLL_CHOOSE_PORT) private readonly groupChoice: GroupPollChoosePort,
   ) {}
 
   /** Crée un vote de date sur la partie de l'autorisation. Seul appelant :
@@ -233,16 +243,27 @@ export class PollService {
     if (!option || option.pollId !== pollId) {
       throw new BadRequestException('Option introuvable dans ce poll');
     }
-    await this.prisma.pollVote.upsert({
-      where: { optionId_userId: { optionId: dto.optionId, userId } },
-      update: { answer: dto.answer },
-      create: {
-        pollId,
-        optionId: dto.optionId,
-        userId,
-        answer: dto.answer,
-      },
-    });
+    const write = (db: Prisma.TransactionClient) =>
+      db.pollVote.upsert({
+        where: { optionId_userId: { optionId: dto.optionId, userId } },
+        update: { answer: dto.answer },
+        create: {
+          pollId,
+          optionId: dto.optionId,
+          userId,
+          answer: dto.answer,
+        },
+      });
+    if (familyOf(partie.gameSystemId) === 'ralliement') {
+      // Story 40.6 : l'écriture d'un vote de groupe se fait sous le verrou de la conjonction, avec relecture
+      // de l'état du sondage — un vote et la fixation de la date simultanés sont sérialisés.
+      await this.prisma.$transaction(async (tx) => {
+        await this.assertGroupPollStillOpen(tx, poll);
+        await write(tx);
+      });
+    } else {
+      await write(this.prisma);
+    }
     this.realtimeEvents.emit(partieTopic(partieId));
     // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement.
@@ -268,6 +289,22 @@ export class PollService {
   ): Promise<void> {
     if (familyOf(partie.gameSystemId) !== 'ralliement') return;
     await this.groupVotes.assertCanVote(poll, partie, userId);
+  }
+
+  /** Story 40.6 : sous le verrou de la conjonction (partie puis événement), le sondage d'un groupe est
+   *  toujours ouvert et sa date n'est pas fixée — sinon 400, rien n'est écrit. */
+  private async assertGroupPollStillOpen(
+    tx: Prisma.TransactionClient,
+    poll: { id: string; partieId: string },
+  ): Promise<void> {
+    const { dated } = await this.groupVotes.lockConjonction(tx, poll);
+    const fresh = await tx.sessionPoll.findUnique({
+      where: { id: poll.id },
+      select: { status: true },
+    });
+    if (dated || !fresh || fresh.status !== 'OPEN') {
+      throw new BadRequestException('Poll introuvable ou fermé');
+    }
   }
 
   /** Anti-spoil serveur : vrai si `pollId` est le vote de la séance d'un brouillon caché ET que
@@ -313,9 +350,17 @@ export class PollService {
     if (!option || option.pollId !== pollId) {
       throw new BadRequestException('Option introuvable dans ce poll');
     }
-    await this.prisma.pollVote.deleteMany({
-      where: { optionId, userId },
-    });
+    if (familyOf(partie.gameSystemId) === 'ralliement') {
+      // Story 40.6 : même verrou que le vote — un retrait après la fixation de la date est refusé.
+      await this.prisma.$transaction(async (tx) => {
+        await this.assertGroupPollStillOpen(tx, poll);
+        await tx.pollVote.deleteMany({ where: { optionId, userId } });
+      });
+    } else {
+      await this.prisma.pollVote.deleteMany({
+        where: { optionId, userId },
+      });
+    }
     this.realtimeEvents.emit(partieTopic(partieId));
     // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : un retrait peut faire réapparaître ce
     // signal pour ce membre — même raisonnement que castVote(), en plus de partieTopic ci-dessus,
@@ -329,7 +374,13 @@ export class PollService {
     userId: string,
     dto: ChooseDateDto,
   ): Promise<void> {
-    await this.permissions.assert(userId, 'POLL_CHOOSE', { partieId });
+    const { partie } = await this.permissions.assert(userId, 'POLL_CHOOSE', { partieId });
+    // Story 40.6 : la famille de la partie décide — un groupe de ralliement fixe la date de sa conjonction
+    // (hôte seul, sous le verrou de l'événement), le JDR garde son chemin inchangé (Story 37.1).
+    if (familyOf(partie.gameSystemId) === 'ralliement') {
+      await this.chooseGroupDate(partie, pollId, userId, dto);
+      return;
+    }
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -359,6 +410,50 @@ export class PollService {
     // AUCUNE_DATE_NI_VOTE/PROCHAINE_SEANCE_CONNUE (Story 29.7, AD-14) : en plus de partieTopic
     // ci-dessus, jamais en remplacement.
     await this.partieSignals.notifyChanged(partieId);
+  }
+
+  /**
+   * Story 40.6 — l'hôte fixe la date d'une conjonction depuis son sondage (UX-DR12). Le droit « hôte »
+   * est décidé par `events/` derrière le port, sur l'événement du sondage (403 pour tout autre membre,
+   * administrateur compris, et pour la rencontre isolée). Puis UNE transaction : verrou de la partie puis
+   * de l'événement, relecture du sondage (ouvert, de la partie, option de ce sondage), sondage clos avec
+   * la date choisie, plage de la séance et prochaine séance écrites par `SeanceDatePort` — tout ou rien.
+   * Une date déjà fixée ou un sondage déjà fermé est refusé (400) : la date ne se rouvre jamais. L'échéance
+   * dépassée ne bloque pas l'hôte. Après le commit : `partie:{id}`, signaux de l'accueil, puis l'e-mail
+   * aux inscrits (jamais bloquant).
+   */
+  private async chooseGroupDate(
+    partie: { id: string; kind: PartieKind },
+    pollId: string,
+    userId: string,
+    dto: ChooseDateDto,
+  ): Promise<void> {
+    const partieId = partie.id;
+    // Le port refuse d'abord la rencontre isolée (403), puis un sondage qui n'est pas celui d'une conjonction
+    // de cette partie (404), puis tout membre qui n'est pas l'hôte (403) — avant toute écriture.
+    await this.groupChoice.assertCanChoose({ id: pollId, partieId }, partie, userId);
+    await this.prisma.$transaction(async (tx) => {
+      const { dated } = await this.groupVotes.lockConjonction(tx, { id: pollId, partieId });
+      if (dated) throw new BadRequestException(DATE_ALREADY_FIXED_MESSAGE);
+      const poll = await tx.sessionPoll.findUnique({ where: { id: pollId } });
+      if (!poll || poll.partieId !== partieId) throw new NotFoundException('Poll introuvable');
+      if (poll.status !== 'OPEN') throw new BadRequestException('Le poll est déjà fermé');
+      const option = await tx.pollOption.findUnique({ where: { id: dto.optionId } });
+      if (!option || option.pollId !== pollId) throw new NotFoundException('Option introuvable');
+      // Un jour déjà passé (clé de jour UTC, comme les conjonctions 40.1 à 40.3) ne se scelle pas : la
+      // conjonction serait passée d'emblée (ni rappel, ni modification possible). Aujourd'hui reste accepté.
+      if (option.date.toISOString().substring(0, 10) < new Date().toISOString().substring(0, 10)) {
+        throw new BadRequestException(PAST_OPTION_MESSAGE);
+      }
+      await tx.sessionPoll.update({
+        where: { id: pollId },
+        data: { status: 'CLOSED', chosenDate: option.date, chosenSlot: option.slot },
+      });
+      await this.seanceDate.chooseDate(tx, pollId, option.date, option.slot);
+    });
+    this.realtimeEvents.emit(partieTopic(partieId));
+    await this.partieSignals.notifyChanged(partieId);
+    await this.groupChoice.notifyDateFixed({ id: pollId, partieId });
   }
 
   /**

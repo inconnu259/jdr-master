@@ -561,3 +561,74 @@ export function pollSummaryLabel(options: readonly { date: string }[], tone: Eve
     range: pollRangeLabel(options.map((o) => o.date)),
   });
 }
+
+// ─── Fixer la date (Story 40.6) ───────────────────────────────────────────────────────────────────
+
+/** Un créneau candidat avec le décompte de ses réponses, tel que la confirmation « Fixer la date » le liste. */
+export interface RankedPollSlot {
+  id: string;
+  /** « sam. 25 oct. · soir ». */
+  label: string;
+  yes: number;
+  maybe: number;
+  no: number;
+  /** Le jour du créneau est avant aujourd'hui : il ne peut plus être retenu (le serveur le refuse). */
+  past: boolean;
+}
+
+/**
+ * Les créneaux du sondage, du plus au moins plébiscité (UX-DR12) : plus de « oui », puis plus de
+ * « peut-être », puis moins de « non », puis le plus proche (jour, puis créneau). Les réponses comptées
+ * sont celles des votants éligibles, comme le « meilleur créneau » du panneau. Le premier est le meilleur
+ * (il est présélectionné) ; sans réponse, c'est le plus proche.
+ */
+export function rankedPollSlots(card: EventCardDto, todayKey: string): RankedPollSlot[] {
+  const poll = card.poll;
+  if (!poll) return [];
+  const eligible = new Set(poll.eligibleVoterIds);
+  return poll.options
+    .map((option) => {
+      const votes = poll.votes.filter((v) => v.optionId === option.id && eligible.has(v.userId));
+      return {
+        option,
+        slot: {
+          id: option.id,
+          label: pollSlotLabel(option),
+          yes: votes.filter((v) => v.answer === 'YES').length,
+          maybe: votes.filter((v) => v.answer === 'MAYBE').length,
+          no: votes.filter((v) => v.answer === 'NO').length,
+          past: option.date < todayKey,
+        },
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.slot.yes - a.slot.yes ||
+        b.slot.maybe - a.slot.maybe ||
+        a.slot.no - b.slot.no ||
+        a.option.date.localeCompare(b.option.date) ||
+        SLOT_ORDER[a.option.slot] - SLOT_ORDER[b.option.slot],
+    )
+    .map((entry) => entry.slot);
+}
+
+/** « 4 oui · 0 peut-être · 1 non » : le décompte d'un créneau dans la confirmation. */
+export function pollCountsLabel(slot: RankedPollSlot, tone: EventTone): string {
+  return fillTone(tone['partie.ralliement_event_fix_counts'], {
+    yes: slot.yes,
+    maybe: slot.maybe,
+    no: slot.no,
+  });
+}
+
+/** L'hôte peut fixer la date : il est l'hôte, le sondage est OUVERT (l'échéance dépassée ne le bloque pas)
+ *  et propose au moins un créneau. Le serveur reste juge. */
+export function canFixDate(card: EventCardDto, userId: string | null | undefined): boolean {
+  return (
+    isHostOf(card, userId) &&
+    card.poll !== null &&
+    card.poll.status === 'OPEN' &&
+    !card.seance?.date &&
+    card.poll.options.length > 0
+  );
+}

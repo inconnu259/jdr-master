@@ -106,6 +106,18 @@
             {{ theme.tone()['partie.ralliement_event_vote_in_calendar_btn'] }}
           </button>
         }
+        <!-- Story 40.6 : l'hôte scelle la date (confirmation « Votre accord »). -->
+        @if (p.kind === 'host') {
+          <button
+            mat-flat-button
+            type="button"
+            class="ed__poll-fix"
+            [disabled]="!canFix() || busy()"
+            (click)="openFixDate()"
+          >
+            {{ theme.tone()['partie.ralliement_event_fix_date_btn'] }}
+          </button>
+        }
         @if (showComposeInCalendar()) {
           <button
             mat-stroked-button

@@ -106,4 +106,14 @@ describe('EventsApiService (Story 40.1)', () => {
     req.flush(card);
     expect(await p).toEqual(card);
   });
+
+  it('choose → PATCH /parties/:id/poll/:pollId/choose avec l’identifiant du créneau (route partagée, Story 40.6)', async () => {
+    const p = service.choose('p1', 'poll-1', 'o2');
+    const req = http.expectOne(`${API}/parties/p1/poll/poll-1/choose`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual({ optionId: 'o2' });
+    req.flush(null);
+    await expect(p).resolves.toBeNull();
+  });
 });

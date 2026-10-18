@@ -389,3 +389,9 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-40-5b-calendrier-du-groupe-pour-un-sondage.md`
   summary: No `calendar-view` spec checks that the legend of a group page omits the « disponibilité du groupe » entry (`[partieContext]="!!partieId() && !isGroup()"`).
   evidence: Reverting the binding leaves all specs green; the legend would describe a layer a group page never offers.
+- source_spec: `_bmad-output/implementation-artifacts/spec-40-6-fixer-la-date-dune-conjonction.md`
+  summary: A group poll whose host account is gone (`Event.ownerId` null) can never be dated: `POLL_CHOOSE` is refused to everyone, so it stays « Date à voter » forever.
+  evidence: Permission spec asserts the refusal when `ownerId` is null; decide with epic 42 whether an admin may fix the date (or cancel) when the host disappeared.
+- source_spec: `_bmad-output/implementation-artifacts/spec-40-6-fixer-la-date-dune-conjonction.md`
+  summary: `ConjonctionsTab` has no spec; the `(refreshRequested)="refresh()"` wiring after fixing the date is untested.
+  evidence: Deleting the binding fails no test; only the live signal then refreshes the host's dialog.
