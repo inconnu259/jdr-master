@@ -1,0 +1,55 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { EmailService } from '../email/email.service';
+import { EventsService } from './events.service';
+import { formatSessionDate } from './session-date';
+
+/**
+ * E-mail n° 7 « Annulée : « *Conjonction* » » (Stories 42.1 et 42.3) — UNE seule définition de l'envoi,
+ * partagée par l'annulation d'une conjonction (`GroupEventsService.cancel`) et par le départ d'un hôte
+ * (`PartiesService.leave`). Classe distincte pour une raison de graphe : `GroupEventsService` reçoit
+ * `PartiesService` par le port des signaux, `PartiesService` ne peut donc pas l'injecter sans cycle ; ce
+ * service-ci ne dépend que d'`EventsService` (lecture) et de l'e-mail.
+ *
+ * À appeler APRÈS le commit : la lecture et l'envoi sont journalisés en cas d'échec et ne lèvent jamais, car
+ * l'annulation (ou le départ) est déjà validée.
+ */
+@Injectable()
+export class EventCancellationMailer {
+  private readonly logger = new Logger(EventCancellationMailer.name);
+
+  constructor(
+    private readonly events: EventsService,
+    private readonly email: EmailService,
+  ) {}
+
+  /** Prévient les inscrits (confirmés ET places réservées) de la conjonction `eventId`, plus son hôte quand
+   *  c'est un autre qui annule ; jamais `actorId`, qui annule ou qui part. */
+  async send(partieId: string, eventId: string, actorId: string): Promise<void> {
+    try {
+      const notice = await this.events.cancellationNotice(eventId, actorId);
+      if (!notice || notice.recipients.length === 0) return;
+      const link = `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${partieId}`;
+      const sessionDate = notice.startDate
+        ? formatSessionDate(notice.startDate, notice.startSlot)
+        : null;
+      for (const recipient of notice.recipients) {
+        const result = await this.email.sendMail('conjonction-annulee', recipient.email, {
+          actorName: notice.actorName,
+          eventTitle: notice.eventTitle,
+          sessionDate,
+          link,
+        });
+        if (!result.ok) {
+          this.logger.error(
+            `Échec d'envoi de l'e-mail d'annulation (partie ${partieId}, événement ${eventId})`,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `Échec de l'envoi des e-mails d'annulation (partie ${partieId}, événement ${eventId})`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+}

@@ -50,6 +50,9 @@ function makePrisma() {
       findFirst: jest.fn().mockResolvedValue(null),
       findUnique: jest.fn(),
       update: jest.fn(),
+      // Story 42.3 : conjonctions à venir de l'hôte qui sort, et leur annulation en lot.
+      findMany: jest.fn().mockResolvedValue([]),
+      updateMany: jest.fn(),
     },
     seance: {
       create: jest.fn().mockResolvedValue({ id: 'se1' }),
@@ -3643,6 +3646,80 @@ describe('EventsService (Story 37.3)', () => {
         notice({ cancelledAt: null });
         await expect(service.cancellationNotice('e1', 'hote')).resolves.toBeNull();
       });
+    });
+  });
+
+  // Story 42.3 — annuler les conjonctions à venir de qui quitte le groupe (AD-17).
+  describe('cancelUpcomingHostedInTx() — départ d’un hôte (Story 42.3)', () => {
+    const hosted = (id: string, pollIds: (string | null)[] = [null]) => ({
+      id,
+      seances: pollIds.map((pollId) => ({ pollId })),
+    });
+
+    it('lit les conjonctions À VENIR de l’hôte (sans date, ou jour ≥ aujourd’hui) non annulées, triées par identifiant', async () => {
+      prisma.tx.event.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.cancelUpcomingHostedInTx(prisma.tx as never, 'p1', 'hote', jest.fn()),
+      ).resolves.toEqual([]);
+
+      const startOfToday = new Date();
+      startOfToday.setUTCHours(0, 0, 0, 0);
+      expect(prisma.tx.event.findMany).toHaveBeenCalledWith({
+        where: {
+          partieId: 'p1',
+          ownerId: 'hote',
+          cancelledAt: null,
+          seances: { some: { OR: [{ startDate: null }, { startDate: { gte: startOfToday } }] } },
+        },
+        select: { id: true, seances: { select: { pollId: true } } },
+        orderBy: { id: 'asc' },
+      });
+      // Rien à annuler : ni verrou, ni écriture.
+      expect(prisma.tx.$queryRaw).not.toHaveBeenCalled();
+      expect(prisma.tx.event.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('verrouille chaque Event dans l’ordre, écrit cancelledAt, ferme les sondages, recalcule la prochaine date, sans émettre', async () => {
+      prisma.tx.event.findMany.mockResolvedValue([hosted('e1', ['poll-1']), hosted('e2')]);
+      prisma.tx.event.updateMany.mockResolvedValue({ count: 2 });
+      const closePolls = jest.fn().mockResolvedValue(1);
+
+      const ids = await service.cancelUpcomingHostedInTx(
+        prisma.tx as never,
+        'p1',
+        'hote',
+        closePolls,
+      );
+
+      expect(ids).toEqual(['e1', 'e2']);
+      const locks = prisma.tx.$queryRaw.mock.calls.map((c) => [(c[0] as string[]).join('?'), c[1]]);
+      expect(locks.slice(0, 2).map((l) => l[1])).toEqual(['e1', 'e2']);
+      expect(String(locks[0][0])).toContain('FROM "Event"');
+      // Le recalcul de la prochaine date reprend le verrou de la partie, déjà tenu par l’appelant.
+      expect(String(locks[2][0])).toContain('FROM "Partie"');
+      expect(prisma.tx.event.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['e1', 'e2'] }, cancelledAt: null },
+        data: { cancelledAt: expect.any(Date) },
+      });
+      expect(closePolls).toHaveBeenCalledWith(prisma.tx, ['poll-1']);
+      expect(prisma.tx.seance.findMany).toHaveBeenCalledWith(
+        objectLike({
+          where: { AND: [{ event: { partieId: 'p1', cancelledAt: null } }, VISIBLE_SEANCE_WHERE] },
+        }),
+      );
+      expect(realtime.emit).not.toHaveBeenCalled();
+    });
+
+    it('rien d’écrit en dessous du verrou (annulée entre-temps) : aucun sondage fermé, aucune annulation rendue', async () => {
+      prisma.tx.event.findMany.mockResolvedValue([hosted('e1', ['poll-1'])]);
+      prisma.tx.event.updateMany.mockResolvedValue({ count: 0 });
+      const closePolls = jest.fn();
+
+      await expect(
+        service.cancelUpcomingHostedInTx(prisma.tx as never, 'p1', 'hote', closePolls),
+      ).resolves.toEqual([]);
+      expect(closePolls).not.toHaveBeenCalled();
     });
   });
 });

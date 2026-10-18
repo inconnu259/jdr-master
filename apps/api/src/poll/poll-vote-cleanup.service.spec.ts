@@ -11,3 +11,24 @@ describe('PollVoteCleanupService — départ du groupe (Story 40.8)', () => {
     });
   });
 });
+
+describe('PollVoteCleanupService — sondages des conjonctions annulées (Story 42.3)', () => {
+  it('ferme les sondages OUVERTS donnés, dans la transaction de l’appelant', async () => {
+    const tx = { sessionPoll: { updateMany: jest.fn().mockResolvedValue({ count: 2 }) } };
+
+    await expect(
+      new PollVoteCleanupService().closePollsInTx(tx as never, ['a', 'b']),
+    ).resolves.toBe(2);
+    expect(tx.sessionPoll.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['a', 'b'] }, status: 'OPEN' },
+      data: { status: 'CLOSED' },
+    });
+  });
+
+  it('aucun sondage : aucune écriture', async () => {
+    const tx = { sessionPoll: { updateMany: jest.fn() } };
+
+    await expect(new PollVoteCleanupService().closePollsInTx(tx as never, [])).resolves.toBe(0);
+    expect(tx.sessionPoll.updateMany).not.toHaveBeenCalled();
+  });
+});

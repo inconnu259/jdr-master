@@ -21,6 +21,7 @@ import {
 } from '../poll/poll.service';
 import { PARTIE_SIGNALS_PORT, type PartieSignalsPort } from '../poll/ports/partie-signals.port';
 import { parseDayKey, todayKeyUtc } from './day-key';
+import { EventCancellationMailer } from './event-cancellation-mailer.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { EventsService, POLL_MODE_MESSAGE, type EventSeanceInput } from './events.service';
 import { formatSessionDate } from './session-date';
@@ -67,6 +68,8 @@ export class GroupEventsService {
     // Story 40.5 : `PollService` reste le seul écrivain de `SessionPoll` — ce service lui fait écrire le
     // sondage d'une conjonction dans la transaction de `EventsService` (couche 2 → couche 1, pas de port).
     private readonly polls: PollService,
+    // Story 42.3 : l'e-mail n° 7 est envoyé par un service partagé avec le départ d'un hôte.
+    private readonly cancellationMailer: EventCancellationMailer,
   ) {}
 
   /**
@@ -164,45 +167,10 @@ export class GroupEventsService {
     );
     // Après validation et après `partie:{id}` (émis par `EventsService.cancelHosted`) ; ne lève jamais.
     await this.partieSignals.notifyChanged(grant.partieId);
-    await this.sendCancellationEmails(grant, eventId, userId);
+    await this.cancellationMailer.send(grant.partieId, eventId, userId);
 
     const [card] = await this.events.listCards(grant, userId, [eventId]);
     return card;
-  }
-
-  /** E-mail n° 7 « Annulée », un par destinataire, APRÈS le commit : lire ou envoyer en échec est journalisé
-   *  et n'annule jamais l'annulation (déjà validée). */
-  private async sendCancellationEmails(
-    grant: PartieGrant,
-    eventId: string,
-    actorId: string,
-  ): Promise<void> {
-    try {
-      const notice = await this.events.cancellationNotice(eventId, actorId);
-      if (!notice || notice.recipients.length === 0) return;
-      const link = `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${grant.partieId}`;
-      const sessionDate = notice.startDate
-        ? formatSessionDate(notice.startDate, notice.startSlot)
-        : null;
-      for (const recipient of notice.recipients) {
-        const result = await this.email.sendMail('conjonction-annulee', recipient.email, {
-          actorName: notice.actorName,
-          eventTitle: notice.eventTitle,
-          sessionDate,
-          link,
-        });
-        if (!result.ok) {
-          this.logger.error(
-            `Échec d'envoi de l'e-mail d'annulation (partie ${grant.partieId}, événement ${eventId})`,
-          );
-        }
-      }
-    } catch (error) {
-      this.logger.error(
-        `Échec de l'envoi des e-mails d'annulation (partie ${grant.partieId}, événement ${eventId})`,
-        error instanceof Error ? error.stack : String(error),
-      );
-    }
   }
 
   /**

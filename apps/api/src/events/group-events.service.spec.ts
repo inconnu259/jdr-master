@@ -10,6 +10,7 @@ import {
   type PollService,
 } from '../poll/poll.service';
 import type { CreateEventDto } from './dto/create-event.dto';
+import type { EventCancellationMailer } from './event-cancellation-mailer.service';
 import { POLL_MODE_MESSAGE, type EventSeanceInput, type EventsService } from './events.service';
 import {
   GroupEventsService,
@@ -53,11 +54,11 @@ describe('GroupEventsService (Story 40.1)', () => {
     retirerReservation: jest.Mock;
     reservationNotice: jest.Mock;
     cancelHosted: jest.Mock;
-    cancellationNotice: jest.Mock;
     listCards: jest.Mock;
   };
   let signals: { notifyChanged: jest.Mock };
   let email: { sendMail: jest.Mock };
+  let mailer: { send: jest.Mock };
   let polls: { createInTx: jest.Mock; updateInTx: jest.Mock; closeInTx: jest.Mock };
   let service: GroupEventsService;
   const order: string[] = [];
@@ -116,17 +117,6 @@ describe('GroupEventsService (Story 40.1)', () => {
         order.push('cancel');
         return Promise.resolve();
       }),
-      cancellationNotice: jest.fn().mockResolvedValue({
-        partieId: 'g1',
-        eventTitle: 'Catane',
-        actorName: 'Léa',
-        startDate: new Date('2026-11-14T00:00:00Z'),
-        startSlot: 'EVENING',
-        recipients: [
-          { id: 'u2', email: 'u2@example.com' },
-          { id: 'u3', email: 'u3@example.com' },
-        ],
-      }),
       listCards: jest.fn().mockResolvedValue([CARD]),
     };
     email = {
@@ -146,19 +136,26 @@ describe('GroupEventsService (Story 40.1)', () => {
       updateInTx: jest.fn().mockResolvedValue(undefined),
       closeInTx: jest.fn().mockResolvedValue(undefined),
     };
+    mailer = {
+      send: jest.fn(() => {
+        order.push('cancel-mail');
+        return Promise.resolve();
+      }),
+    };
     service = new GroupEventsService(
       permissions as unknown as PermissionService,
       events as unknown as EventsService,
       signals,
       email as unknown as EmailService,
       polls as unknown as PollService,
+      mailer as unknown as EventCancellationMailer,
     );
   });
 
   describe('cancel() — Story 42.1', () => {
     const grantE1 = () => testGrant(GROUPE, 'member', { eventId: 'e1' });
 
-    it('droit EVENT_CANCEL sur l’événement, annulation, puis signaux, e-mails n° 7 (un par destinataire) et carte', async () => {
+    it('droit EVENT_CANCEL sur l’événement, annulation, puis signaux, e-mail n° 7 (service partagé) et carte', async () => {
       permissions.assert.mockResolvedValue(grantE1());
 
       const card = await service.cancel('g1', 'e1', 'u1');
@@ -169,19 +166,10 @@ describe('GroupEventsService (Story 40.1)', () => {
         'e1',
         expect.any(Function),
       );
-      expect(events.cancellationNotice).toHaveBeenCalledWith('e1', 'u1');
-      expect(email.sendMail).toHaveBeenCalledTimes(2);
-      expect(email.sendMail).toHaveBeenCalledWith(
-        'conjonction-annulee',
-        'u2@example.com',
-        expect.objectContaining({
-          actorName: 'Léa',
-          eventTitle: 'Catane',
-          link: expect.stringContaining('/parties/g1'),
-        }),
-      );
-      // Écriture validée, puis signaux de l'accueil, puis e-mails — jamais l'inverse.
-      expect(order).toEqual(['cancel', 'signals', 'email', 'email']);
+      // L'e-mail n° 7 est confié au service partagé (Story 42.3), l'auteur étant l'appelant.
+      expect(mailer.send).toHaveBeenCalledWith('g1', 'e1', 'u1');
+      // Écriture validée, puis signaux de l'accueil, puis e-mail — jamais l'inverse.
+      expect(order).toEqual(['cancel', 'signals', 'cancel-mail']);
       expect(card).toBe(CARD);
     });
 
@@ -216,7 +204,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
       await expect(refusal).rejects.toThrow(RALLIEMENT_UNAVAILABLE_MESSAGE);
       expect(events.cancelHosted).not.toHaveBeenCalled();
-      expect(email.sendMail).not.toHaveBeenCalled();
+      expect(mailer.send).not.toHaveBeenCalled();
     });
 
     it('un refus de droit remonte tel quel, rien n’est écrit ni envoyé', async () => {
@@ -225,7 +213,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       await expect(service.cancel('g1', 'e1', 'u2')).rejects.toBeInstanceOf(ForbiddenException);
       expect(events.cancelHosted).not.toHaveBeenCalled();
       expect(signals.notifyChanged).not.toHaveBeenCalled();
-      expect(email.sendMail).not.toHaveBeenCalled();
+      expect(mailer.send).not.toHaveBeenCalled();
     });
 
     it('un refus de l’écriture (déjà annulée, passée) remonte, sans signal ni e-mail', async () => {
@@ -234,33 +222,7 @@ describe('GroupEventsService (Story 40.1)', () => {
 
       await expect(service.cancel('g1', 'e1', 'u1')).rejects.toBeInstanceOf(BadRequestException);
       expect(signals.notifyChanged).not.toHaveBeenCalled();
-      expect(email.sendMail).not.toHaveBeenCalled();
-    });
-
-    it('un échec d’envoi ou de lecture est journalisé et ne remonte jamais : l’annulation reste', async () => {
-      permissions.assert.mockResolvedValue(grantE1());
-      email.sendMail.mockResolvedValue({ ok: false });
-      await expect(service.cancel('g1', 'e1', 'u1')).resolves.toBe(CARD);
-
-      events.cancellationNotice.mockRejectedValue(new Error('lecture'));
-      await expect(service.cancel('g1', 'e1', 'u1')).resolves.toBe(CARD);
-    });
-
-    it('aucun destinataire (ou conjonction sans notice) : aucun e-mail', async () => {
-      permissions.assert.mockResolvedValue(grantE1());
-      events.cancellationNotice.mockResolvedValue({
-        partieId: 'g1',
-        eventTitle: 'Catane',
-        actorName: 'Léa',
-        startDate: null,
-        startSlot: null,
-        recipients: [],
-      });
-      await service.cancel('g1', 'e1', 'u1');
-      events.cancellationNotice.mockResolvedValue(null);
-      await service.cancel('g1', 'e1', 'u1');
-
-      expect(email.sendMail).not.toHaveBeenCalled();
+      expect(mailer.send).not.toHaveBeenCalled();
     });
   });
 

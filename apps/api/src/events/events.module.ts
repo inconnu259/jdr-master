@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { EmailModule } from '../email/email.module';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { PollModule } from '../poll/poll.module';
+import { EventCancellationMailer } from './event-cancellation-mailer.service';
 import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { GroupEventsService } from './group-events.service';
@@ -30,13 +31,28 @@ import { GroupPollExtensionService } from './group-poll-extension.service';
  * Story 40.7 : `GroupPollExtensionService` (prolonger le vote) est exporté pour `PortsModule`, qui le lie à
  * `GroupPollExtendPort` — il ne dépend que de `PermissionsModule`, jamais de `poll/`.
  *
+ * Story 42.3 : `EventCancellationMailer` (e-mail n° 7) est exporté — `PartiesService.leave()` l'appelle après le
+ * commit du départ d'un hôte, sans passer par `GroupEventsService` (cycle de fournisseurs).
+ *
  * Story 40.3 : `GroupEventsService` est exporté — les routes d'inscription partagées avec le JDR
  * (`scenarios/seances/:id/inscription`) y délèguent la branche « groupe ».
  */
 @Module({
   imports: [PermissionsModule, EmailModule, PollModule],
   controllers: [EventsController],
-  providers: [EventsService, GroupEventsService, GroupPollChoiceService, GroupPollExtensionService],
-  exports: [EventsService, GroupEventsService, GroupPollChoiceService, GroupPollExtensionService],
+  providers: [
+    EventsService,
+    EventCancellationMailer,
+    GroupEventsService,
+    GroupPollChoiceService,
+    GroupPollExtensionService,
+  ],
+  exports: [
+    EventsService,
+    EventCancellationMailer,
+    GroupEventsService,
+    GroupPollChoiceService,
+    GroupPollExtensionService,
+  ],
 })
 export class EventsModule {}

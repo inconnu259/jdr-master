@@ -64,6 +64,7 @@ import { readFile, unlink, writeFile } from 'node:fs/promises';
 import type { AggregatedSlotDto, AvailableSlotDto, PartieKind } from '@master-jdr/shared';
 import { GAME_SYSTEMS, isOpenForCreation, kindsOf } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
+import type { EventCancellationMailer } from '../events/event-cancellation-mailer.service';
 import { EventsService } from '../events/events.service';
 import { PollVoteCleanupService } from '../poll/poll-vote-cleanup.service';
 import {
@@ -119,6 +120,8 @@ describe('PartiesService', () => {
       groupBy: jest.Mock;
       findFirst: jest.Mock;
       update: jest.Mock;
+      findMany: jest.Mock;
+      updateMany: jest.Mock;
     };
     scenario: {
       create: jest.Mock;
@@ -157,7 +160,8 @@ describe('PartiesService', () => {
     computeSlotStatus: jest.Mock;
   };
   let realtimeEvents: { emit: jest.Mock };
-  let polls: { removeOpenVotesInTx: jest.Mock };
+  let polls: { removeOpenVotesInTx: jest.Mock; closePollsInTx: jest.Mock };
+  let mailer: { send: jest.Mock };
 
   const partie = {
     id: 'p1',
@@ -207,6 +211,9 @@ describe('PartiesService', () => {
         groupBy: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
         update: jest.fn().mockResolvedValue({}),
+        // Story 42.3 : conjonctions à venir de qui sort d'un groupe (défaut : aucune) et leur annulation.
+        findMany: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       // Verrou de la partie pris par `EventsService.createInTx` (garde ONE_SHOT).
       $queryRaw: jest.fn().mockResolvedValue([{ kind: 'ONE_SHOT' }]),
@@ -257,7 +264,11 @@ describe('PartiesService', () => {
       computeSlotStatus: jest.fn().mockReturnValue('UNKNOWN'),
     };
     realtimeEvents = { emit: jest.fn() };
-    polls = { removeOpenVotesInTx: jest.fn().mockResolvedValue(0) };
+    polls = {
+      removeOpenVotesInTx: jest.fn().mockResolvedValue(0),
+      closePollsInTx: jest.fn().mockResolvedValue(0),
+    };
+    mailer = { send: jest.fn().mockResolvedValue(undefined) };
     service = new PartiesService(
       prisma as unknown as PrismaService,
       avail as unknown as AvailabilityService,
@@ -271,6 +282,7 @@ describe('PartiesService', () => {
       // le propriétaire), comme l'étaient `getOwned`/`getViewable`.
       new PermissionService(prisma as unknown as PrismaService),
       polls as unknown as PollVoteCleanupService,
+      mailer as unknown as EventCancellationMailer,
     );
   });
 
@@ -1668,6 +1680,101 @@ describe('PartiesService', () => {
       expect(realtimeEvents.emit).not.toHaveBeenCalled();
     });
 
+    // Story 42.3 : les conjonctions à venir de l'hôte qui sort sont annulées dans la même transaction.
+    describe('conjonctions hébergées (Story 42.3)', () => {
+      const hosted = (id: string, pollId: string | null = null) => ({ id, seances: [{ pollId }] });
+
+      it('annule les conjonctions à venir de l’hôte sous le verrou, ferme leurs sondages, AVANT de supprimer l’adhésion ; e-mails après le commit', async () => {
+        const ordre: string[] = [];
+        prisma.$queryRaw.mockImplementation((strings: TemplateStringsArray) => {
+          ordre.push(strings.join('?').includes('"Partie"') ? 'verrou-partie' : 'verrou-event');
+          return Promise.resolve([{ id: 'x' }]);
+        });
+        prisma.event.findMany.mockResolvedValue([hosted('evA', 'poll-A'), hosted('evB')]);
+        prisma.event.updateMany.mockImplementation(() => {
+          ordre.push('annulation');
+          return Promise.resolve({ count: 2 });
+        });
+        polls.closePollsInTx.mockImplementation(() => {
+          ordre.push('sondages');
+          return Promise.resolve(1);
+        });
+        prisma.membership.deleteMany.mockImplementation(() => {
+          ordre.push('adhesion');
+          return Promise.resolve({ count: 1 });
+        });
+        prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+          const result = await fn(prisma);
+          ordre.push('commit');
+          return result;
+        });
+        mailer.send.mockImplementation((_p: string, eventId: string) => {
+          ordre.push(`mail-${eventId}`);
+          return Promise.resolve();
+        });
+
+        await service.leave('p1', 'membre1', { type: 'LEFT' });
+
+        // Les conjonctions de l'hôte uniquement, de ce groupe, non annulées, à venir.
+        expect(callArg<{ where: Record<string, unknown> }>(prisma.event.findMany).where).toEqual(
+          objectLike({ partieId: 'p1', ownerId: 'membre1', cancelledAt: null }),
+        );
+        expect(polls.closePollsInTx).toHaveBeenCalledWith(expect.anything(), ['poll-A']);
+        expect(ordre.slice(0, 7)).toEqual([
+          'verrou-partie',
+          'verrou-event',
+          'verrou-event',
+          'annulation',
+          'sondages',
+          'verrou-partie',
+          'adhesion',
+        ]);
+        // Les e-mails n° 7 partent APRÈS le commit, un jeu par conjonction, au nom de la personne qui part.
+        expect(mailer.send).toHaveBeenCalledTimes(2);
+        expect(mailer.send).toHaveBeenCalledWith('p1', 'evA', 'membre1');
+        expect(mailer.send).toHaveBeenCalledWith('p1', 'evB', 'membre1');
+        expect(ordre.indexOf('commit')).toBeLessThan(ordre.indexOf('mail-evA'));
+      });
+
+      it('un retrait par un administrateur annule aussi les conjonctions à venir de la cible, mail au nom de la cible', async () => {
+        prisma.event.findMany.mockResolvedValue([hosted('evA')]);
+        prisma.event.updateMany.mockResolvedValue({ count: 1 });
+
+        await service.leave('p1', 'membre1', { type: 'REMOVED', byUserId: 'admin1' });
+
+        expect(callArg<{ where: Record<string, unknown> }>(prisma.event.findMany).where).toEqual(
+          objectLike({ ownerId: 'membre1' }),
+        );
+        expect(mailer.send).toHaveBeenCalledWith('p1', 'evA', 'membre1');
+      });
+
+      it('un membre qui n’héberge rien : aucune annulation ni e-mail', async () => {
+        await service.leave('p1', 'membre1', { type: 'LEFT' });
+
+        expect(prisma.event.updateMany).not.toHaveBeenCalled();
+        expect(polls.closePollsInTx).not.toHaveBeenCalled();
+        expect(mailer.send).not.toHaveBeenCalled();
+      });
+
+      it('un échec de l’annulation annule tout le départ : adhésion intacte, rien émis ni envoyé', async () => {
+        prisma.event.findMany.mockResolvedValue([hosted('evA')]);
+        prisma.event.updateMany.mockRejectedValue(new Error('boom'));
+
+        await expect(service.leave('p1', 'membre1', { type: 'LEFT' })).rejects.toThrow('boom');
+
+        expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+        expect(realtimeEvents.emit).not.toHaveBeenCalled();
+        expect(mailer.send).not.toHaveBeenCalled();
+      });
+
+      it('le dernier administrateur supprime le groupe sans annuler ni envoyer (cascade)', async () => {
+        await service.leave('p1', 'admin1', { type: 'LEFT', deleteIfLastAdmin: true });
+
+        expect(prisma.event.findMany).not.toHaveBeenCalled();
+        expect(mailer.send).not.toHaveBeenCalled();
+      });
+    });
+
     it('Story 40.8 : le dernier administrateur supprime le groupe sans nettoyage (cascade)', async () => {
       await service.leave('p1', 'admin1', { type: 'LEFT', deleteIfLastAdmin: true });
       expect(prisma.inscription.findMany).not.toHaveBeenCalled();
@@ -2667,6 +2774,7 @@ describe('PartiesService', () => {
         new EventsService(p, realtime),
         permissions,
         { removeOpenVotesInTx: jest.fn() } as unknown as PollVoteCleanupService,
+        { send: jest.fn() } as unknown as EventCancellationMailer,
       );
 
       const mjResults = (await svc.getAvailableSlots(

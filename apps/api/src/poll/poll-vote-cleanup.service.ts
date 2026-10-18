@@ -25,4 +25,19 @@ export class PollVoteCleanupService {
     });
     return count;
   }
+
+  /**
+   * Story 42.3 — ferme, dans la transaction de l'appelant (`PartiesService.leave()`), les sondages ouverts
+   * des conjonctions que la personne qui sort organisait et qui viennent d'être annulées. Un sondage déjà
+   * fermé (date fixée) reste tel quel. Aucun droit décidé ici ; n'émet rien : l'appelant émet après son
+   * commit. Renvoie le nombre de sondages fermés.
+   */
+  async closePollsInTx(tx: Prisma.TransactionClient, pollIds: string[]): Promise<number> {
+    if (pollIds.length === 0) return 0;
+    const { count } = await tx.sessionPoll.updateMany({
+      where: { id: { in: pollIds }, status: 'OPEN' },
+      data: { status: 'CLOSED' },
+    });
+    return count;
+  }
 }

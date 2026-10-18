@@ -34,6 +34,7 @@ import {
   kindsOf,
 } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
+import { EventCancellationMailer } from '../events/event-cancellation-mailer.service';
 import { EventsService } from '../events/events.service';
 import {
   ADMIN_ONLY_MESSAGE,
@@ -239,6 +240,8 @@ export class PartiesService implements PartieSignalsPort {
     private readonly permissions: PermissionService,
     // Story 40.8 : le module `poll/` retire les réponses de la personne qui sort (`leave()`).
     private readonly polls: PollVoteCleanupService,
+    // Story 42.3 : e-mail n° 7 aux inscrits des conjonctions annulées par le départ de leur hôte.
+    private readonly cancellationMailer: EventCancellationMailer,
   ) {}
 
   /** Story 29.17, AC2/AC4 : refus explicite partagé par `create()` et `update()` — un seul endroit
@@ -607,6 +610,8 @@ export class PartiesService implements PartieSignalsPort {
                 partieId,
                 cause.deleteIfLastAdmin,
               ),
+              // Le groupe disparaît en cascade : aucune annulation, aucun e-mail.
+              cancelledEventIds: [] as string[],
             };
           }
         }
@@ -619,8 +624,15 @@ export class PartiesService implements PartieSignalsPort {
       // lignes `Event` (triées) prises par `EventsService`.
       await this.events.releaseUpcomingInscriptionsInTx(tx, partieId, userId);
       await this.polls.removeOpenVotesInTx(tx, partieId, userId);
-      // Points d'extension suivants, dans cette même transaction :
-      // - epic 42 : annuler les événements à venir qu'elle organise ;
+      // Story 42.3 : les conjonctions À VENIR qu'elle organise sont annulées par la procédure de la Story 42.1,
+      // dans cette même transaction (un échec annule tout le départ) ; le passé reste, hôte affiché compris.
+      const cancelledEventIds = await this.events.cancelUpcomingHostedInTx(
+        tx,
+        partieId,
+        userId,
+        (client, pollIds) => this.polls.closePollsInTx(client, pollIds),
+      );
+      // Point d'extension suivant, dans cette même transaction :
       // - epic 43 : suppression de compte, nouveau motif de `LeaveCause`.
       await tx.membership.deleteMany({ where: { partieId, userId } });
       // Le créateur qui sort ne laisse pas de propriétaire derrière lui : sans ligne d'adhésion,
@@ -629,7 +641,12 @@ export class PartiesService implements PartieSignalsPort {
         where: { id: partieId, ownerId: userId },
         data: { ownerId: null },
       });
-      return { deleted: false, ownerCleared: cleared.count > 0, participantIds: [] as string[] };
+      return {
+        deleted: false,
+        ownerCleared: cleared.count > 0,
+        participantIds: [] as string[],
+        cancelledEventIds,
+      };
     });
 
     // Après le commit uniquement.
@@ -639,6 +656,11 @@ export class PartiesService implements PartieSignalsPort {
       return { ok: true, deleted: true };
     }
     await this.emitDeparture(partieId, userId, outcome.ownerCleared ? null : partie.ownerId);
+    // Story 42.3 : e-mail n° 7 de chaque conjonction annulée, APRÈS le commit (échecs journalisés, jamais
+    // remontés) ; l'auteur est la personne qui part.
+    for (const eventId of outcome.cancelledEventIds) {
+      await this.cancellationMailer.send(partieId, eventId, userId);
+    }
     return { ok: true, deleted: false };
   }
 

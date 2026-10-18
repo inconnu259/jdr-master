@@ -951,6 +951,54 @@ export class EventsService
   }
 
   /**
+   * Story 42.3 (AD-17) : annule, DANS la transaction de l'appelant (`PartiesService.leave()`, déjà sous le
+   * verrou de la partie), les conjonctions À VENIR dont `hostId` est l'hôte — mêmes règles que
+   * `releaseUpcomingInscriptionsInTx` : séance sans date (sondage ouvert) ou jour aujourd'hui ou plus tard
+   * (jour UTC). Les conjonctions passées gardent leur hôte et leurs inscrits ; celles déjà annulées sont
+   * ignorées. Les lignes `Event` concernées sont verrouillées triées par identifiant (après la partie),
+   * `cancelledAt` est écrit, les sondages ouverts sont confiés à `closePolls` (`poll/` reste l'écrivain de
+   * `SessionPoll`) et la prochaine date de la partie est recalculée. N'émet rien : l'appelant émet et envoie
+   * les e-mails après SON commit. Renvoie les identifiants des conjonctions annulées.
+   */
+  async cancelUpcomingHostedInTx(
+    tx: Prisma.TransactionClient,
+    partieId: string,
+    hostId: string,
+    closePolls: (tx: Prisma.TransactionClient, pollIds: string[]) => Promise<unknown>,
+  ): Promise<string[]> {
+    const todayStart = parseDayKey(todayKeyUtc());
+    const hosted = await tx.event.findMany({
+      where: {
+        partieId,
+        ownerId: hostId,
+        cancelledAt: null,
+        seances: {
+          some: {
+            OR: [{ startDate: null }, ...(todayStart ? [{ startDate: { gte: todayStart } }] : [])],
+          },
+        },
+      },
+      select: { id: true, seances: { select: { pollId: true } } },
+      orderBy: { id: 'asc' },
+    });
+    if (hosted.length === 0) return [];
+    const eventIds = hosted.map((e) => e.id);
+    for (const eventId of eventIds) {
+      await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
+    }
+    // Relue sous les verrous : une annulation concurrente (hôte, administrateur) ne s'écrit pas deux fois.
+    const { count } = await tx.event.updateMany({
+      where: { id: { in: eventIds }, cancelledAt: null },
+      data: { cancelledAt: new Date() },
+    });
+    if (count === 0) return [];
+    const pollIds = hosted.flatMap((e) => e.seances.flatMap((s) => (s.pollId ? [s.pollId] : [])));
+    await closePolls(tx, pollIds);
+    await this.recalculateNextSessionInTx(tx, partieId);
+    return eventIds;
+  }
+
+  /**
    * Story 42.1 : de quoi écrire l'e-mail d'annulation (n° 7), lu APRÈS le commit — titre, date, nom de la
    * personne qui a annulé et destinataires : les inscrits (confirmés ET places réservées) plus l'hôte quand
    * c'est un autre qui annule ; jamais celui qui annule, une adresse chacun. `null` si l'événement n'existe

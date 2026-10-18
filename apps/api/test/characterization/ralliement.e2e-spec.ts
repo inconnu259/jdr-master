@@ -4306,7 +4306,8 @@ describe('Ralliement — libérer places et votes de qui quitte le groupe (Story
     expect(await rows(today.seance!.id)).toEqual([]);
     expect(await rows(undated.seance!.id)).toEqual([]);
     expect(await votesOf(undated.poll!.id, leaver.id)).toBe(0);
-    // Conservés : le passé (la personne y reste parmi les participants), le sondage fermé, l'hébergée.
+    // Conservés : le passé (la personne y reste parmi les participants), le sondage fermé, l'hébergée (que la
+    // Story 42.3 annule désormais : elle reste attribuée à son hôte, ses inscrits sont conservés).
     expect(await rows(past.seance!.id)).toEqual([[leaver.id, 'CONFIRMED']]);
     expect(await votesOf(closed.poll!.id, leaver.id)).toBe(1);
     expect(await h.prisma.event.count({ where: { id: hosted.id, ownerId: leaver.id } })).toBe(1);
@@ -5475,5 +5476,231 @@ describe('Ralliement — annuler une conjonction de groupe (Story 42.1)', () => 
     );
     // Une fois l'annulation validée, plus aucune inscription n'est possible.
     expect((await signUp(guest, card.seance!.id)).status).toBe(400);
+  });
+});
+
+describe('Ralliement — annuler les conjonctions de qui quitte le groupe (Story 42.3)', () => {
+  let h: Harness;
+  let admin: TestUser;
+  let host: TestUser;
+  let guest: TestUser;
+  let reservedUser: TestUser;
+  let third: TestUser;
+  let groupId: string;
+
+  type CardLike = {
+    id: string;
+    cancelled: boolean;
+    seance: { id: string } | null;
+    poll: { id: string; options: { id: string }[] } | null;
+  };
+
+  const CANCEL_MAIL = 'conjonction-annulee';
+  const propose = async (who: TestUser, over: Record<string, unknown> = {}) => {
+    const res = await who.agent
+      .post(`/parties/${groupId}/events`)
+      .send({ title: 'Soirée', date: isoDay(6), slot: 'EVENING', capacity: 6, ...over });
+    expect(res.status).toBe(201);
+    return body<CardLike>(res);
+  };
+  const proposePoll = (who: TestUser, over: Record<string, unknown> = {}) =>
+    propose(who, {
+      date: undefined,
+      slot: undefined,
+      capacity: null,
+      pollOptions: [
+        { date: isoDay(8), slot: 'EVENING' },
+        { date: isoDay(9), slot: 'MORNING' },
+      ],
+      pollDeadline: isoDay(5),
+      ...over,
+    });
+  const signUp = (who: TestUser, seanceId: string) =>
+    who.agent.post(`/scenarios/seances/${seanceId}/inscription`);
+  const reserve = (who: TestUser, seanceId: string, userId: string) =>
+    who.agent.post(`/scenarios/seances/${seanceId}/reservations`).send({ userId });
+  const leave = (who: TestUser) => who.agent.delete(`/parties/${groupId}/members/me`);
+  const remove = (who: TestUser, targetId: string) =>
+    who.agent.delete(`/parties/${groupId}/members/${targetId}`);
+  const eventRow = (eventId: string) =>
+    h.prisma.event.findUniqueOrThrow({ where: { id: eventId } });
+  const cardFor = async (who: TestUser, eventId: string) =>
+    body<CardLike[]>(await who.agent.get(`/parties/${groupId}/events/list`).expect(200)).find(
+      (c) => c.id === eventId,
+    )!;
+  const member = (userId: string) =>
+    h.prisma.membership.findUnique({ where: { userId_partieId: { userId, partieId: groupId } } });
+  const cancelMails = (since: number, title: string) =>
+    h.email.calls
+      .slice(since)
+      .filter((c) => c.template === CANCEL_MAIL && c.data.eventTitle === title);
+  const setDay = (seanceId: string, day: string) => {
+    const date = new Date(`${day}T00:00:00.000Z`);
+    return h.prisma.seance.update({
+      where: { id: seanceId },
+      data: { startDate: date, endDate: date },
+    });
+  };
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, host, guest, reservedUser, third] = await Promise.all([
+      h.createUser('qgrp-admin'),
+      h.createUser('qgrp-hote'),
+      h.createUser('qgrp-invite'),
+      h.createUser('qgrp-reserve'),
+      h.createUser('qgrp-tiers'),
+    ]);
+    ({ id: groupId } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'qgrp', 'ralliement'));
+    for (const who of [guest, reservedUser, third]) await h.addMember(groupId, who);
+  });
+
+  afterAll(async () => {
+    await h?.close();
+  });
+
+  // Le départ est le sujet de chaque scénario : l'hôte est (re)membre avant chacun.
+  beforeEach(async () => {
+    if (!(await member(host.id))) await h.addMember(groupId, host);
+  });
+
+  it('départ volontaire : seules les conjonctions à venir de l’hôte sont annulées (sondage clos), le passé et l’ancienne annulation restent ; e-mail n° 7 aux inscrits, jamais à l’hôte', async () => {
+    const upcoming = await propose(host, { title: 'Hôte parti : à venir' });
+    const polled = await proposePoll(host, { title: 'Hôte parti : sondage' });
+    const past = await propose(host, { title: 'Hôte parti : passée' });
+    const already = await propose(host, { title: 'Hôte parti : déjà annulée' });
+    const others = await propose(third, { title: 'Hôte parti : celle d’un autre' });
+    await signUp(guest, upcoming.seance!.id).expect(201);
+    await reserve(host, upcoming.seance!.id, reservedUser.id).expect(201);
+    await signUp(guest, past.seance!.id).expect(201);
+    await setDay(past.seance!.id, isoDay(-2));
+    await signUp(guest, polled.seance!.id).expect(201);
+    await signUp(guest, already.seance!.id).expect(201);
+    await host.agent.post(`/parties/${groupId}/events/${already.id}/cancel`).expect(201);
+    const firstStamp = (await eventRow(already.id)).cancelledAt;
+    await signUp(guest, others.seance!.id).expect(201);
+    const before = h.email.calls.length;
+
+    const emit = jest.spyOn(h.app.get(RealtimeEventsService), 'emit');
+    try {
+      await leave(host).expect(200);
+      expect(emit).toHaveBeenCalledWith(partieTopic(groupId));
+      expect(emit).toHaveBeenCalledWith(userTopic(host.id));
+      expect(emit).toHaveBeenCalledWith(userTopic(guest.id));
+    } finally {
+      emit.mockRestore();
+    }
+
+    expect(await member(host.id)).toBeNull();
+    // Annulées dans la même transaction que le départ ; sondage clos.
+    expect((await eventRow(upcoming.id)).cancelledAt).not.toBeNull();
+    expect((await eventRow(polled.id)).cancelledAt).not.toBeNull();
+    const poll = await h.prisma.sessionPoll.findUniqueOrThrow({ where: { id: polled.poll!.id } });
+    expect(poll.status).toBe('CLOSED');
+    // Le passé reste intact, avec son hôte et ses inscrits ; l'ancienne annulation n'est pas réécrite.
+    const pastRow = await eventRow(past.id);
+    expect(pastRow.cancelledAt).toBeNull();
+    expect(pastRow.ownerId).toBe(host.id);
+    expect(await h.prisma.inscription.count({ where: { seanceId: past.seance!.id } })).toBe(1);
+    expect((await eventRow(already.id)).cancelledAt).toEqual(firstStamp);
+    // La conjonction d'un autre hôte ne bouge pas.
+    expect((await eventRow(others.id)).cancelledAt).toBeNull();
+
+    // Les autres membres voient l'état « annulée » ; le passé garde son hôte affiché.
+    expect((await cardFor(guest, upcoming.id)).cancelled).toBe(true);
+    expect((await cardFor(guest, polled.id)).cancelled).toBe(true);
+    expect((await cardFor(guest, polled.id)).poll).toBeNull();
+    expect((await cardFor(guest, past.id)).cancelled).toBe(false);
+    expect((await cardFor(guest, others.id)).cancelled).toBe(false);
+
+    // E-mail n° 7 : confirmés ET places réservées, au nom de l'hôte parti, jamais à lui ; rien pour le reste.
+    const sent = cancelMails(before, 'Hôte parti : à venir');
+    expect(sent.map((c) => c.to).sort()).toEqual([guest.email, reservedUser.email].sort());
+    expect(sent[0].data).toMatchObject({ actorName: host.displayName });
+    expect(cancelMails(before, 'Hôte parti : sondage').map((c) => c.to)).toEqual([guest.email]);
+    expect(cancelMails(before, 'Hôte parti : passée')).toEqual([]);
+    expect(cancelMails(before, 'Hôte parti : déjà annulée')).toEqual([]);
+    expect(cancelMails(before, 'Hôte parti : celle d’un autre')).toEqual([]);
+    expect(h.email.calls.slice(before).some((c) => c.to === host.email)).toBe(false);
+  });
+
+  it('retrait par un administrateur : mêmes annulations, e-mail au nom de l’hôte retiré', async () => {
+    const card = await propose(host, { title: 'Hôte retiré' });
+    await signUp(guest, card.seance!.id).expect(201);
+    const before = h.email.calls.length;
+
+    await remove(admin, host.id).expect(200);
+
+    expect(await member(host.id)).toBeNull();
+    expect((await eventRow(card.id)).cancelledAt).not.toBeNull();
+    const sent = cancelMails(before, 'Hôte retiré');
+    expect(sent.map((c) => c.to)).toEqual([guest.email]);
+    expect(sent[0].data).toMatchObject({ actorName: host.displayName });
+  });
+
+  it('une conjonction annulée par le départ n’accepte plus rien (inscription refusée)', async () => {
+    const card = await propose(host, { title: 'Plus rien' });
+    await leave(host).expect(200);
+
+    const res = await signUp(third, card.seance!.id);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('un membre qui n’héberge rien part : aucune annulation, aucun e-mail', async () => {
+    const card = await propose(third, { title: 'Intacte' });
+    const before = h.email.calls.length;
+
+    await leave(guest).expect(200);
+    await h.addMember(groupId, guest);
+
+    expect((await eventRow(card.id)).cancelledAt).toBeNull();
+    expect(h.email.calls.slice(before).filter((c) => c.template === CANCEL_MAIL)).toEqual([]);
+  });
+
+  it('un échec de l’annulation annule tout le départ : adhésion et conjonction intactes, aucun e-mail', async () => {
+    const card = await propose(host, { title: 'Départ avorté' });
+    await signUp(guest, card.seance!.id).expect(201);
+    const before = h.email.calls.length;
+    const spy = jest
+      .spyOn(h.app.get(PollVoteCleanupService), 'closePollsInTx')
+      .mockRejectedValueOnce(new Error('boom'));
+    const poll = await proposePoll(host, { title: 'Départ avorté (sondage)' });
+    try {
+      const res = await leave(host);
+      expect(res.status).toBe(500);
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(await member(host.id)).not.toBeNull();
+    expect((await eventRow(card.id)).cancelledAt).toBeNull();
+    expect((await eventRow(poll.id)).cancelledAt).toBeNull();
+    expect(
+      (await h.prisma.sessionPoll.findUniqueOrThrow({ where: { id: poll.poll!.id } })).status,
+    ).toBe('OPEN');
+    expect(cancelMails(before, 'Départ avorté')).toEqual([]);
+  });
+
+  it('le dernier administrateur supprime le groupe : aucune annulation ni e-mail', async () => {
+    const { id: soloId } = await h.createPartie(
+      third,
+      'CAMPAGNE_EPISODIQUE',
+      'qgrp-solo',
+      'ralliement',
+    );
+    await h.addMember(soloId, guest);
+    const res = await third.agent
+      .post(`/parties/${soloId}/events`)
+      .send({ title: 'Groupe supprimé', date: isoDay(6), slot: 'EVENING' })
+      .expect(201);
+    const seanceId = body<CardLike>(res).seance!.id;
+    await signUp(guest, seanceId).expect(201);
+    const before = h.email.calls.length;
+
+    await third.agent.delete(`/parties/${soloId}/members/me?deleteIfLastAdmin=true`).expect(200);
+
+    expect(cancelMails(before, 'Groupe supprimé')).toEqual([]);
+    expect(await h.prisma.partie.count({ where: { id: soloId } })).toBe(0);
   });
 });
