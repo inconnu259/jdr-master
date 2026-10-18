@@ -80,6 +80,31 @@ export interface AuthUser {
   defaultCalendarLayers: CalendarLayerKey[];
 }
 
+/** Un groupe (ou une rencontre isolée) que l'effacement du compte supprimerait : son utilisateur en est le
+ *  SEUL administrateur (Story 43.1, AD-11). */
+export interface DeletionImpactGroupDto {
+  id: string;
+  name: string;
+  /** Adhésions du groupe, administrateur compris. */
+  memberCount: number;
+  /** Événements du groupe (les conjonctions). */
+  eventCount: number;
+}
+
+/** Une partie de JDR que l'effacement du compte supprimerait : son utilisateur en est le MJ. */
+export interface DeletionImpactJdrPartieDto {
+  id: string;
+  name: string;
+  /** Joueurs (hors MJ) qui y perdraient leurs personnages. */
+  playerCount: number;
+}
+
+/** Réponse de GET /me/deletion-impact — ce que l'effacement du compte emporterait (Story 43.1). */
+export interface AccountDeletionImpactDto {
+  groups: DeletionImpactGroupDto[];
+  jdrParties: DeletionImpactJdrPartieDto[];
+}
+
 /** Corps de la requête PATCH /me/display-name. */
 export interface UpdateDisplayNameDto {
   displayName: string;

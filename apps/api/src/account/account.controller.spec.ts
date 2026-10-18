@@ -25,6 +25,7 @@ function makeAccountService() {
     addFavorite: jest.fn(),
     removeFavorite: jest.fn(),
     getUnseenAnnouncements: jest.fn(),
+    getDeletionImpact: jest.fn(),
     markAnnouncementRead: jest.fn(),
   };
 }
@@ -478,5 +479,16 @@ describe('AccountController', () => {
       await request(app.getHttpServer()).put('/me/announcements-read/a1').expect(200);
       expect(account.markAnnouncementRead).toHaveBeenCalledWith('u1', 'a1');
     });
+  });
+
+  it("getDeletionImpact() lit l'id depuis la session (req.user) et ne prend aucun paramètre (Story 43.1)", async () => {
+    const impact = { groups: [], jdrParties: [] };
+    account.getDeletionImpact.mockResolvedValue(impact);
+
+    const req = { user: { id: 'u1' } } as unknown as Request;
+    const result = await controller.getDeletionImpact(req);
+
+    expect(account.getDeletionImpact).toHaveBeenCalledWith('u1');
+    expect(result).toBe(impact);
   });
 });

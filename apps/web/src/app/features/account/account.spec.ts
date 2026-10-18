@@ -9,6 +9,9 @@ import { Account } from './account';
 import { AuthService } from '../../core/auth/auth.service';
 import { AccountService } from '../../core/account/account.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
+import { TONE_MAP } from '../../core/theme/tones';
+import { MatDialog } from '@angular/material/dialog';
+import { DeleteAccountDialog } from './delete-account-dialog/delete-account-dialog';
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 
 function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
@@ -939,5 +942,93 @@ describe('Account — « Ce que révèle mon calendrier » en intentions (Story 
     (fixture.componentInstance as any).onIntentToggle('votes', true);
 
     expect(currentUserSignal()?.defaultCalendarLayers).toContain('votes-en-cours');
+  });
+});
+
+describe('Account — zone sensible (Story 43.1)', () => {
+  const IMPACT = {
+    groups: [{ id: 'g1', name: 'La Bande du Jeudi', memberCount: 14, eventCount: 6 }],
+    jdrParties: [],
+  };
+
+  async function createDangerFixture(accountSvc: Record<string, ReturnType<typeof vi.fn>>) {
+    const dialog = { open: vi.fn() };
+    await TestBed.configureTestingModule({
+      imports: [Account],
+      providers: [
+        provideRouter([]),
+        { provide: AuthService, useValue: { currentUser: signal(makeUser({ pseudo: 'alice' })) } },
+        { provide: AccountService, useValue: accountSvc },
+        { provide: MatDialog, useValue: dialog },
+        {
+          provide: ThemeToneService,
+          useValue: {
+            tone: signal(TONE_MAP['grimoire-emeraude']),
+            activeTheme: signal('grimoire-emeraude'),
+            themes: ['grimoire-emeraude', 'foret-ancienne', 'atelier-cuivre'],
+            themeNames: {},
+            setTheme: vi.fn(),
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(Account);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, dialog, el: fixture.nativeElement as HTMLElement };
+  }
+
+  const pill = (el: HTMLElement) => el.querySelector<HTMLButtonElement>('.danger-pill')!;
+
+  it('la section vient après « Fermer le grimoire », avec son étiquette, sa phrase et la pilule', async () => {
+    const { el } = await createDangerFixture({ getDeletionImpact: vi.fn() });
+
+    const zone = el.querySelector('.danger-zone')!;
+    expect(zone.textContent).toContain('Zone sensible');
+    expect(zone.textContent).toContain(TONE_MAP['grimoire-emeraude']['account.danger_explain']);
+    expect(pill(el).textContent).toContain('Effacer mon compte');
+    expect(pill(el).querySelector('mat-icon')?.textContent?.trim()).toBe('delete');
+    const logout = el.querySelector('.logout-row')!;
+    expect(logout.compareDocumentPosition(zone) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('un clic lit l’aperçu et ouvre la fenêtre avec le pseudo et l’aperçu', async () => {
+    const getDeletionImpact = vi.fn().mockResolvedValue(IMPACT);
+    const { fixture, dialog, el } = await createDangerFixture({ getDeletionImpact });
+
+    pill(el).click();
+    await fixture.whenStable();
+
+    expect(getDeletionImpact).toHaveBeenCalledTimes(1);
+    expect(dialog.open).toHaveBeenCalledWith(DeleteAccountDialog, {
+      data: { pseudo: 'alice', impact: IMPACT },
+    });
+  });
+
+  it('l’aperçu est relu à chaque ouverture', async () => {
+    const getDeletionImpact = vi.fn().mockResolvedValue(IMPACT);
+    const { fixture, el } = await createDangerFixture({ getDeletionImpact });
+
+    pill(el).click();
+    await fixture.whenStable();
+    pill(el).click();
+    await fixture.whenStable();
+
+    expect(getDeletionImpact).toHaveBeenCalledTimes(2);
+  });
+
+  it('échec de lecture : aucune fenêtre, un message sous la pilule', async () => {
+    const getDeletionImpact = vi.fn().mockRejectedValue(new Error('boom'));
+    const { fixture, dialog, el } = await createDangerFixture({ getDeletionImpact });
+
+    pill(el).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(dialog.open).not.toHaveBeenCalled();
+    expect(el.querySelector('.danger-zone .error')?.textContent).toContain(
+      TONE_MAP['grimoire-emeraude']['account.danger_load_error'],
+    );
   });
 });

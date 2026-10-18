@@ -164,4 +164,27 @@
       {{ theme.tone()['nav.logout'] }}
     </button>
   </div>
+
+  <!-- ⚠️ Story 43.1 (UX-DR13) — zone sensible, sous « Fermer le grimoire » (la déconnexion), séparée
+       par un filet. -->
+  <section class="danger-zone" aria-labelledby="danger-zone-title">
+    <h2 id="danger-zone-title" class="lbl danger-zone__label">
+      {{ theme.tone()['account.danger_title'] }}
+    </h2>
+    <p class="danger-zone__explain">{{ theme.tone()['account.danger_explain'] }}</p>
+    <div class="actions actions--start">
+      <button
+        type="button"
+        class="danger-pill"
+        [disabled]="deleteLoading()"
+        (click)="openDeleteAccount()"
+      >
+        <mat-icon aria-hidden="true">delete</mat-icon>
+        {{ theme.tone()['account.delete_pill'] }}
+      </button>
+    </div>
+    @if (deleteError()) {
+      <p class="error" role="alert">{{ deleteError() }}</p>
+    }
+  </section>
 </mat-card>

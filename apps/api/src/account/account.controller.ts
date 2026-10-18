@@ -43,6 +43,13 @@ export class AccountController {
     return this.account.removeFavorite((req.user as { id: string }).id, partieId);
   }
 
+  /** Story 43.1 — aperçu en lecture seule de ce que l'effacement du compte emporterait ; ne vise
+   *  que l'utilisateur connecté (aucun identifiant en paramètre). */
+  @Get('deletion-impact')
+  getDeletionImpact(@Req() req: Request) {
+    return this.account.getDeletionImpact((req.user as { id: string }).id);
+  }
+
   @Get('unseen-announcements')
   getUnseenAnnouncements(@Req() req: Request) {
     return this.account.getUnseenAnnouncements((req.user as { id: string }).id);

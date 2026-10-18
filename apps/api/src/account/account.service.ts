@@ -1,12 +1,30 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { AnnouncementDto, Theme } from '@master-jdr/shared';
+import {
+  GAME_SYSTEMS,
+  type AccountDeletionImpactDto,
+  type AnnouncementDto,
+  type Theme,
+} from '@master-jdr/shared';
 import { PermissionService } from '../permissions/permission.service';
 import { RELEASED_ANNOUNCEMENT_WHERE, isSpoilRestricted } from '../permissions/scenario-visibility';
 import { PrismaService } from '../prisma/prisma.service';
 import { toDto as toAnnouncementDto } from '../announcements/announcements.service';
 import { toAuthUser } from '../users/to-auth-user.util';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
+
+/** Identifiants des systèmes d'une famille, lus dans le registre (Story 43.1) : la famille n'est pas
+ *  une colonne, le filtre SQL passe donc par la liste des systèmes qui la portent. */
+function systemIdsOfFamily(family: 'jdr' | 'ralliement'): string[] {
+  return GAME_SYSTEMS.filter((g) => g.family === family).map((g) => g.id);
+}
+const RALLIEMENT_SYSTEM_IDS = systemIdsOfFamily('ralliement');
+const JDR_SYSTEM_IDS = systemIdsOfFamily('jdr');
+
+/** `groupBy` → table `partieId → nombre`. */
+function countsByPartie(rows: { partieId: string; _count: { _all: number } }[]): Map<string, number> {
+  return new Map(rows.map((r) => [r.partieId, r._count._all]));
+}
 
 @Injectable()
 export class AccountService {
@@ -97,6 +115,82 @@ export class AccountService {
       throw e;
     }
     return toAuthUser(user);
+  }
+
+  /**
+   * Story 43.1 (AD-11) — ce que l'effacement du compte emporterait, en lecture seule et pour
+   * `userId` seul : les groupes et rencontres isolées dont il est le SEUL administrateur (un groupe
+   * qui garde un autre administrateur survit, il n'est pas listé) et les parties de JDR qu'il
+   * possède. Lectures groupées, jamais une requête par partie.
+   */
+  async getDeletionImpact(userId: string): Promise<AccountDeletionImpactDto> {
+    const [adminships, ownedJdr] = await Promise.all([
+      this.prisma.membership.findMany({
+        where: { userId, role: 'ADMIN', partie: { gameSystemId: { in: RALLIEMENT_SYSTEM_IDS } } },
+        select: { partie: { select: { id: true, name: true } } },
+      }),
+      this.prisma.partie.findMany({
+        where: { ownerId: userId, gameSystemId: { in: JDR_SYSTEM_IDS } },
+        select: { id: true, name: true },
+      }),
+    ]);
+    const groupIds = adminships.map((a) => a.partie.id);
+    const jdrIds = ownedJdr.map((p) => p.id);
+
+    const [adminRows, memberRows, eventRows, characterRows] = await Promise.all([
+      groupIds.length
+        ? this.prisma.membership.groupBy({
+            by: ['partieId'],
+            where: { partieId: { in: groupIds }, role: 'ADMIN' },
+            _count: { _all: true },
+          })
+        : [],
+      groupIds.length
+        ? this.prisma.membership.groupBy({
+            by: ['partieId'],
+            where: { partieId: { in: groupIds } },
+            _count: { _all: true },
+          })
+        : [],
+      groupIds.length
+        ? this.prisma.event.groupBy({
+            by: ['partieId'],
+            where: { partieId: { in: groupIds } },
+            _count: { _all: true },
+          })
+        : [],
+      // Un joueur ne perd ses personnages que s'il en a : on compte les joueurs distincts, MJ exclu.
+      jdrIds.length
+        ? this.prisma.character.findMany({
+            where: { partieId: { in: jdrIds }, userId: { not: userId } },
+            select: { partieId: true, userId: true },
+            distinct: ['partieId', 'userId'],
+          })
+        : [],
+    ]);
+
+    const admins = countsByPartie(adminRows);
+    const members = countsByPartie(memberRows);
+    const events = countsByPartie(eventRows);
+    const players = new Map<string, number>();
+    for (const c of characterRows) players.set(c.partieId, (players.get(c.partieId) ?? 0) + 1);
+
+    const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'fr');
+    return {
+      // Le recomptage des administrateurs fait foi : un autre ADMIN sauve le groupe.
+      groups: adminships
+        .filter((a) => (admins.get(a.partie.id) ?? 0) <= 1)
+        .map((a) => ({
+          id: a.partie.id,
+          name: a.partie.name,
+          memberCount: members.get(a.partie.id) ?? 0,
+          eventCount: events.get(a.partie.id) ?? 0,
+        }))
+        .sort(byName),
+      jdrParties: ownedJdr
+        .map((p) => ({ id: p.id, name: p.name, playerCount: players.get(p.id) ?? 0 }))
+        .sort(byName),
+    };
   }
 
   /** Idempotent (sémantique PUT) : un favori déjà posé n'est jamais une erreur (P2002 absorbé).

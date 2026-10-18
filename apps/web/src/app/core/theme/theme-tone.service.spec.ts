@@ -1079,9 +1079,26 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'portrait.cropper_zoom',
     'portrait.avatar_aria',
     'portrait.avatar_aria_empty',
+    // Story 43.1 : zone sensible et confirmation d'effacement du compte — textes fixes du contrat
+    // (UX-DR12, UX-DR13), volontairement identiques dans les trois thèmes.
+    'account.danger_title',
+    'account.delete_pill',
+    'account.delete_intro',
+    'account.delete_groups_title',
+    'account.delete_group_line',
+    'account.delete_members_one',
+    'account.delete_members_many',
+    'account.delete_events_one',
+    'account.delete_events_many',
+    'account.delete_jdr_title',
+    'account.delete_jdr_line',
+    'account.delete_jdr_line_one',
+    'account.delete_jdr_line_none',
+    'account.delete_irreversible',
+    'account.delete_confirm_btn',
   ]);
 
-  const REFERENCE = TONE_MAP['grimoire-emeraude'];
+  const REFERENCE =TONE_MAP['grimoire-emeraude'];
   const identicalKeys = () =>
     Object.keys(REFERENCE).filter(
       (key) => new Set(THEMES.map((theme) => TONE_MAP[theme][key])).size === 1,
@@ -1225,7 +1242,9 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     key === 'character.nature_dragon' ||
     key.startsWith('auth.password_') ||
     key.startsWith('auth.field_') ||
-    key.startsWith('calendar.agenda.badge_');
+    key.startsWith('calendar.agenda.badge_') ||
+    // Story 43.1 : confirmation d'effacement du compte, textes fixes du contrat (UX-DR12), vouvoyés.
+    key.startsWith('account.delete_');
   const VOUVOIEMENT =
     /(^|[^\p{L}])(vous|votre|vos)(?=$|[^\p{L}])|-vous(?=$|[^\p{L}])|(^|[^\p{L}])(réessayez|rechargez|vérifiez|choisissez|ouvrez|créez|connectez|terminez|refaites|patientez|utilisez|acceptez|cochez|cliquez|revalidez|demandez|revenez|touchez|répartissez|gravez|ajoutez|sélectionnez|renseignez|veuillez|rédigez|déverrouillez|rouvrez|consultez|plantez|façonnez)(?=$|[^\p{L}])/iu;
   // Impératifs du tutoiement, restreints aux formes sans ambiguïté (« ouvre » est aussi un « il ouvre »).

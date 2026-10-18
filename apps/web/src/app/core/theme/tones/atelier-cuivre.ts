@@ -247,6 +247,26 @@ export const atelierCuivre: Record<ToneKey, string> = {
   'account.email_change_taken': 'Cette fréquence est déjà occupée par un autre poste.',
   'account.email_change_error': 'L’établi n’a pas pu transmettre la demande. Réessayez.',
   'account.appearance_label': 'Apparence de l’atelier',
+  /* — zone sensible et effacement du compte (Story 43.1) : textes fixes du contrat, identiques dans les trois thèmes — */
+  'account.danger_title': 'Zone sensible',
+  'account.danger_explain':
+    'Effacer votre compte est définitif : il disparaît avec ce qui n’appartient qu’à vous.',
+  'account.delete_pill': 'Effacer mon compte',
+  'account.danger_load_error': 'Impossible de préparer l’effacement du compte. Réessayez.',
+  'account.delete_intro': 'Effacer votre compte « {pseudo} » ? Seront supprimés avec lui :',
+  'account.delete_groups_title': 'Groupes dont vous êtes le seul administrateur',
+  'account.delete_group_line': '{name} — {members} · {events}',
+  'account.delete_members_one': '{n} membre',
+  'account.delete_members_many': '{n} membres',
+  'account.delete_events_one': '{n} conjonction',
+  'account.delete_events_many': '{n} conjonctions',
+  'account.delete_jdr_title': 'Parties de JDR dont vous êtes le MJ',
+  'account.delete_jdr_line': '{name} — {n} joueurs y perdent aussi leurs personnages',
+  'account.delete_jdr_line_one': '{name} — {n} joueur y perd aussi son personnage',
+  'account.delete_jdr_line_none': '{name}',
+  'account.delete_irreversible':
+    'Cette action est irréversible. Pour confirmer, saisissez votre mot de passe.',
+  'account.delete_confirm_btn': 'Effacer mon compte',
   /* — calendrier du compte — */
   'account.calendar_layers_title': 'Ce qu’affiche mon calendrier',
   // Couches et intentions du calendrier : verbatim du contrat d’UI (story 36.14), volontairement identiques.

@@ -17,7 +17,7 @@ import { PermissionService } from '../permissions/permission.service';
 import { testGrant } from '../common/test-utils/grant';
 import { RELEASED_ANNOUNCEMENT_WHERE } from '../permissions/scenario-visibility';
 import { AccountService } from './account.service';
-import { anyOf } from '../common/test-utils/jest-typed';
+import { anyOf, objectLike } from '../common/test-utils/jest-typed';
 
 // Champs requis par toAuthUser() (Story 30.4) — fusionnés dans chaque mock de retour
 // `prisma.user.update()` qui ne les fournit pas déjà explicitement.
@@ -34,6 +34,10 @@ function makePrisma() {
     partieFavorite: { create: jest.fn(), deleteMany: jest.fn() },
     announcement: { findMany: jest.fn(), count: jest.fn() },
     announcementRead: { create: jest.fn() },
+    membership: { findMany: jest.fn(), groupBy: jest.fn() },
+    partie: { findMany: jest.fn() },
+    event: { groupBy: jest.fn() },
+    character: { findMany: jest.fn() },
     $transaction: jest.fn(),
   };
 }
@@ -682,6 +686,121 @@ describe('AccountService', () => {
       prisma.announcementRead.create.mockRejectedValue(otherError);
 
       await expect(service.markAnnouncementRead('u1', 'a1')).rejects.toBe(otherError);
+    });
+  });
+
+  describe('getDeletionImpact() — Story 43.1', () => {
+    function mockReads(opts: {
+      adminships?: { partie: { id: string; name: string } }[];
+      owned?: { id: string; name: string }[];
+      admins?: { partieId: string; n: number }[];
+      members?: { partieId: string; n: number }[];
+      events?: { partieId: string; n: number }[];
+      characters?: { partieId: string; userId: string }[];
+    }) {
+      const rows = (r: { partieId: string; n: number }[] = []) =>
+        r.map((x) => ({ partieId: x.partieId, _count: { _all: x.n } }));
+      prisma.membership.findMany.mockResolvedValue(opts.adminships ?? []);
+      prisma.partie.findMany.mockResolvedValue(opts.owned ?? []);
+      prisma.membership.groupBy
+        .mockResolvedValueOnce(rows(opts.admins))
+        .mockResolvedValueOnce(rows(opts.members));
+      prisma.event.groupBy.mockResolvedValue(rows(opts.events));
+      prisma.character.findMany.mockResolvedValue(opts.characters ?? []);
+    }
+
+    it('seul administrateur : le groupe est listé avec ses adhésions et ses conjonctions', async () => {
+      mockReads({
+        adminships: [{ partie: { id: 'g1', name: 'La Bande du Jeudi' } }],
+        admins: [{ partieId: 'g1', n: 1 }],
+        members: [{ partieId: 'g1', n: 14 }],
+        events: [{ partieId: 'g1', n: 6 }],
+      });
+
+      await expect(service.getDeletionImpact('u1')).resolves.toEqual({
+        groups: [{ id: 'g1', name: 'La Bande du Jeudi', memberCount: 14, eventCount: 6 }],
+        jdrParties: [],
+      });
+    });
+
+    it('un autre administrateur existe : le groupe survit, il n’est pas listé', async () => {
+      mockReads({
+        adminships: [
+          { partie: { id: 'g1', name: 'Partagé' } },
+          { partie: { id: 'g2', name: 'Seul' } },
+        ],
+        admins: [
+          { partieId: 'g1', n: 2 },
+          { partieId: 'g2', n: 1 },
+        ],
+        members: [
+          { partieId: 'g1', n: 5 },
+          { partieId: 'g2', n: 3 },
+        ],
+      });
+
+      const impact = await service.getDeletionImpact('u1');
+
+      expect(impact.groups.map((g) => g.id)).toEqual(['g2']);
+      expect(impact.groups[0]).toMatchObject({ memberCount: 3, eventCount: 0 });
+    });
+
+    it('partie de JDR possédée : compte les joueurs distincts qui ont un personnage', async () => {
+      mockReads({
+        owned: [{ id: 'q1', name: 'Quête' }],
+        characters: [
+          { partieId: 'q1', userId: 'p1' },
+          { partieId: 'q1', userId: 'p2' },
+        ],
+      });
+
+      await expect(service.getDeletionImpact('u1')).resolves.toEqual({
+        groups: [],
+        jdrParties: [{ id: 'q1', name: 'Quête', playerCount: 2 }],
+      });
+      // Le MJ lui-même n'est jamais compté, et seules ses parties sont lues.
+      expect(prisma.character.findMany).toHaveBeenCalledWith(
+        objectLike({ where: { partieId: { in: ['q1'] }, userId: { not: 'u1' } } }),
+      );
+      expect(prisma.partie.findMany).toHaveBeenCalledWith(
+        objectLike({ where: objectLike({ ownerId: 'u1' }) }),
+      );
+    });
+
+    it('simple membre : deux listes vides, et aucune lecture groupée inutile', async () => {
+      mockReads({});
+
+      await expect(service.getDeletionImpact('u1')).resolves.toEqual({
+        groups: [],
+        jdrParties: [],
+      });
+      expect(prisma.membership.groupBy).not.toHaveBeenCalled();
+      expect(prisma.event.groupBy).not.toHaveBeenCalled();
+      expect(prisma.character.findMany).not.toHaveBeenCalled();
+    });
+
+    it('ne lit que les adhésions ADMIN de l’utilisateur appelant', async () => {
+      mockReads({});
+
+      await service.getDeletionImpact('u1');
+
+      expect(prisma.membership.findMany).toHaveBeenCalledWith(
+        objectLike({ where: objectLike({ userId: 'u1', role: 'ADMIN' }) }),
+      );
+    });
+
+    it('trie les listes par nom', async () => {
+      mockReads({
+        adminships: [{ partie: { id: 'g1', name: 'Zèbre' } }, { partie: { id: 'g2', name: 'Abeille' } }],
+        admins: [
+          { partieId: 'g1', n: 1 },
+          { partieId: 'g2', n: 1 },
+        ],
+      });
+
+      const impact = await service.getDeletionImpact('u1');
+
+      expect(impact.groups.map((g) => g.name)).toEqual(['Abeille', 'Zèbre']);
     });
   });
 });
