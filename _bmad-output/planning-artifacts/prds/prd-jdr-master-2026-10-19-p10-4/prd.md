@@ -114,7 +114,8 @@ Le MJ peut masquer une fenêtre de l'automate. Réalise UJ-1.
 Le MJ peut replier et redéplier la liste des fenêtres de l'automate. Réalise UJ-1.
 
 **Consequences (testable) :**
-- Repliée, la liste n'affiche qu'un en-tête avec le nombre de fenêtres.
+- Sur ordinateur, la colonne de droite entière se range en dock collé au bord droit (flèche ›), et le calendrier reprend toute la largeur ; le dock affiche le libellé et le nombre de fenêtres, et se rouvre (flèche ‹). *Précisé en UX le 2026-10-20.*
+- Sur téléphone, où la colonne est sous la grille, la liste se replie verticalement et n'affiche qu'un en-tête avec le nombre de fenêtres.
 - Les champs Du / Au et l'action « Scruter » (période sur laquelle l'automate calcule) ne se montrent que liste dépliée.
 - L'état replié / déplié est retenu pour ce MJ. `[ASSUMPTION]`
 

@@ -54,6 +54,10 @@ h2{font-size:15px;margin:28px 0 4px}
 .blk{background:var(--surface-high);border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--muted);margin-bottom:12px}
 .hdr{display:flex;align-items:center;justify-content:space-between;background:var(--surface-high);border-radius:10px;padding:10px 12px;font-weight:600;min-height:44px}
 .hdr small{color:var(--muted);font-weight:400}
+.arrow{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid var(--outline);font-size:18px;color:var(--text)}
+.dock{flex:0 0 44px;background:var(--surface);border-radius:12px 0 0 12px;display:flex;flex-direction:column;align-items:center;gap:14px;padding:8px 0;margin-right:-18px}
+.dock .vl{writing-mode:vertical-rl;font-weight:600;font-size:12.5px;color:var(--text)}
+.dock .vl small{color:var(--muted);font-weight:400}
 .form{display:flex;gap:8px;align-items:end;margin:10px 0 8px;font-size:12px;color:var(--muted)}
 .form .f{flex:1}
 .form .in{border:1px solid var(--outline);border-radius:8px;padding:6px 8px;color:var(--text);margin-top:3px}
@@ -71,7 +75,7 @@ h2{font-size:15px;margin:28px 0 4px}
 </head>
 <body>
 <h1>Colonne MJ sur ordinateur — Éphémérides actionnables (Grimoire Émeraude)</h1>
-<p class="intro">Deux moments du parcours d'Incon (UJ-1). En haut : il a déplié les Éphémérides et sélectionné une fenêtre. En bas : il a ajouté trois fenêtres au vote, puis sélectionné deux jours du geste des dispos ; le composer accumule. Planche de travail : les spines l'emportent.</p>
+<p class="intro">Trois moments du parcours d'Incon (UJ-1). En haut : il a déplié les Éphémérides et sélectionné une fenêtre. En bas : il a ajouté trois fenêtres au vote, puis sélectionné deux jours du geste des dispos ; le composer accumule. Enfin, il range la colonne en dock pour voir le calendrier en grand. Planche de travail : les spines l'emportent.</p>
 
 <h2>① Fenêtre sélectionnée</h2>
 <p class="sub">La fenêtre est entourée dans la liste et sur la grille ; les autres jours s'estompent (même estompe que la Destinée). Deux actions écrites sur la carte.</p>
@@ -103,7 +107,7 @@ h2{font-size:15px;margin:28px 0 4px}
     </div>
     <div class="side">
       <div class="blk">Aucun conseil de date en cours.</div>
-      <div class="hdr"><span>Éphémérides · 6</span><small>replier ⌃</small></div>
+      <div class="hdr"><span>Éphémérides · 6</span><span class="arrow" title="Ranger la colonne">›</span></div>
       <div class="form"><div class="f">Du<div class="in">20/10/2026</div></div><div class="f">Au<div class="in">20/12/2026</div></div><span class="pill">Scruter</span></div>
       <div class="card"><div><div class="d">mer. 22 oct. · soir</div><div class="s">4 sur 4 libres</div></div></div>
       <div class="card"><div><div class="d">ven. 24 oct. · soir</div><div class="s">4 sur 4 libres</div></div></div>
@@ -148,7 +152,7 @@ h2{font-size:15px;margin:28px 0 4px}
     </div>
     <div class="side">
       <div class="blk">Aucun conseil de date en cours.</div>
-      <div class="hdr"><span>Éphémérides · 3</span><small>replier ⌃</small></div>
+      <div class="hdr"><span>Éphémérides · 3</span><span class="arrow" title="Ranger la colonne">›</span></div>
       <div class="form"><div class="f">Du<div class="in">20/10/2026</div></div><div class="f">Au<div class="in">20/12/2026</div></div><span class="pill">Scruter</span></div>
       <div class="card"><div><div class="d">dim. 26 oct. · matin</div><div class="s">4 sur 4 libres</div></div></div>
       <div class="card"><div><div class="d">mer. 29 oct. · soir</div><div class="s">3 sur 4 libres</div></div></div>
@@ -158,5 +162,23 @@ h2{font-size:15px;margin:28px 0 4px}
   </div>
 </div>
 <p class="note">« Ajouter au vote » porte le compte à 5 créneaux (3 fenêtres + 2 soirs) ; Valider ouvre alors le vote. Annuler rend les trois fenêtres à la liste. Pendant le composer, « Proposer des dates » disparaît de la ligne de contrôles.</p>
+
+<h2>③ Colonne rangée en dock</h2>
+<p class="sub">La flèche › de l'en-tête range toute la colonne contre le bord droit ; le calendrier reprend toute la largeur. La flèche ‹ du dock la rouvre. Sur téléphone, la colonne étant sous la grille, la liste se replie simplement vers le haut.</p>
+<div class="win">
+  <div class="bar"><i></i><i></i><i></i></div>
+  <div class="tb"><span class="back">←</span> Les Voyageurs du col — Almanach</div>
+  <div class="wrap">
+    <div class="main">
+      <div class="controls"><span class="chip">☰ Affichage</span><span class="btn-o">Proposer des dates</span><span class="spring"></span><span class="seg"><span class="on">Mois</span><span>Semaine</span><span>Agenda</span></span></div>
+      <div class="mh"><span>octobre 2026</span><span>‹ ›</span></div>
+      <div class="dow"><div>lun.</div><div>mar.</div><div>mer.</div><div>jeu.</div><div>ven.</div><div>sam.</div><div>dim.</div></div>
+      <div class="grid"><div class="cell">20<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">21<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">22<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">23<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">24<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">25<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">26<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">27<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">28<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">29<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">30<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">31<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">1<div class="b"></div><div class="b"></div><div class="b"></div></div><div class="cell">2<div class="b"></div><div class="b"></div><div class="b"></div></div></div>
+      <div class="rail"><b>lun. 20 oct.</b> · aucun créneau en cours</div>
+    </div>
+    <div class="dock"><span class="arrow" title="Rouvrir la colonne">‹</span><span class="vl">Éphémérides <small>· 6</small></span></div>
+  </div>
+</div>
+<p class="note">Le dock dit ce qu'il contient (ici les éphémérides et leur nombre ; « ✦ Chapitre 4 » quand c'est le plateau de la destinée). L'état rangé est retenu pour le MJ.</p>
 </body>
 </html>

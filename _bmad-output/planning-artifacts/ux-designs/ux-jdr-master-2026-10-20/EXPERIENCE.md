@@ -48,8 +48,11 @@ Sous 768 px, le plateau est un **tiroir du bas** dans les trois calendriers ; le
 
 Planche : [`mockups/proposition-colonne-mj-ephemerides.html`](mockups/proposition-colonne-mj-ephemerides.html). Ordre de la colonne MJ, inchangé sauf la liste : bloc « qui manque » par vote ouvert (ou « Aucun conseil de date en cours. »), puis **la liste de l'automate**, désormais :
 
-1. **En-tête repliable** « Éphémérides · 18 » (libellé du thème, §3.1), avec chevron. Replié par défaut à la première visite ; l'état est retenu pour le MJ. `[ASSUMPTION]`
-2. **Déplié** : champs Du / Au et « Scruter », puis les cartes, puis le lien « Afficher les N masquées » s'il y en a.
+1. **En-tête** « Éphémérides · 18 » (libellé du thème, §3.1).
+   - **≥ 768 px** : une flèche **›** dans l'en-tête de la colonne **range toute la colonne de droite en dock** collé au bord droit ; le calendrier reprend toute la largeur. Le dock (bande verticale étroite) porte une flèche **‹** pour la rouvrir et, en vertical, le libellé et le compteur (« Éphémérides · 18 »). Demandé par l'utilisateur le 2026-10-20.
+   - **< 768 px** : la colonne étant empilée sous la grille, l'en-tête replie la liste verticalement (chevron).
+   - État retenu pour le MJ ; colonne ouverte par défaut à la première visite. `[ASSUMPTION]`
+2. **Colonne ouverte / liste dépliée** : champs Du / Au et « Scruter », puis les cartes, puis le lien « Afficher les N masquées » s'il y en a.
 3. **Carte sélectionnée** : « Ajouter au vote » et « Masquer ».
 
 ### 2.3 ⚠️ « Proposer des dates » et le choix du rendez-vous
@@ -152,7 +155,8 @@ JDR : « séance sans date ». Mode soirée : « {conjonction | halte | réunion
 | `DestinyBoard` (≥ 768 px) | Colonne sticky, défilement interne. Remplace le contenu de la colonne de droite tant que la Destinée est active ; le contenu habituel revient à la sortie. |
 | `DestinyList` | Modal (tiroir) sous 1024 px, menu ancré au-delà. Échap ou fond assombri ferment sans rien changer. |
 | `RendezvousPicker` | Modal. Une ligne = un rendez-vous ; toucher la ligne arme le composer. Sauté s'il n'y a qu'un rendez-vous. |
-| `AutomateList` | En-tête bouton (`aria-expanded`). Cartes sélectionnables une à la fois. |
+| `SideDock` (≥ 768 px) | Toute colonne de droite du calendrier (colonne MJ, joueur, groupe, plateau de la destinée) se range en dock par la flèche › de son en-tête et se rouvre par la flèche ‹ du dock. Le dock montre en vertical ce qu'il contient (« Éphémérides · 18 », « ✦ Chapitre 4 »). Rangée, la colonne libère toute la largeur pour la grille. `[ASSUMPTION]` pour les colonnes autres que celle du MJ. |
+| `AutomateList` | Sous 768 px : en-tête bouton (`aria-expanded`) qui replie la liste. Cartes sélectionnables une à la fois. |
 | Barre de sélection en composition | La barre des dispos (36.3), en version composition : « N jours sélectionnés », portée (Journée en JDR seulement · Matin · Après-m. · Soir), « Ajouter au vote », « Retirer », « Annuler ». |
 | `app-compose-bar` | Inchangée : cible, compte cumulé, raison de blocage (2 minimum), Valider, Annuler. |
 
@@ -201,6 +205,7 @@ Les quatre principes du Palier 9 (§6 bis) tiennent : le rail suit, **la Destin�
 
 ## 7. Accessibility Floor
 
+- Les flèches › et ‹ du dock sont des boutons nommés (« Ranger la colonne », « Rouvrir la colonne ») avec `aria-expanded` ; ranger la colonne rend le focus à la flèche ‹.
 - Le tiroir replié est une région nommée (« Destinée : {nom} ») ; son bouton de dépliage porte `aria-expanded`. Le déplier ne piège pas le focus.
 - La liste des destinées et le choix du rendez-vous piègent le focus, se ferment par `Échap` et rendent le focus à leur bouton.
 - Changer de créneau courant annonce, en `aria-live` poli : « Créneau 2 sur 5, samedi 18 octobre, soir, 4 oui ».
@@ -229,7 +234,7 @@ Mêmes protagonistes que le PRD (UJ-1 à UJ-4).
 
 | # | Écran validé | Ce qui change | Pourquoi |
 | --- | --- | --- | --- |
-| 1 | Colonne MJ (P9, 36.x) | liste de l'automate repliable, cartes actionnables, masquage ; Du / Au / Scruter sous l'en-tête | FR-1 à FR-4 |
+| 1 | Colonne MJ (P9, 36.x) | colonne rangeable en dock à droite (›/‹) sur ordinateur, liste repliable sur mobile ; cartes actionnables, masquage ; Du / Au / Scruter sous l'en-tête | FR-1 à FR-4 ; le calendrier récupère toute la place |
 | 2 | Libellés `section.slots` | Grimoire « Éphémérides », Atelier « Créneaux calculés par l'automate » | FR-16 ; « validés » laissait croire à des dates confirmées |
 | 3 | Ligne de contrôles | « Proposer des dates » / « Modifier les dates » remplace « Inscrire des dates » et « Composer les créneaux : {titre} » | FR-5, FR-10 ; un seul point d'entrée, trouvable |
 | 4 | `ComposeConfirmDialog` (36.10) | le choix de la séance passe **avant** le composer ; la fenêtre ne garde que l'avertissement de perte | FR-2, FR-5 |

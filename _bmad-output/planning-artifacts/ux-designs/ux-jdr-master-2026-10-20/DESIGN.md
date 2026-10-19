@@ -57,8 +57,16 @@ components:
     answered: "{colors.accent-1} à 15 % de fond, bordure à 45 %"
     organizer: "{colors.accent-2} à 18 % de fond, bordure à 50 %"
     notVoter: "{colors.text-muted}, contour {colors.outline}"
-  automate-list-header:                # en-tête repliable des fenêtres de l'automate (⚠️ §7.3)
-    kind: "bouton pleine largeur, libellé + compteur + chevron, aria-expanded"
+  side-dock:                           # colonne de droite rangée en dock, ≥ 768 px (⚠️ §7.3)
+    width: 44px
+    placement: "collée au bord droit du calendrier, pleine hauteur de la colonne, sticky"
+    backgroundColor: "{colors.surface-container}"
+    rounded: "12px 0 0 12px"
+    toggle: "flèche ‹ en tête, cible 44 × 44 px"
+    label: "texte vertical (writing-mode: vertical-rl), 12,5 px / 600, libellé + compteur"
+    collapseControl: "flèche › dans l'en-tête de la colonne ouverte"
+  automate-list-header:                # en-tête des fenêtres de l'automate (⚠️ §7.3)
+    kind: "≥ 768 px : titre + compteur + flèche › (range la colonne) ; < 768 px : bouton pleine largeur + chevron, aria-expanded"
     minHeight: 44px
   automate-card-selected:              # fenêtre de l'automate sélectionnée (⚠️ §7.3)
     border: "2px solid {colors.accent-1}"
@@ -144,7 +152,7 @@ Ouverte par la puce ✦. Planche : écran ①. Tiroir modal sous 1024 px, menu a
 
 Planche : [`mockups/proposition-colonne-mj-ephemerides.html`](mockups/proposition-colonne-mj-ephemerides.html) (fenêtre sélectionnée ; composer en cours).
 
-- **En-tête repliable** (`automate-list-header`) : « {libellé du thème} · N », chevron. Replié par défaut à la première visite `[ASSUMPTION]`. Les champs Du / Au et « Scruter » vivent **sous** l'en-tête, visibles seulement déplié.
+- **En-tête** (`automate-list-header`) : « {libellé du thème} · N ». Sur ordinateur, la flèche **›** range toute la colonne en `side-dock` (44 px) collé au bord droit, et la grille reprend la largeur ; la flèche **‹** du dock la rouvre. Sur mobile, un chevron replie la liste. Les champs Du / Au et « Scruter » vivent **sous** l'en-tête, visibles seulement colonne ouverte ou liste dépliée.
 - **Carte sélectionnée** (`automate-card-selected`) : contour `{colors.accent-1}` 2 px ; deux actions écrites. Dans la grille, la bande de la fenêtre prend le même contour, et **tous les autres jours** prennent l'estompe de la Destinée (.28).
 - **Carte dans le composer** : elle quitte la liste (PRD FR-2) ; la bande prend le liseré orange tireté « désigné pour le vote » existant (36.10).
 - **Fenêtres masquées** : un lien « Afficher les N masquées » en pied de liste ; une carte masquée, à 55 % d'opacité, porte « Démasquer ».
