@@ -1,17 +1,27 @@
 import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
-import { MAT_DIALOG_DATA } from '@angular/material/dialog';
-import { afterEach, describe, expect, it } from 'vitest';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpErrorResponse } from '@angular/common/http';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AccountDeletionImpactDto } from '@master-jdr/shared';
+import { AccountService } from '../../../core/account/account.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { TONE_MAP, type Theme } from '../../../core/theme/tones';
 import { DeleteAccountDialog } from './delete-account-dialog';
 
 // Story 43.1 (UX-DR12, confirmation n° 1) : les deux listes, le champ du mot de passe, le bouton
-// rouge ; les listes vides sont omises ; l'effacement lui-même attend la Story 43.2.
+// rouge ; les listes vides sont omises. Story 43.2 : le bouton rouge efface le compte.
 
-describe('DeleteAccountDialog (Story 43.1)', () => {
-  afterEach(() => TestBed.resetTestingModule());
+describe('DeleteAccountDialog (Stories 43.1 et 43.2)', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    account.deleteAccount.mockReset();
+    ref.close.mockReset();
+  });
+
+  let current: ComponentFixture<DeleteAccountDialog>;
+  const account = { deleteAccount: vi.fn() };
+  const ref = { close: vi.fn() };
 
   async function render(
     impact: AccountDeletionImpactDto,
@@ -22,9 +32,12 @@ describe('DeleteAccountDialog (Story 43.1)', () => {
       providers: [
         { provide: MAT_DIALOG_DATA, useValue: { pseudo: 'alice', impact } },
         { provide: ThemeToneService, useValue: { tone: signal(TONE_MAP[theme]) } },
+        { provide: AccountService, useValue: account },
+        { provide: MatDialogRef, useValue: ref },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(DeleteAccountDialog);
+    current = fixture;
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
   }
@@ -35,7 +48,9 @@ describe('DeleteAccountDialog (Story 43.1)', () => {
     const el = await render({ groups: [], jdrParties: [] });
 
     expect(el.querySelector('h2')?.textContent).toContain('Votre accord');
-    expect(el.textContent).toContain('Effacer votre compte « alice » ? Seront supprimés avec lui :');
+    expect(el.textContent).toContain(
+      'Effacer votre compte « alice » ? Seront supprimés avec lui :',
+    );
     expect(el.textContent).toContain(
       'Cette action est irréversible. Pour confirmer, saisissez votre mot de passe.',
     );
@@ -89,7 +104,7 @@ describe('DeleteAccountDialog (Story 43.1)', () => {
     expect(none.querySelector('[data-testid="impact-jdr"]')).toBeNull();
   });
 
-  it('champ mot de passe, « Renoncer » et bouton rouge avec pictogramme et mot — inerte pour l’instant', async () => {
+  it('champ mot de passe, « Renoncer » et bouton rouge avec pictogramme et mot — désactivé tant que le champ est vide', async () => {
     const el = await render({ groups: [], jdrParties: [] });
 
     expect(el.querySelector('input[type="password"]')).not.toBeNull();
@@ -99,6 +114,52 @@ describe('DeleteAccountDialog (Story 43.1)', () => {
     expect(effacer.querySelector('mat-icon')?.textContent?.trim()).toBe('warning');
     expect(effacer.textContent).toContain('Effacer mon compte');
     expect(effacer.disabled).toBe(true);
+  });
+
+  async function typeAndConfirm(el: HTMLElement, password: string): Promise<void> {
+    const input = el.querySelector<HTMLInputElement>('input[type="password"]')!;
+    input.value = password;
+    input.dispatchEvent(new Event('input'));
+    current.detectChanges();
+    const effacer = buttons(el)[1] as HTMLButtonElement;
+    expect(effacer.disabled).toBe(false);
+    effacer.click();
+    await current.whenStable();
+    current.detectChanges();
+  }
+
+  it('mot de passe saisi, confirmation : DELETE envoyé avec le mot de passe, la fenêtre se ferme sur true', async () => {
+    account.deleteAccount.mockResolvedValue({ ok: true });
+    const el = await render({ groups: [], jdrParties: [] });
+
+    await typeAndConfirm(el, 'secret-123');
+
+    expect(account.deleteAccount).toHaveBeenCalledWith('secret-123');
+    expect(ref.close).toHaveBeenCalledWith(true);
+  });
+
+  it.each([
+    [401, 'account.password_wrong_current'],
+    [429, 'account.delete_throttled'],
+    [500, 'account.delete_error'],
+  ])('échec %i : la fenêtre reste ouverte avec un message écrit (%s)', async (status, key) => {
+    account.deleteAccount.mockRejectedValue(
+      new HttpErrorResponse({ status, statusText: 'x', error: null }),
+    );
+    const el = await render({ groups: [], jdrParties: [] });
+
+    await typeAndConfirm(el, 'faux');
+
+    expect(ref.close).not.toHaveBeenCalled();
+    expect(el.querySelector('.error')?.textContent).toContain(TONE_MAP['grimoire-emeraude'][key]);
+  });
+
+  it('« Renoncer » ferme sans rien envoyer', async () => {
+    const el = await render({ groups: [], jdrParties: [] });
+
+    (buttons(el)[0] as HTMLButtonElement).click();
+
+    expect(account.deleteAccount).not.toHaveBeenCalled();
   });
 
   it.each(['grimoire-emeraude', 'foret-ancienne', 'atelier-cuivre'] as const)(

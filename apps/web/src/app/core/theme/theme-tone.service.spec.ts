@@ -1244,7 +1244,7 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     key.startsWith('auth.field_') ||
     key.startsWith('calendar.agenda.badge_') ||
     // Story 43.1 : confirmation d'effacement du compte, textes fixes du contrat (UX-DR12), vouvoyés.
-    key.startsWith('account.delete_');
+    /^account\.delete_(intro|groups_title|jdr_title|irreversible)$/.test(key);
   const VOUVOIEMENT =
     /(^|[^\p{L}])(vous|votre|vos)(?=$|[^\p{L}])|-vous(?=$|[^\p{L}])|(^|[^\p{L}])(réessayez|rechargez|vérifiez|choisissez|ouvrez|créez|connectez|terminez|refaites|patientez|utilisez|acceptez|cochez|cliquez|revalidez|demandez|revenez|touchez|répartissez|gravez|ajoutez|sélectionnez|renseignez|veuillez|rédigez|déverrouillez|rouvrez|consultez|plantez|façonnez)(?=$|[^\p{L}])/iu;
   // Impératifs du tutoiement, restreints aux formes sans ambiguïté (« ouvre » est aussi un « il ouvre »).

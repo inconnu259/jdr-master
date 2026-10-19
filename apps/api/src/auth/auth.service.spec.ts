@@ -514,6 +514,38 @@ describe('AuthService', () => {
     });
   });
 
+  describe('verifyPassword (Story 43.2)', () => {
+    it('mot de passe correct → résolu, rien d’écrit', async () => {
+      prisma.user.findUnique.mockResolvedValue({ passwordHash: 'STORED_HASH' });
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+
+      await expect(service.verifyPassword('u1', 'bon')).resolves.toBeUndefined();
+
+      expect(argon2.verify).toHaveBeenCalledWith('STORED_HASH', 'bon');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('mot de passe incorrect → UnauthorizedException', async () => {
+      prisma.user.findUnique.mockResolvedValue({ passwordHash: 'STORED_HASH' });
+      (argon2.verify as jest.Mock).mockResolvedValue(false);
+
+      await expect(service.verifyPassword('u1', 'faux')).rejects.toThrow('Mot de passe incorrect');
+    });
+
+    it('hash illisible (argon2 lève) → traité comme incorrect, jamais un 500', async () => {
+      prisma.user.findUnique.mockResolvedValue({ passwordHash: 'N_IMPORTE_QUOI' });
+      (argon2.verify as jest.Mock).mockRejectedValue(new Error('invalid hash'));
+
+      await expect(service.verifyPassword('u1', 'bon')).rejects.toThrow('Mot de passe incorrect');
+    });
+
+    it('compte introuvable → NotFoundException', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.verifyPassword('u1', 'bon')).rejects.toThrow('Compte introuvable');
+    });
+  });
+
   describe('changePassword', () => {
     const currentUser = {
       id: 'u1',

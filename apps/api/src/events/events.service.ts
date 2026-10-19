@@ -1020,7 +1020,11 @@ export class EventsService
    * c'est un autre qui annule ; jamais celui qui annule, une adresse chacun. `null` si l'événement n'existe
    * plus. Une conjonction non annulée n'a rien à notifier (`null`).
    */
-  async cancellationNotice(eventId: string, actorId: string): Promise<CancellationNotice | null> {
+  async cancellationNotice(
+    eventId: string,
+    actorId: string,
+    actorName?: string,
+  ): Promise<CancellationNotice | null> {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
       select: {
@@ -1071,7 +1075,8 @@ export class EventsService
     return {
       partieId: event.partieId,
       eventTitle: event.title,
-      actorName: actor?.displayName ?? 'Un membre du groupe',
+      // Story 43.2 : un compte effacé n'existe plus à l'envoi, son nom est fourni par l'appelant.
+      actorName: actorName ?? actor?.displayName ?? 'Un membre du groupe',
       startDate: seance?.startDate ?? null,
       startSlot: seance?.startSlot ?? null,
       recipients,

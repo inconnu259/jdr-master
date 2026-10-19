@@ -70,6 +70,11 @@ export class Harness {
   readonly suffix = randomUUID().slice(0, 8);
   /** Mot de passe de test généré pour cette exécution, jamais réutilisé ailleurs. */
   private readonly password = randomBytes(12).toString('hex');
+
+  /** Mot de passe de tous les comptes de cette exécution (Story 43.2 : `DELETE /me` l'exige). */
+  get userPassword(): string {
+    return this.password;
+  }
   private readonly userIds: string[] = [];
   private readonly partieIds: string[] = [];
   private userCounter = 0;

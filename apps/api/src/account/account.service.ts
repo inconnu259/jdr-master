@@ -6,6 +6,8 @@ import {
   type AnnouncementDto,
   type Theme,
 } from '@master-jdr/shared';
+import { AuthService } from '../auth/auth.service';
+import { PartiesService } from '../parties/parties.service';
 import { PermissionService } from '../permissions/permission.service';
 import { RELEASED_ANNOUNCEMENT_WHERE, isSpoilRestricted } from '../permissions/scenario-visibility';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,7 +24,9 @@ const RALLIEMENT_SYSTEM_IDS = systemIdsOfFamily('ralliement');
 const JDR_SYSTEM_IDS = systemIdsOfFamily('jdr');
 
 /** `groupBy` → table `partieId → nombre`. */
-function countsByPartie(rows: { partieId: string; _count: { _all: number } }[]): Map<string, number> {
+function countsByPartie(
+  rows: { partieId: string; _count: { _all: number } }[],
+): Map<string, number> {
   return new Map(rows.map((r) => [r.partieId, r._count._all]));
 }
 
@@ -32,7 +36,41 @@ export class AccountService {
     private readonly prisma: PrismaService,
     // Story 37.7 (AD-6) : toute décision de droit sur une partie passe par ce service.
     private readonly permissions: PermissionService,
+    // Story 43.2 : mot de passe et sessions restent à `AuthService` (AD-11) ; la sortie des parties à
+    // la procédure unique de `PartiesService` (AD-17).
+    private readonly auth: AuthService,
+    private readonly parties: PartiesService,
   ) {}
+
+  /**
+   * Story 43.2 (AD-11) — efface le compte `userId`. Mot de passe vérifié d'abord, par `AuthService` : un
+   * faux mot de passe est refusé (401) sans rien modifier. Puis UNE transaction : parties de JDR possédées
+   * supprimées, procédure de départ pour chaque groupe, sessions coupées, compte supprimé. Émissions et
+   * e-mails d'annulation viennent après la validation uniquement.
+   */
+  async deleteAccount(userId: string, password: string): Promise<{ ok: true }> {
+    await this.auth.verifyPassword(userId, password);
+    // Lu avant l'effacement : l'e-mail d'annulation de ses conjonctions nomme encore leur hôte.
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { displayName: true },
+    });
+    if (!user) throw new NotFoundException('Compte introuvable');
+
+    const effects = await this.prisma.$transaction(
+      async (tx) => {
+        const done = await this.parties.eraseMembershipsInTx(tx, userId);
+        await this.auth.revokeSessions(tx, userId);
+        await tx.user.delete({ where: { id: userId } });
+        return done;
+      },
+      // Beaucoup de groupes verrouillés l'un après l'autre : au-delà des 5 s par défaut.
+      { timeout: 30_000 },
+    );
+
+    await this.parties.announceAccountErasure(userId, user.displayName, effects);
+    return { ok: true };
+  }
 
   async updateDisplayName(userId: string, displayName: string) {
     let user;

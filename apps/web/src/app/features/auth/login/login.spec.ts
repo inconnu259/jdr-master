@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter, Router } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
 import { Login } from './login';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
@@ -289,5 +289,42 @@ describe('Login — structure, validation écrite et orientation (Story 34.3)', 
     const el = fixture.nativeElement as HTMLElement;
     expect(document.activeElement).toBe(el.querySelector('input[formControlName="password"]'));
     expect(component.form.getRawValue().identifier).toBe('alice');
+  });
+});
+
+describe('Login — confirmation d’un compte effacé (Story 43.2)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  async function render(query: Record<string, string>): Promise<HTMLElement> {
+    await TestBed.configureTestingModule({
+      imports: [Login],
+      providers: [
+        provideRouter([]),
+        { provide: AuthService, useValue: { login: vi.fn() } },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { queryParamMap: convertToParamMap(query) } },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(Login);
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('arrivée après l’effacement (?compte=efface) : le message themé est écrit, en zone de statut', async () => {
+    const el = await render({ compte: 'efface' });
+    const notice = el.querySelector('[role="status"]');
+    expect(notice?.textContent).toContain(TONE_MAP['grimoire-emeraude']['auth.account_deleted']);
+  });
+
+  it('arrivée ordinaire : aucun message', async () => {
+    const el = await render({});
+    expect(el.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('une autre valeur du paramètre n’affiche rien', async () => {
+    const el = await render({ compte: 'autre' });
+    expect(el.querySelector('[role="status"]')).toBeNull();
   });
 });

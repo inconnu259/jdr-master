@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { of } from 'rxjs';
 import { provideRouter, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { vi } from 'vitest';
@@ -951,13 +952,17 @@ describe('Account — zone sensible (Story 43.1)', () => {
     jdrParties: [],
   };
 
-  async function createDangerFixture(accountSvc: Record<string, ReturnType<typeof vi.fn>>) {
-    const dialog = { open: vi.fn() };
+  async function createDangerFixture(
+    accountSvc: Record<string, ReturnType<typeof vi.fn>>,
+    closedWith: boolean | undefined = undefined,
+  ) {
+    const dialog = { open: vi.fn(() => ({ afterClosed: () => of(closedWith) })) };
+    const currentUser = signal<AuthUser | null>(makeUser({ pseudo: 'alice' }));
     await TestBed.configureTestingModule({
       imports: [Account],
       providers: [
         provideRouter([]),
-        { provide: AuthService, useValue: { currentUser: signal(makeUser({ pseudo: 'alice' })) } },
+        { provide: AuthService, useValue: { currentUser } },
         { provide: AccountService, useValue: accountSvc },
         { provide: MatDialog, useValue: dialog },
         {
@@ -976,7 +981,8 @@ describe('Account — zone sensible (Story 43.1)', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
-    return { fixture, dialog, el: fixture.nativeElement as HTMLElement };
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    return { fixture, dialog, currentUser, navigate, el: fixture.nativeElement as HTMLElement };
   }
 
   const pill = (el: HTMLElement) => el.querySelector<HTMLButtonElement>('.danger-pill')!;
@@ -1030,5 +1036,33 @@ describe('Account — zone sensible (Story 43.1)', () => {
     expect(el.querySelector('.danger-zone .error')?.textContent).toContain(
       TONE_MAP['grimoire-emeraude']['account.danger_load_error'],
     );
+  });
+
+  it('compte effacé (fenêtre fermée sur true) : utilisateur local oublié, accueil public avec le message de confirmation (Story 43.2)', async () => {
+    const getDeletionImpact = vi.fn().mockResolvedValue(IMPACT);
+    const { fixture, currentUser, navigate, el } = await createDangerFixture(
+      { getDeletionImpact },
+      true,
+    );
+
+    pill(el).click();
+    await fixture.whenStable();
+
+    expect(currentUser()).toBeNull();
+    expect(navigate).toHaveBeenCalledWith(['/login'], { queryParams: { compte: 'efface' } });
+  });
+
+  it('fenêtre refermée sans effacement (Renoncer) : l’utilisateur reste connecté sur la page', async () => {
+    const getDeletionImpact = vi.fn().mockResolvedValue(IMPACT);
+    const { fixture, currentUser, navigate, el } = await createDangerFixture(
+      { getDeletionImpact },
+      false,
+    );
+
+    pill(el).click();
+    await fixture.whenStable();
+
+    expect(currentUser()).not.toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

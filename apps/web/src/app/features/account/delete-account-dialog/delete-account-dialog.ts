@@ -1,11 +1,15 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { map } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialogModule, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import type { AccountDeletionImpactDto } from '@master-jdr/shared';
+import { AccountService } from '../../../core/account/account.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { fillTone } from '../../../core/theme/tone-format';
 import { PasswordReveal } from '../../../shared/password-reveal/password-reveal';
@@ -20,8 +24,8 @@ export interface DeleteAccountDialogData {
  * Story 43.1 (UX-DR12, confirmation n° 1) — « Effacer votre compte ? » : ce qui disparaîtrait avec
  * lui, le champ du mot de passe et le bouton rouge. Les listes vides sont omises.
  *
- * Le bouton rouge reste inerte dans cette story : l'effacement lui-même (`DELETE /me`) est la
- * Story 43.2, qui l'activera et enverra le mot de passe. « Renoncer » ne change rien.
+ * Story 43.2 : le bouton rouge efface le compte (`DELETE /me`) une fois le mot de passe saisi.
+ * « Renoncer » ne change rien.
  */
 @Component({
   selector: 'app-delete-account-dialog',
@@ -76,10 +80,18 @@ export interface DeleteAccountDialogData {
         />
         <app-password-toggle matSuffix [for]="pw" />
       </mat-form-field>
+      @if (error()) {
+        <p class="error" role="alert">{{ error() }}</p>
+      }
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button [mat-dialog-close]="false">{{ tone()['common.annuler'] }}</button>
-      <button mat-flat-button class="confirm-destructive" disabled>
+      <button
+        mat-flat-button
+        class="confirm-destructive"
+        [disabled]="!hasPassword() || busy()"
+        (click)="confirm()"
+      >
         <mat-icon aria-hidden="true">warning</mat-icon>
         {{ tone()['account.delete_confirm_btn'] }}
       </button>
@@ -102,6 +114,10 @@ export interface DeleteAccountDialogData {
       margin: 0;
       padding-left: 1.25rem;
     }
+    .error {
+      margin: 0.5rem 0 0;
+      color: var(--color-unavailable, #b00020);
+    }
     mat-form-field {
       width: 100%;
     }
@@ -117,8 +133,42 @@ export interface DeleteAccountDialogData {
 export class DeleteAccountDialog {
   protected readonly data = inject<DeleteAccountDialogData>(MAT_DIALOG_DATA);
   private readonly theme = inject(ThemeToneService);
+  private readonly account = inject(AccountService);
+  private readonly dialogRef = inject<MatDialogRef<DeleteAccountDialog, boolean>>(MatDialogRef);
+  protected readonly busy = signal(false);
+  protected readonly error = signal<string | null>(null);
   protected readonly tone = this.theme.tone;
   protected readonly password = new FormControl('', { nonNullable: true });
+  protected readonly hasPassword = toSignal(
+    this.password.valueChanges.pipe(map((v) => v.length > 0)),
+    {
+      initialValue: false,
+    },
+  );
+
+  /** Efface le compte (Story 43.2). Succès : la fenêtre se ferme sur `true`, c'est la page Compte qui
+   *  déconnecte et change d'écran. Échec : la fenêtre reste ouverte avec un message écrit, rien n'a changé. */
+  protected async confirm(): Promise<void> {
+    if (!this.password.value || this.busy()) return;
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      await this.account.deleteAccount(this.password.value);
+      this.dialogRef.close(true);
+    } catch (err) {
+      const status = err instanceof HttpErrorResponse ? err.status : null;
+      const tone = this.tone();
+      this.error.set(
+        status === 401
+          ? tone['account.password_wrong_current']
+          : status === 429
+            ? tone['account.delete_throttled']
+            : tone['account.delete_error'],
+      );
+    } finally {
+      this.busy.set(false);
+    }
+  }
 
   protected get intro(): string {
     return fillTone(this.tone()['account.delete_intro'], { pseudo: this.data.pseudo });
@@ -140,7 +190,8 @@ export class DeleteAccountDialog {
 
   protected jdrLine(p: AccountDeletionImpactDto['jdrParties'][number]): string {
     const tone = this.tone();
-    if (p.playerCount === 0) return fillTone(tone['account.delete_jdr_line_none'], { name: p.name });
+    if (p.playerCount === 0)
+      return fillTone(tone['account.delete_jdr_line_none'], { name: p.name });
     const key = p.playerCount === 1 ? 'account.delete_jdr_line_one' : 'account.delete_jdr_line';
     return fillTone(tone[key], { name: p.name, n: p.playerCount });
   }

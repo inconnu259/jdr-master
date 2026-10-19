@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 
@@ -14,6 +14,8 @@ jest.mock('@master-jdr/game-rules', () => ({
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PermissionService } from '../permissions/permission.service';
+import { AuthService } from '../auth/auth.service';
+import { PartiesService } from '../parties/parties.service';
 import { testGrant } from '../common/test-utils/grant';
 import { RELEASED_ANNOUNCEMENT_WHERE } from '../permissions/scenario-visibility';
 import { AccountService } from './account.service';
@@ -29,7 +31,7 @@ const AUTH_USER_BASE_FIELDS = {
 
 function makePrisma() {
   return {
-    user: { update: jest.fn() },
+    user: { update: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
     userCalendarLayer: { deleteMany: jest.fn(), createMany: jest.fn() },
     partieFavorite: { create: jest.fn(), deleteMany: jest.fn() },
     announcement: { findMany: jest.fn(), count: jest.fn() },
@@ -42,20 +44,35 @@ function makePrisma() {
   };
 }
 
+const EFFECTS = { deletedJdr: [], jdrDepartures: [], groupDepartures: [] };
+
 describe('AccountService', () => {
   let service: AccountService;
   let prisma: ReturnType<typeof makePrisma>;
   // Story 37.7 : l'appartenance à la partie est décidée par `PermissionService.assert()`, simulé ici.
   let permissions: { assert: jest.Mock };
+  // Story 43.2 : mot de passe et sessions (AuthService), sortie des parties (PartiesService), simulés.
+  let auth: { verifyPassword: jest.Mock; revokeSessions: jest.Mock };
+  let parties: { eraseMembershipsInTx: jest.Mock; announceAccountErasure: jest.Mock };
 
   beforeEach(async () => {
     prisma = makePrisma();
     permissions = { assert: jest.fn().mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' })) };
+    auth = {
+      verifyPassword: jest.fn().mockResolvedValue(undefined),
+      revokeSessions: jest.fn().mockResolvedValue(undefined),
+    };
+    parties = {
+      eraseMembershipsInTx: jest.fn().mockResolvedValue(EFFECTS),
+      announceAccountErasure: jest.fn().mockResolvedValue(undefined),
+    };
     const module = await Test.createTestingModule({
       providers: [
         AccountService,
         { provide: PrismaService, useValue: prisma },
         { provide: PermissionService, useValue: permissions },
+        { provide: AuthService, useValue: auth },
+        { provide: PartiesService, useValue: parties },
       ],
     }).compile();
     service = module.get(AccountService);
@@ -791,7 +808,10 @@ describe('AccountService', () => {
 
     it('trie les listes par nom', async () => {
       mockReads({
-        adminships: [{ partie: { id: 'g1', name: 'Zèbre' } }, { partie: { id: 'g2', name: 'Abeille' } }],
+        adminships: [
+          { partie: { id: 'g1', name: 'Zèbre' } },
+          { partie: { id: 'g2', name: 'Abeille' } },
+        ],
         admins: [
           { partieId: 'g1', n: 1 },
           { partieId: 'g2', n: 1 },
@@ -801,6 +821,73 @@ describe('AccountService', () => {
       const impact = await service.getDeletionImpact('u1');
 
       expect(impact.groups.map((g) => g.name)).toEqual(['Abeille', 'Zèbre']);
+    });
+  });
+
+  describe('deleteAccount() — Story 43.2', () => {
+    const tx = { user: { delete: jest.fn() } };
+
+    beforeEach(() => {
+      tx.user.delete.mockReset().mockResolvedValue({});
+      prisma.user.findUnique.mockResolvedValue({ displayName: 'Alice au pays' });
+      prisma.$transaction.mockImplementation((cb: (t: typeof tx) => Promise<unknown>) => cb(tx));
+    });
+
+    it('faux mot de passe : refusé, aucune transaction, aucune annonce', async () => {
+      auth.verifyPassword.mockRejectedValue(new UnauthorizedException('Mot de passe incorrect'));
+
+      await expect(service.deleteAccount('u1', 'faux')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+
+      expect(auth.verifyPassword).toHaveBeenCalledWith('u1', 'faux');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(parties.announceAccountErasure).not.toHaveBeenCalled();
+    });
+
+    it('une transaction : parties quittées, sessions coupées, compte supprimé — puis annonce', async () => {
+      const order: string[] = [];
+      parties.eraseMembershipsInTx.mockImplementation(() => {
+        order.push('parties');
+        return Promise.resolve(EFFECTS);
+      });
+      auth.revokeSessions.mockImplementation(() => {
+        order.push('sessions');
+        return Promise.resolve();
+      });
+      tx.user.delete.mockImplementation(() => {
+        order.push('compte');
+        return Promise.resolve({});
+      });
+      parties.announceAccountErasure.mockImplementation(() => {
+        order.push('annonce');
+        return Promise.resolve();
+      });
+
+      await expect(service.deleteAccount('u1', 'bon')).resolves.toEqual({ ok: true });
+
+      expect(order).toEqual(['parties', 'sessions', 'compte', 'annonce']);
+      expect(parties.eraseMembershipsInTx).toHaveBeenCalledWith(tx, 'u1');
+      expect(auth.revokeSessions).toHaveBeenCalledWith(tx, 'u1');
+      expect(tx.user.delete).toHaveBeenCalledWith({ where: { id: 'u1' } });
+      expect(parties.announceAccountErasure).toHaveBeenCalledWith('u1', 'Alice au pays', EFFECTS);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('échec dans la transaction : propagé, rien n’est annoncé', async () => {
+      tx.user.delete.mockRejectedValue(new Error('boom'));
+
+      await expect(service.deleteAccount('u1', 'bon')).rejects.toThrow('boom');
+
+      expect(parties.announceAccountErasure).not.toHaveBeenCalled();
+    });
+
+    it('compte introuvable : 404, aucune transaction', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.deleteAccount('u1', 'bon')).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 });

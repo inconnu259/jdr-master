@@ -30,9 +30,12 @@ export class EventCancellationMailer {
     eventId: string,
     actorId: string,
     extraEmails: string[] = [],
+    actorName?: string,
   ): Promise<void> {
     try {
-      const notice = await this.events.cancellationNotice(eventId, actorId);
+      const notice = await (actorName === undefined
+        ? this.events.cancellationNotice(eventId, actorId)
+        : this.events.cancellationNotice(eventId, actorId, actorName));
       if (!notice) return;
       // Story 42.2 : les invités nominatifs sans réponse d'une soirée annulée s'ajoutent aux membres ; une
       // adresse n'est écrite qu'une fois.

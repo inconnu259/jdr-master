@@ -3819,6 +3819,136 @@ describe('PartiesService', () => {
       expect(result).toEqual([]);
     });
   });
+
+  describe('eraseMembershipsInTx() / announceAccountErasure() — effacement de compte (Story 43.2)', () => {
+    const tx = () => prisma as unknown as Prisma.TransactionClient;
+
+    beforeEach(() => {
+      prisma.partie.findMany.mockResolvedValue([]);
+      prisma.membership.findMany.mockResolvedValue([]);
+      prisma.partie.delete.mockResolvedValue({});
+      prisma.$queryRaw.mockResolvedValue([{ id: 'g1' }]);
+      prisma.membership.deleteMany.mockResolvedValue({ count: 1 });
+      prisma.membership.count.mockResolvedValue(2);
+    });
+
+    it('supprime les parties de JDR possédées (joueurs relevés avant), pas les groupes', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'q1', gameSystemId: 'ryuutama' },
+        { id: 'g9', gameSystemId: 'ralliement' },
+      ]);
+      prisma.membership.findMany
+        .mockResolvedValueOnce([{ userId: 'j1' }, { userId: 'j2' }]) // joueurs de q1
+        .mockResolvedValueOnce([]); // adhésions du compte
+
+      const effects = await service.eraseMembershipsInTx(tx(), 'u1');
+
+      expect(prisma.partie.delete).toHaveBeenCalledTimes(1);
+      expect(prisma.partie.delete).toHaveBeenCalledWith({ where: { id: 'q1' } });
+      expect(effects.deletedJdr).toEqual([{ partieId: 'q1', participantIds: ['j1', 'j2'] }]);
+    });
+
+    it('joueur d’une partie de JDR : il perd sa ligne d’adhésion, sans verrou', async () => {
+      prisma.membership.findMany.mockResolvedValue([
+        { partieId: 'q2', partie: { gameSystemId: 'ryuutama', ownerId: 'mj1' } },
+      ]);
+
+      const effects = await service.eraseMembershipsInTx(tx(), 'u1');
+
+      expect(prisma.membership.deleteMany).toHaveBeenCalledWith({
+        where: { partieId: 'q2', userId: 'u1' },
+      });
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
+      expect(effects.jdrDepartures).toEqual([{ partieId: 'q2', ownerId: 'mj1' }]);
+    });
+
+    it('seul administrateur : le groupe est supprimé sans demander de confirmation', async () => {
+      prisma.membership.findMany
+        .mockResolvedValueOnce([
+          { partieId: 'g1', partie: { gameSystemId: 'ralliement', ownerId: 'u1' } },
+        ])
+        .mockResolvedValueOnce([{ userId: 'u1' }, { userId: 'm1' }]); // participants lus avant
+      prisma.membership.findUnique.mockResolvedValue({ role: 'ADMIN' });
+      prisma.membership.count.mockResolvedValue(1);
+
+      const effects = await service.eraseMembershipsInTx(tx(), 'u1');
+
+      expect(prisma.partie.delete).toHaveBeenCalledWith({ where: { id: 'g1' } });
+      expect(effects.groupDepartures[0].outcome).toMatchObject({
+        deleted: true,
+        participantIds: ['u1', 'm1'],
+      });
+    });
+
+    it('administrateur parmi d’autres : le groupe survit, adhésion retirée, ownerId vidé', async () => {
+      prisma.membership.findMany.mockResolvedValue([
+        { partieId: 'g1', partie: { gameSystemId: 'ralliement', ownerId: 'u1' } },
+      ]);
+      prisma.membership.findUnique.mockResolvedValue({ role: 'ADMIN' });
+      prisma.membership.count.mockResolvedValue(2);
+      prisma.partie.updateMany.mockResolvedValue({ count: 1 });
+
+      const effects = await service.eraseMembershipsInTx(tx(), 'u1');
+
+      expect(prisma.partie.delete).not.toHaveBeenCalled();
+      expect(prisma.membership.deleteMany).toHaveBeenCalledWith({
+        where: { partieId: 'g1', userId: 'u1' },
+      });
+      expect(prisma.partie.updateMany).toHaveBeenCalledWith({
+        where: { id: 'g1', ownerId: 'u1' },
+        data: { ownerId: null },
+      });
+      expect(effects.groupDepartures[0].outcome).toMatchObject({
+        deleted: false,
+        ownerCleared: true,
+      });
+    });
+
+    it('lit les adhésions dans l’ordre des identifiants (ordre de verrouillage stable)', async () => {
+      await service.eraseMembershipsInTx(tx(), 'u1');
+
+      expect(prisma.membership.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 'u1' }, orderBy: { partieId: 'asc' } }),
+      );
+    });
+
+    it('annonce après coup : e-mail n° 7 au nom de l’hôte effacé, temps réel pour les parties supprimées', async () => {
+      await service.announceAccountErasure('u1', 'Alice au pays', {
+        deletedJdr: [{ partieId: 'q1', participantIds: ['j1'] }],
+        jdrDepartures: [],
+        groupDepartures: [
+          {
+            partieId: 'g1',
+            ownerId: 'u1',
+            outcome: {
+              deleted: false,
+              ownerCleared: true,
+              participantIds: [],
+              cancelledEventIds: ['e1'],
+            },
+          },
+        ],
+      });
+
+      expect(mailer.send).toHaveBeenCalledWith('g1', 'e1', 'u1', [], 'Alice au pays');
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('q1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('j1'));
+    });
+
+    it('un échec d’annonce est journalisé, jamais remonté', async () => {
+      realtimeEvents.emit.mockImplementation(() => {
+        throw new Error('sse');
+      });
+
+      await expect(
+        service.announceAccountErasure('u1', 'A', {
+          deletedJdr: [{ partieId: 'q1', participantIds: [] }],
+          jdrDepartures: [],
+          groupDepartures: [],
+        }),
+      ).resolves.toBeUndefined();
+    });
+  });
 });
 
 describe('GetAvailableSlotsDto', () => {

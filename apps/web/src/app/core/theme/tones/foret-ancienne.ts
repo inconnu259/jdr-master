@@ -264,6 +264,9 @@ export const foretAncienne: Record<ToneKey, string> = {
   'account.delete_irreversible':
     'Cette action est irréversible. Pour confirmer, saisissez votre mot de passe.',
   'account.delete_confirm_btn': 'Effacer mon compte',
+  'account.delete_error': 'La forêt n’a pas pu effacer ton compte. Rien n’a changé, réessaie.',
+  'account.delete_throttled': 'Trop de tentatives. Patiente une minute avant de réessayer.',
+  'auth.account_deleted': 'Ton compte a été effacé. La forêt ne garde plus ta trace.',
   /* — calendrier du compte — */
   'account.calendar_layers_title': 'Ce que montre mon calendrier',
   // Couches et intentions du calendrier : verbatim du contrat d’UI (story 36.14), volontairement identiques.

@@ -129,7 +129,30 @@ export const RALLIEMENT_REMOVE_PROTECTED_MESSAGE =
  * la même procédure `PartiesService.leave()`, sans nouvelle route.
  */
 export type LeaveCause =
-  { type: 'LEFT'; deleteIfLastAdmin?: boolean } | { type: 'REMOVED'; byUserId: string };
+  | { type: 'LEFT'; deleteIfLastAdmin?: boolean }
+  | { type: 'REMOVED'; byUserId: string }
+  // Story 43.2 : effacement du compte — ne passe jamais par `leave()` (route) mais par la même
+  // procédure sous verrou, dans la transaction de l'effacement ; la suppression d'un groupe sans
+  // autre administrateur y est d'office confirmée.
+  | { type: 'ACCOUNT_DELETION' };
+
+/** Ce qu'une sortie de groupe a fait, de quoi émettre et notifier APRÈS le commit. */
+interface DepartureOutcome {
+  deleted: boolean;
+  ownerCleared: boolean;
+  participantIds: string[];
+  cancelledEventIds: string[];
+}
+
+/** Ce que l'effacement d'un compte a fait dans sa transaction (Story 43.2), à émettre APRÈS le commit. */
+export interface AccountErasureEffects {
+  /** Parties de JDR du compte supprimées, avec les joueurs à prévenir. */
+  deletedJdr: { partieId: string; participantIds: string[] }[];
+  /** Parties de JDR où le compte n'était que joueur. */
+  jdrDepartures: { partieId: string; ownerId: string | null }[];
+  /** Groupes quittés (ou supprimés faute d'autre administrateur). */
+  groupDepartures: { partieId: string; ownerId: string | null; outcome: DepartureOutcome }[];
+}
 
 /** Story 39.4 : refus d'un mouvement de rôle qui n'existe pas (nommer un administrateur, ou
  *  quitter soi-même l'office — rien d'autre). */
@@ -581,7 +604,7 @@ export class PartiesService implements PartieSignalsPort {
   async leave(
     partieId: string,
     userId: string,
-    cause: LeaveCause,
+    cause: Exclude<LeaveCause, { type: 'ACCOUNT_DELETION' }>,
   ): Promise<{ ok: true; deleted: boolean }> {
     const { partie } =
       cause.type === 'REMOVED'
@@ -606,95 +629,201 @@ export class PartiesService implements PartieSignalsPort {
     // Story 41.4 : les invités d'une soirée terminée ne bougent plus (400).
     if (cause.type === 'REMOVED') await this.events.assertIsolatedOpen(partie);
 
-    const outcome = await this.prisma.$transaction(async (tx) => {
-      await this.lockPartie(tx, partieId);
-      if (cause.type === 'REMOVED') {
-        // Rôles relus SOUS le verrou : un appelant qui vient de quitter l'office ne retire plus
-        // personne, une cible nommée administrateur entre-temps n'est jamais retirée.
-        const remover = await tx.membership.findUnique({
-          where: { userId_partieId: { userId: cause.byUserId, partieId } },
-          select: { role: true },
-        });
-        if (remover?.role !== 'ADMIN') throw new ForbiddenException(ADMIN_ONLY_MESSAGE);
-        const target = await tx.membership.findUnique({
-          where: { userId_partieId: { userId, partieId } },
-          select: { role: true },
-        });
-        if (!target) throw new NotFoundException('Ce membre est introuvable');
-        if (target.role !== 'MEMBER') {
-          throw new ConflictException(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
-        }
-      } else {
-        const leaver = await tx.membership.findUnique({
-          where: { userId_partieId: { userId, partieId } },
-          select: { role: true },
-        });
-        if (!leaver) throw new ForbiddenException(NO_ACCESS_MESSAGE);
-        if (leaver.role === 'ADMIN') {
-          // Le recomptage des administrateurs fait foi (le verrou le fige) : deux derniers
-          // administrateurs qui partent en même temps ne laissent jamais un groupe sans administrateur.
-          const adminCount = await tx.membership.count({ where: { partieId, role: 'ADMIN' } });
-          if (adminCount <= 1) {
-            return {
-              deleted: true,
-              ownerCleared: false,
-              participantIds: await this.deleteGroupOfLastAdmin(
-                tx,
-                partieId,
-                cause.deleteIfLastAdmin,
-              ),
-              // Le groupe disparaît en cascade : aucune annulation, aucun e-mail.
-              cancelledEventIds: [] as string[],
-            };
-          }
+    const outcome = await this.prisma.$transaction((tx) =>
+      this.departGroupInTx(tx, partieId, userId, cause),
+    );
+    return this.afterDeparture(partieId, userId, partie.ownerId, outcome);
+  }
+
+  /**
+   * Corps transactionnel de la sortie d'un groupe, SOUS le verrou de la partie — partagé par
+   * `leave()` (départ, retrait) et par l'effacement du compte (Story 43.2, AD-17) : une seule
+   * procédure. Aucune émission ici ; `afterDeparture()` s'en charge après le commit.
+   */
+  private async departGroupInTx(
+    tx: Prisma.TransactionClient,
+    partieId: string,
+    userId: string,
+    cause: LeaveCause,
+  ): Promise<DepartureOutcome> {
+    await this.lockPartie(tx, partieId);
+    if (cause.type === 'REMOVED') {
+      // Rôles relus SOUS le verrou : un appelant qui vient de quitter l'office ne retire plus
+      // personne, une cible nommée administrateur entre-temps n'est jamais retirée.
+      const remover = await tx.membership.findUnique({
+        where: { userId_partieId: { userId: cause.byUserId, partieId } },
+        select: { role: true },
+      });
+      if (remover?.role !== 'ADMIN') throw new ForbiddenException(ADMIN_ONLY_MESSAGE);
+      const target = await tx.membership.findUnique({
+        where: { userId_partieId: { userId, partieId } },
+        select: { role: true },
+      });
+      if (!target) throw new NotFoundException('Ce membre est introuvable');
+      if (target.role !== 'MEMBER') {
+        throw new ConflictException(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
+      }
+    } else {
+      const leaver = await tx.membership.findUnique({
+        where: { userId_partieId: { userId, partieId } },
+        select: { role: true },
+      });
+      if (!leaver) throw new ForbiddenException(NO_ACCESS_MESSAGE);
+      if (leaver.role === 'ADMIN') {
+        // Le recomptage des administrateurs fait foi (le verrou le fige) : deux derniers
+        // administrateurs qui partent en même temps ne laissent jamais un groupe sans administrateur.
+        const adminCount = await tx.membership.count({ where: { partieId, role: 'ADMIN' } });
+        if (adminCount <= 1) {
+          return {
+            deleted: true,
+            ownerCleared: false,
+            participantIds: await this.deleteGroupOfLastAdmin(
+              tx,
+              partieId,
+              // Effacement du compte : la confirmation est celle du compte lui-même.
+              cause.type === 'LEFT' ? cause.deleteIfLastAdmin : true,
+            ),
+            // Le groupe disparaît en cascade : aucune annulation, aucun e-mail.
+            cancelledEventIds: [] as string[],
+          };
         }
       }
+    }
 
-      // Story 40.8 : dans CETTE transaction et sous ce verrou (aucune nouvelle route), les places et
-      // les votes de la personne sont libérés — inscriptions (réservées ou confirmées) aux
-      // conjonctions à venir, puis réponses aux sondages ouverts. Les données passées, les sondages
-      // fermés et les conjonctions à venir qu'elle organise restent. Ordre des verrous : partie, puis
-      // lignes `Event` (triées) prises par `EventsService`.
-      await this.events.releaseUpcomingInscriptionsInTx(tx, partieId, userId);
-      await this.polls.removeOpenVotesInTx(tx, partieId, userId);
-      // Story 42.3 : les conjonctions À VENIR qu'elle organise sont annulées par la procédure de la Story 42.1,
-      // dans cette même transaction (un échec annule tout le départ) ; le passé reste, hôte affiché compris.
-      const cancelledEventIds = await this.events.cancelUpcomingHostedInTx(
-        tx,
-        partieId,
-        userId,
-        (client, pollIds) => this.polls.closePollsInTx(client, pollIds),
-      );
-      // Point d'extension suivant, dans cette même transaction :
-      // - epic 43 : suppression de compte, nouveau motif de `LeaveCause`.
-      await tx.membership.deleteMany({ where: { partieId, userId } });
-      // Le créateur qui sort ne laisse pas de propriétaire derrière lui : sans ligne d'adhésion,
-      // `ownerId` le ferait encore compter comme administrateur (`ralliementRole`).
-      const cleared = await tx.partie.updateMany({
-        where: { id: partieId, ownerId: userId },
-        data: { ownerId: null },
-      });
-      return {
-        deleted: false,
-        ownerCleared: cleared.count > 0,
-        participantIds: [] as string[],
-        cancelledEventIds,
-      };
+    // Story 40.8 : dans CETTE transaction et sous ce verrou (aucune nouvelle route), les places et
+    // les votes de la personne sont libérés — inscriptions (réservées ou confirmées) aux
+    // conjonctions à venir, puis réponses aux sondages ouverts. Les données passées, les sondages
+    // fermés et les conjonctions à venir qu'elle organise restent. Ordre des verrous : partie, puis
+    // lignes `Event` (triées) prises par `EventsService`.
+    await this.events.releaseUpcomingInscriptionsInTx(tx, partieId, userId);
+    await this.polls.removeOpenVotesInTx(tx, partieId, userId);
+    // Story 42.3 : les conjonctions À VENIR qu'elle organise sont annulées par la procédure de la Story 42.1,
+    // dans cette même transaction (un échec annule tout le départ) ; le passé reste, hôte affiché compris.
+    const cancelledEventIds = await this.events.cancelUpcomingHostedInTx(
+      tx,
+      partieId,
+      userId,
+      (client, pollIds) => this.polls.closePollsInTx(client, pollIds),
+    );
+    await tx.membership.deleteMany({ where: { partieId, userId } });
+    // Le créateur qui sort ne laisse pas de propriétaire derrière lui : sans ligne d'adhésion,
+    // `ownerId` le ferait encore compter comme administrateur (`ralliementRole`).
+    const cleared = await tx.partie.updateMany({
+      where: { id: partieId, ownerId: userId },
+      data: { ownerId: null },
     });
+    return {
+      deleted: false,
+      ownerCleared: cleared.count > 0,
+      participantIds: [] as string[],
+      cancelledEventIds,
+    };
+  }
 
-    // Après le commit uniquement.
+  /** Après le commit uniquement : émissions temps réel et e-mails d'une sortie de groupe. `actorName` est
+   *  le nom de la personne qui part, quand elle n'existera plus à l'envoi (effacement du compte). */
+  private async afterDeparture(
+    partieId: string,
+    userId: string,
+    ownerId: string | null,
+    outcome: DepartureOutcome,
+    actorName?: string,
+  ): Promise<{ ok: true; deleted: boolean }> {
     if (outcome.deleted) {
       this.realtimeEvents.emit(partieTopic(partieId));
-      this.emitPartieDeleted(partie.ownerId, outcome.participantIds);
+      this.emitPartieDeleted(ownerId, outcome.participantIds);
       return { ok: true, deleted: true };
     }
-    await this.emitDeparture(partieId, userId, outcome.ownerCleared ? null : partie.ownerId);
+    await this.emitDeparture(partieId, userId, outcome.ownerCleared ? null : ownerId);
     // Story 42.3 : e-mail n° 7 de chaque conjonction annulée, APRÈS le commit (échecs journalisés, jamais
     // remontés) ; l'auteur est la personne qui part.
     for (const eventId of outcome.cancelledEventIds) {
-      await this.cancellationMailer.send(partieId, eventId, userId);
+      if (actorName === undefined) await this.cancellationMailer.send(partieId, eventId, userId);
+      else await this.cancellationMailer.send(partieId, eventId, userId, [], actorName);
     }
     return { ok: true, deleted: false };
+  }
+
+  /**
+   * Story 43.2 (AD-11, AD-17) — la part « parties » de l'effacement d'un compte, DANS la transaction de
+   * l'appelant : les parties de JDR possédées sont supprimées (personnages compris, par cascade) ; chaque
+   * autre adhésion est quittée, dans l'ordre des identifiants (ordre de verrouillage stable) — une partie
+   * de JDR en perdant simplement la ligne, un groupe par la procédure de `leave()` (`departGroupInTx`) :
+   * places et votes à venir libérés, conjonctions à venir hébergées annulées, groupe supprimé s'il n'a plus
+   * d'administrateur, `ownerId` vidé ailleurs. Ne supprime pas le compte et n'émet rien.
+   */
+  async eraseMembershipsInTx(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<AccountErasureEffects> {
+    const effects: AccountErasureEffects = {
+      deletedJdr: [],
+      jdrDepartures: [],
+      groupDepartures: [],
+    };
+
+    const owned = await tx.partie.findMany({
+      where: { ownerId: userId },
+      select: { id: true, gameSystemId: true },
+      orderBy: { id: 'asc' },
+    });
+    for (const p of owned) {
+      if (familyOf(p.gameSystemId) === 'ralliement') continue; // quitté plus bas, via son adhésion
+      const members = await tx.membership.findMany({
+        where: { partieId: p.id },
+        select: { userId: true },
+      });
+      await tx.partie.delete({ where: { id: p.id } });
+      effects.deletedJdr.push({ partieId: p.id, participantIds: members.map((m) => m.userId) });
+    }
+
+    const memberships = await tx.membership.findMany({
+      where: { userId },
+      select: { partieId: true, partie: { select: { gameSystemId: true, ownerId: true } } },
+      orderBy: { partieId: 'asc' },
+    });
+    for (const m of memberships) {
+      if (familyOf(m.partie.gameSystemId) !== 'ralliement') {
+        await tx.membership.deleteMany({ where: { partieId: m.partieId, userId } });
+        effects.jdrDepartures.push({ partieId: m.partieId, ownerId: m.partie.ownerId });
+        continue;
+      }
+      const outcome = await this.departGroupInTx(tx, m.partieId, userId, {
+        type: 'ACCOUNT_DELETION',
+      });
+      effects.groupDepartures.push({ partieId: m.partieId, ownerId: m.partie.ownerId, outcome });
+    }
+    return effects;
+  }
+
+  /** Story 43.2 — émissions et e-mails de l'effacement d'un compte, APRÈS le commit. Un échec ici est
+   *  journalisé, jamais remonté : le compte n'existe plus, rien ne se rejoue. */
+  async announceAccountErasure(
+    userId: string,
+    actorName: string,
+    effects: AccountErasureEffects,
+  ): Promise<void> {
+    const guard = async (what: string, action: () => Promise<unknown> | void) => {
+      try {
+        await action();
+      } catch (e) {
+        this.logger.error(`Échec de l'annonce de l'effacement du compte (${what})`, e as Error);
+      }
+    };
+    for (const d of effects.deletedJdr) {
+      await guard(`partie ${d.partieId}`, () => {
+        this.realtimeEvents.emit(partieTopic(d.partieId));
+        this.emitPartieDeleted(userId, d.participantIds);
+      });
+    }
+    for (const d of effects.jdrDepartures) {
+      await guard(`partie ${d.partieId}`, () => this.emitDeparture(d.partieId, userId, d.ownerId));
+    }
+    for (const g of effects.groupDepartures) {
+      await guard(`groupe ${g.partieId}`, () =>
+        this.afterDeparture(g.partieId, userId, g.ownerId, g.outcome, actorName),
+      );
+    }
   }
 
   /** Émissions d'une sortie de partie (après le commit) : `partie:{id}` pour la liste des membres

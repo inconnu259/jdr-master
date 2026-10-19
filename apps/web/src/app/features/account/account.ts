@@ -1,6 +1,7 @@
 import { Component, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -120,7 +121,7 @@ export class Account {
 
   // Story 43.1 — zone sensible : l'aperçu est relu à CHAQUE ouverture (on peut aller nommer un autre
   // administrateur puis revenir) ; en cas d'échec aucune fenêtre ne s'ouvre. L'effacement lui-même est
-  // la Story 43.2.
+  // celui de la fenêtre (Story 43.2).
   protected readonly deleteLoading = signal(false);
   protected readonly deleteError = signal<string | null>(null);
 
@@ -128,13 +129,22 @@ export class Account {
     if (this.deleteLoading()) return;
     this.deleteLoading.set(true);
     this.deleteError.set(null);
+    let closed: Promise<boolean | undefined>;
     try {
       const impact = await this.account.getDeletionImpact();
-      this.dialog.open(DeleteAccountDialog, { data: { pseudo: this.pseudo, impact } });
+      const ref = this.dialog.open(DeleteAccountDialog, { data: { pseudo: this.pseudo, impact } });
+      closed = firstValueFrom(ref.afterClosed());
     } catch {
       this.deleteError.set(this.theme.tone()['account.danger_load_error']);
+      return;
     } finally {
       this.deleteLoading.set(false);
+    }
+    // Story 43.2 : la fenêtre ne se ferme sur `true` que si le compte est effacé. Plus de session : on
+    // oublie l'utilisateur local et on arrive sur l'accueil public avec un message qui le confirme.
+    if (await closed) {
+      this.auth.currentUser.set(null);
+      void this.router.navigate(['/login'], { queryParams: { compte: 'efface' } });
     }
   }
 

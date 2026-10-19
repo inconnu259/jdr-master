@@ -269,6 +269,9 @@ export const grimoireEmeraude = {
   'account.delete_irreversible':
     'Cette action est irréversible. Pour confirmer, saisissez votre mot de passe.',
   'account.delete_confirm_btn': 'Effacer mon compte',
+  'account.delete_error': "Le grimoire n'a pas pu effacer ce compte. Rien n'a changé, réessayez.",
+  'account.delete_throttled': 'Trop de tentatives. Patientez une minute avant de réessayer.',
+  'auth.account_deleted': 'Votre compte a été effacé. Le grimoire ne garde plus trace de vous.',
   /* — calendrier du compte — */
   'account.calendar_layers_title': 'Ce que révèle mon calendrier',
   // Couches et intentions du calendrier : verbatim du contrat d’UI (story 36.14), volontairement identiques.

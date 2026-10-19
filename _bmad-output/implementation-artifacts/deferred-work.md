@@ -410,3 +410,7 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-42-1-annuler-une-conjonction-de-groupe.md`
   summary: Raise the label contrast of the existing destructive `ConfirmDialog` button (white on `--color-unavailable`).
   evidence: `confirm-dialog.ts` sets `--mat-button-filled-label-text-color: #fff` on #e74c3c, which measures 3.8:1 (below the 4.5:1 text threshold of NFR4); the new cancel dialog of 42.1 uses the theme background colour instead (4.9 to 5.1:1). Pre-existing, outside the cancel story.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-43-2-effacer-mon-compte.md`
+  summary: Unlink the personal files (character portraits, party covers) of an erased account, and of any cascade-deleted party.
+  evidence: Account erasure follows the existing deletion rule, which unlinks nothing (party delete leaves covers and portraits on disk), so an erased account's uploaded images stay orphaned on disk.

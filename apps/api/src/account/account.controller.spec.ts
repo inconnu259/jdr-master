@@ -1,7 +1,7 @@
 import { ExecutionContext, INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 
 // AccountController -> AccountService -> toDto() (AnnouncementsService, Story 29.13, AD-17) ->
 // transitivement CharacterService -> @master-jdr/game-rules (ESM, non transformé par ts-jest).
@@ -26,6 +26,7 @@ function makeAccountService() {
     removeFavorite: jest.fn(),
     getUnseenAnnouncements: jest.fn(),
     getDeletionImpact: jest.fn(),
+    deleteAccount: jest.fn(),
     markAnnouncementRead: jest.fn(),
   };
 }
@@ -490,5 +491,39 @@ describe('AccountController', () => {
 
     expect(account.getDeletionImpact).toHaveBeenCalledWith('u1');
     expect(result).toBe(impact);
+  });
+
+  it("deleteAccount() lit l'id depuis la session, passe le mot de passe, ferme la session et retire le cookie (Story 43.2)", async () => {
+    account.deleteAccount.mockResolvedValue({ ok: true });
+    const destroy = jest.fn((cb: () => void) => cb());
+    const clearCookie = jest.fn();
+
+    const req = { user: { id: 'u1' }, session: { destroy } } as unknown as Request;
+    const res = { clearCookie } as unknown as Response;
+    const result = await controller.deleteAccount(req, res, { password: 'secret' });
+
+    expect(account.deleteAccount).toHaveBeenCalledWith('u1', 'secret');
+    expect(destroy).toHaveBeenCalledTimes(1);
+    expect(clearCookie).toHaveBeenCalledWith('connect.sid');
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("deleteAccount() : mot de passe refusé → la session n'est pas touchée", async () => {
+    account.deleteAccount.mockRejectedValue(new Error('refusé'));
+    const destroy = jest.fn();
+    const clearCookie = jest.fn();
+
+    const req = { user: { id: 'u1' }, session: { destroy } } as unknown as Request;
+    const res = { clearCookie } as unknown as Response;
+    await expect(controller.deleteAccount(req, res, { password: 'faux' })).rejects.toThrow();
+
+    expect(destroy).not.toHaveBeenCalled();
+    expect(clearCookie).not.toHaveBeenCalled();
+  });
+
+  it("deleteAccount() porte le plafond de débit des routes d'authentification : 5 par minute (Story 43.2)", () => {
+    const handler = AccountController.prototype.deleteAccount;
+    expect(Reflect.getMetadata('THROTTLER:LIMITdefault', handler)).toBe(5);
+    expect(Reflect.getMetadata('THROTTLER:TTLdefault', handler)).toBe(60_000);
   });
 });

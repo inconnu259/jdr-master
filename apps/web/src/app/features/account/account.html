@@ -33,7 +33,9 @@
         <button
           type="button"
           class="field-edit-pencil__button"
-          [attr.aria-label]="theme.tone()['common.modifier'] + ' ' + theme.tone()['account.email_label']"
+          [attr.aria-label]="
+            theme.tone()['common.modifier'] + ' ' + theme.tone()['account.email_label']
+          "
           (click)="startEmailEdit()"
         >
           ✎
@@ -62,11 +64,7 @@
           <button mat-button type="button" (click)="cancelEmailEdit()">
             {{ theme.tone()['account.cancel_btn'] }}
           </button>
-          <button
-            mat-flat-button
-            type="submit"
-            [disabled]="emailSaving() || emailForm.invalid"
-          >
+          <button mat-flat-button type="submit" [disabled]="emailSaving() || emailForm.invalid">
             {{ theme.tone()['account.email_change_save_btn'] }}
           </button>
         </div>

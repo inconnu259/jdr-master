@@ -79,6 +79,16 @@ export class AccountService {
     );
   }
 
+  /** Story 43.2 — efface le compte connecté ; le mot de passe est dans le corps, jamais dans l'URL. */
+  deleteAccount(password: string): Promise<{ ok: true }> {
+    return firstValueFrom(
+      this.http.delete<{ ok: true }>(`${API_BASE}/me`, {
+        body: { password },
+        withCredentials: true,
+      }),
+    );
+  }
+
   addFavorite(partieId: string): Promise<{ ok: true }> {
     return firstValueFrom(
       this.http.put<{ ok: true }>(

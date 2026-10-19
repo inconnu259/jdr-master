@@ -291,6 +291,26 @@ export class AuthService {
   }
 
   /**
+   * Story 43.2 — vérifie le mot de passe du compte `userId` (effacement du compte), sans rien modifier :
+   * 401 « Mot de passe incorrect » s'il ne correspond pas, 404 si le compte n'existe plus. Seul endroit où
+   * un mot de passe est comparé hors connexion et changement de mot de passe.
+   */
+  async verifyPassword(userId: string, password: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+    if (!user) throw new NotFoundException('Compte introuvable');
+    let valid: boolean;
+    try {
+      valid = await argon2.verify(user.passwordHash, password);
+    } catch {
+      valid = false;
+    }
+    if (!valid) throw new UnauthorizedException('Mot de passe incorrect');
+  }
+
+  /**
    * Changement de mot de passe en session (Story 28.5) — l'utilisateur est déjà authentifié et
    * prouve la connaissance du mot de passe actuel ; contrairement à resetPassword(), seules les
    * AUTRES sessions sont coupées (`exceptSid` = session courante, jamais lue depuis le corps de

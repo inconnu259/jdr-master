@@ -1,7 +1,7 @@
 import { Component, ElementRef, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -35,10 +35,14 @@ export class Login {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly theme = inject(ThemeToneService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly tone = this.theme.tone;
+
+  /** Story 43.2 : on arrive d'un compte tout juste effacé (`?compte=efface`) — message de confirmation. */
+  protected readonly accountDeleted = this.route.snapshot.queryParamMap.get('compte') === 'efface';
 
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
