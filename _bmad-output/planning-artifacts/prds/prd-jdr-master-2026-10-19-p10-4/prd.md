@@ -13,6 +13,8 @@ Ce PRD cadre le Palier 10.4 de jdr-master : rendre la **création d'un sondage**
 
 Il est écrit pour le PM (l'utilisateur) et les workflows suivants (`bmad-ux`, `bmad-architecture`, `bmad-create-epics-and-stories`) : vocabulaire au Glossaire (§3) ; FR propres à ce PRD (une FR d'un autre palier est citée avec son PRD) ; hypothèses en §9 ; technique en `addendum.md`.
 
+**Mise à jour du 2026-10-20, après le travail UX** (`_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-10-20/`) : le geste de sélection garde l'ordre des dispos, sélections cumulatives, plus de touche Maj (FR-6) ; plateau en tiroir du bas sur mobile (FR-8) ; le bouton s'appelle « Proposer des dates » (FR-5) ; libellés des fenêtres de l'automate choisis (FR-16) ; ajout de FR-17 (mode et nature expliqués dans le formulaire de création), demandé par l'utilisateur.
+
 ⚠️ **Ce palier modifie des écrans validés** : le calendrier (Épics 30 et 36, Palier 9), la page calendrier du groupe (Story 40.5b) et les accès au vote. Chaque modification est listée en §4.6. Il lève aussi, **pour ce sujet seulement**, la contrainte « le JDR ne change pas » du Palier 10.
 
 ## 1. Vision
@@ -127,7 +129,7 @@ Le MJ peut replier et redéplier la liste des fenêtres de l'automate. Réalise 
 L'organisateur du sondage peut, depuis le calendrier, créer le sondage d'un de ses rendez-vous à dater. Réalise UJ-2.
 
 **Consequences (testable) :**
-- L'action « Créer un sondage » est un bouton écrit et atteignable au clavier, jamais une icône seule, présent dans le calendrier personnel, le calendrier de partie et le calendrier du groupe.
+- L'action « Créer un sondage » (libellé d'interface : « Proposer des dates », variantes par thème en UX ; « Modifier les dates » quand la destinée active est un sondage de l'organisateur) est un bouton écrit et atteignable au clavier, jamais une icône seule, présent dans le calendrier personnel, le calendrier de partie et le calendrier du groupe.
 - Elle ouvre la liste des **rendez-vous à dater** de l'utilisateur, groupés par partie. En calendrier de partie ou du groupe, la liste est restreinte à cette partie ; s'il n'y en a qu'un, il est choisi d'office.
 - Le bouton est **caché** quand l'utilisateur n'a aucun rendez-vous à dater : il n'est organisateur d'aucune partie active, ou tous ses rendez-vous ont déjà une date ou un sondage ouvert.
 - Choisir un rendez-vous ouvre le composer (FR-6) pour ce rendez-vous ; le serveur reste juge du droit de créer.
@@ -142,8 +144,8 @@ L'organisateur peut sélectionner les créneaux candidats avec le même geste qu
 
 **Consequences (testable) :**
 - Le geste de sélection (taper, glisser sur plusieurs jours) est le même que celui des dispos ; le calendrier indique clairement qu'on compose un sondage, et pour quel rendez-vous.
-- L'organisateur choisit **d'abord le moment** (matin, après-midi ou soir), puis sélectionne des jours : chaque jour sélectionné devient un créneau candidat à ce moment-là (« tous les vendredis soir de novembre »).
-- Il peut ajouter à la sélection des créneaux d'un autre moment sans perdre ceux déjà choisis, en maintenant Maj (ou Ctrl) au clic. Sur téléphone, où il n'y a pas de Maj, un équivalent tactile le permet. `[ASSUMPTION]`
+- Comme pour les dispos, l'organisateur **sélectionne d'abord des jours**, puis choisit le moment (matin, après-midi, soir ; journée entière en JDR) : chaque jour sélectionné devient un créneau candidat à ce moment-là (« tous les vendredis soir de novembre »). *Amendé le 2026-10-20 (UX) : la version « moment d'abord » inversait le geste des dispos.*
+- Chaque nouvelle sélection **s'ajoute** aux créneaux déjà choisis, ce qui permet de mêler les moments sans touche de modification, au doigt comme à la souris. Un tap court ajoute ou retire un seul créneau.
 - Deux créneaux candidats minimum, sans plafond métier ; la journée entière reste refusée en mode soirée, avec la raison écrite (règle existante).
 - Valider crée ou modifie le sondage du rendez-vous ; annuler ne change rien.
 
@@ -161,7 +163,7 @@ L'utilisateur peut ouvrir la liste des destinées depuis la puce ✦ et y choisi
 - La liste montre les **sondages ouverts** que l'utilisateur peut voir (règle d'accès existante), groupés par partie ; chaque ligne donne le nom du vote, son échéance (« échéance passée » le cas échéant) et l'état de l'utilisateur : « à faire », « répondu », « organisateur » ou « vous ne votez pas ».
 - En calendrier personnel, elle couvre toutes les **parties actives** de l'utilisateur, quel que soit le mois affiché. En calendrier de partie ou du groupe, elle ne montre que cette partie.
 - Choisir une ligne active la Destinée sur ce sondage et déplace le calendrier sur son premier créneau candidat.
-- Sans sondage ouvert, la puce ✦ le dit au lieu d'ouvrir une liste vide.
+- Sans sondage ouvert, la puce ✦ n'apparaît pas (comportement existant, Story 36.9 ; décidé en UX le 2026-10-20).
 
 #### FR-8 : Plateau de la destinée
 
@@ -173,7 +175,7 @@ Quand la Destinée est active, la colonne de droite devient le plateau de la des
 - Les comptes se mettent à jour en direct quand un autre participant vote.
 - Après l'échéance, le plateau reste consultable, sans vote possible ; il l'indique.
 - Le plateau remplace le contenu habituel de la colonne tant que la Destinée est active ; le quitter rend la colonne habituelle.
-- Sur mobile, le plateau s'ouvre en tiroir en bas de l'écran. `[ASSUMPTION]`
+- Sur mobile, le plateau s'ouvre en tiroir en bas de l'écran, replié (créneau courant) ou déplié (tous les créneaux) ; la grille reste visible tiroir replié.
 
 #### FR-9 : Parcourir les dates du vote actif
 
@@ -263,7 +265,7 @@ Dans son calendrier personnel, l'utilisateur peut restreindre l'affichage à une
 Le mot « destinée » ne désigne plus qu'une chose dans l'interface : le mode Destinée.
 
 **Consequences (testable) :**
-- Les fenêtres de l'automate reçoivent un autre libellé, dans les trois thèmes (libellé choisi en UX, §8).
+- Les fenêtres de l'automate reçoivent un autre libellé : « Éphémérides » en Grimoire Émeraude (provisoire), « Clairières disponibles » en Forêt Ancienne (inchangé), « Créneaux calculés par l'automate » en Atelier Cuivré.
 - Les nouveaux libellés de ce palier existent dans les trois thèmes, et respectent les règles du mode soirée : aucun mot du JDR, et le mot « partie » n'y apparaît pas (liste des destinées, liste des rendez-vous à dater, filtre).
 
 ### 4.6 Écrans validés modifiés ⚠️
@@ -278,6 +280,7 @@ Ce palier modifie des contrats UI validés ; chaque écart doit être porté dan
 - Fenêtre d'un événement (Palier 10) : le lien « Voter dans le calendrier » change de destination, pas de libellé.
 - Page d'une partie de JDR et fiche de scénario : les boutons qui mènent au calendrier changent de destination (FR-14), pas de forme.
 - E-mail de relance du vote : destination du lien.
+- Formulaire de création (Palier 10) : bascule de mode et choix de la nature expliqués (FR-17).
 
 ### 4.7 Exigences transverses
 
@@ -286,6 +289,19 @@ Ce palier modifie des contrats UI validés ; chaque écart doit être porté dan
 - **Temps réel** : les comptes du plateau, la liste des destinées, la liste des rendez-vous à dater et la liste de l'automate suivent les changements des autres en direct (canal existant).
 - **Mobile** : chaque fonction est utilisable au doigt sur un téléphone ; aucune n'exige un appui long pour être trouvée.
 - **Accessibilité** : actions écrites et atteignables au clavier ; l'estompe de la Destinée ne porte jamais seule une information.
+
+### 4.8 Formulaire de création *(ajouté le 2026-10-20)*
+
+**Description :** Les noms de thème (Quête, Sentier, Ralliement, La halte au gué…) donnent leur couleur à l'application mais ne disent pas ce qu'ils désignent. Demandé par l'utilisateur pendant l'UX du 10.4 : les garder, et ajouter une explication en clair.
+
+#### FR-17 : Mode et nature expliqués
+
+À la création d'une partie, l'utilisateur comprend, sans connaître le vocabulaire du thème, ce que désigne chaque mode et chaque nature.
+
+**Consequences (testable) :**
+- Chaque option de la bascule de mode affiche, sous son nom de thème, une ligne en clair : « Jeu de rôle » ou « Soirée entre amis ».
+- Chaque nature (trois en JDR, deux en mode soirée) affiche une ligne d'explication en clair (textes : UX `EXPERIENCE.md` §2.7).
+- Ces lignes sont identiques dans les trois thèmes ; celles du mode soirée n'emploient aucun mot du JDR.
 
 ## 5. Non-Goals (Explicit)
 
@@ -304,6 +320,7 @@ Ce palier modifie des contrats UI validés ; chaque écart doit être porté dan
 - Destinée enrichie A + B : liste, plateau, flèches, création / modification, fixation de la date, fin propre (FR-7 à FR-12).
 - Ouverture directe en Destinée, liens de vote branchés, filtre du calendrier personnel par partie (FR-13 à FR-15).
 - Un seul sens pour « destinée » (FR-16).
+- Mode et nature expliqués dans le formulaire de création (FR-17).
 
 ### 6.2 Out of Scope for MVP
 
@@ -319,18 +336,13 @@ Ce palier modifie des contrats UI validés ; chaque écart doit être porté dan
 
 ## 8. Open Questions
 
-*Les questions laissées ouvertes par l'UX du Palier 10 ont été tranchées le 2026-10-19 (voir `.memlog.md`). Restent, renvoyées à l'étape qui les tranchera :*
+*Les questions renvoyées à l'UX ont été tranchées le 2026-10-20 : plus de touche Maj (FR-6), libellés choisis (FR-16), aucun mot générique pour « partie » (chaque liste affiche le nom propre de la partie ou du ralliement). Reste :*
 
-1. **Équivalent tactile de Maj** pour ajouter des créneaux d'un autre moment (FR-6) — UX.
-2. **Nouveau libellé des fenêtres de l'automate**, dans les trois thèmes (FR-16) — UX.
-3. **Libellé neutre** remplaçant « partie » en mode soirée dans les listes et le filtre (FR-16) — UX.
-4. **Stockage du masquage et de l'état replié** (FR-3, FR-4) : sur le serveur (suit le MJ sur ses appareils) ou dans le navigateur — architecture.
+1. **Stockage du masquage et de l'état replié** (FR-3, FR-4) : sur le serveur (suit le MJ sur ses appareils) ou dans le navigateur — architecture.
 
 ## 9. Assumptions Index
 
 - §3 — « Partie active » = ni close ni annulée ; une soirée isolée passée en sort.
 - FR-3 — le masquage d'une fenêtre survit au rechargement et à une nouvelle connexion.
 - FR-4 — l'état replié de la liste est retenu pour le MJ.
-- FR-6 — un équivalent tactile de Maj existe sur téléphone.
-- FR-8 — sur mobile, le plateau est un tiroir en bas de l'écran.
 - FR-15 — les dispos restent visibles sous filtre ; le filtre n'est pas enregistré.

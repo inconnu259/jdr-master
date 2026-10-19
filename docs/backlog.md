@@ -205,11 +205,12 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 
 ---
 
-## Palier 10.4 — Sondage et Destinée dans le calendrier *(avant le 10.5, vaut aussi pour le JDR — PRD final, prochaine étape : UX)*
+## Palier 10.4 — Sondage et Destinée dans le calendrier *(avant le 10.5, vaut aussi pour le JDR — PRD et UX finals, prochaine étape : architecture)*
 
 > PRD : `_bmad-output/planning-artifacts/prds/prd-jdr-master-2026-10-19-p10-4/prd.md` (final, 2026-10-20) — FR-1 à FR-16 ;
 > ajoute aux demandes ci-dessous « Créer un sondage » dans les 3 calendriers (choix d'un rendez-vous à dater) et la
-> fixation de la date depuis la Destinée.
+> fixation de la date depuis la Destinée ; FR-17 (mode et nature expliqués à la création) ajoutée pendant l'UX.
+> UX : `_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-10-20/` (final, 2026-10-20).
 
 > Demandé pendant l'UX du Palier 10 (2026-10-08) : « j'ai galéré » à créer un sondage. Touche le calendrier **et** le
 > JDR ; lève, pour ce sujet seulement, la contrainte « le JDR ne change pas » du Palier 10. En attendant, le Palier 10
