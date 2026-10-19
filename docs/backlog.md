@@ -205,7 +205,11 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 
 ---
 
-## Palier 10.4 — Sondage et Destinée dans le calendrier *(avant le 10.5, vaut aussi pour le JDR)*
+## Palier 10.4 — Sondage et Destinée dans le calendrier *(avant le 10.5, vaut aussi pour le JDR — PRD final, prochaine étape : UX)*
+
+> PRD : `_bmad-output/planning-artifacts/prds/prd-jdr-master-2026-10-19-p10-4/prd.md` (final, 2026-10-20) — FR-1 à FR-16 ;
+> ajoute aux demandes ci-dessous « Créer un sondage » dans les 3 calendriers (choix d'un rendez-vous à dater) et la
+> fixation de la date depuis la Destinée.
 
 > Demandé pendant l'UX du Palier 10 (2026-10-08) : « j'ai galéré » à créer un sondage. Touche le calendrier **et** le
 > JDR ; lève, pour ce sujet seulement, la contrainte « le JDR ne change pas » du Palier 10. En attendant, le Palier 10
@@ -263,6 +267,11 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 
 - [ ] Pastille « **Ma situation** » sur les cartes de chapitres/séances (participe, vote à faire, pas inscrit).
 - [ ] Détail d'un chapitre/séance **« situation d'abord »** (l'action à faire en tête, la fiche ensuite) ; vote en **résumé** (réponses, meilleur créneau, qui n'a pas répondu) plutôt qu'en liste.
+      **⚠️ Laissé explicitement au 10.8 par le PRD du 10.4** (2026-10-19, FR-14 « Out of Scope ») : dans la fiche de
+      scénario, remplacer la liste des créneaux du vote (réponse + « Sceller ce créneau ») par ce résumé et un bouton
+      « Voter dans le calendrier » qui ouvre le calendrier **en Destinée sur ce sondage**, comme pour une conjonction.
+      Le 10.4 fournit l'ouverture directe (paramètre d'URL, FR-13), la fixation de la date depuis la Destinée (FR-11)
+      et redirige les liens existants, mais ne touche pas à la forme du vote dans la fiche.
 - [ ] Onglet d'accueil d'une partie = **la suite des chapitres/séances** (ordre des onglets inversé), badges de rôle sur les avatars.
 - [ ] Couverture : pastille « Changer » sur la bannière (déjà prévue au 10 pour la création ; à étendre à l'édition).
 - [ ] Boutons d'action du pied de page (clore, brûler…) et libellés revus avec la même langue.
@@ -339,4 +348,7 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 - Import de perso existant entre parties du même système.
 - Rôles avancés / modération (si plateforme publique).
 - Thèmes par univers.
+- **Créer directement un événement de groupe depuis le calendrier** : « Créer un sondage » (Palier 10.4) ne date
+  que des rendez-vous existants ; proposer aussi d'y créer une conjonction. À réévaluer **après la mise en
+  production**, sur l'app réelle et les retours de la bande. Idée notée le 2026-10-19 pendant le PRD du 10.4.
 - **Aperçu résumé + détail au clic pour les types (assistant de création)** : à l'étape Type, afficher les courts textes de `docs/assistant.md` (ex. "Le voyageur sait comment se débarrasser des monstres.") en aperçu par type, avec un clic pour afficher la description complète déjà seedée dans `types.json` (effets, avantages...). Idée notée le 2026-07-26 pendant la Story 23.3, non implémentée (hors scope).
