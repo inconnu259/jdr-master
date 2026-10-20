@@ -23,5 +23,9 @@
 
 - FR-13 : un paramètre de requête sur les routes calendrier existantes (calendrier de partie, `/parties/:id/guild-calendar`, calendrier personnel), lu à l'initialisation puis tenu à jour quand la destinée change.
 - FR-7 « toutes les parties actives » : le calendrier personnel ne charge peut-être pas les sondages hors du mois affiché ; vérifier si une lecture nouvelle est nécessaire (première story probablement non « front pure », contrairement à 36.9).
-- FR-3 / FR-4 : masquage et état replié = préférences par MJ ; décider entre stockage serveur (suit l'utilisateur sur ses appareils) et local.
+- FR-3 / FR-4 : ~~décider entre stockage serveur et local~~ — **tranché en architecture le 2026-10-20** : masquage sur le serveur, repli dans le navigateur.
+
+## Après l'architecture (2026-10-20)
+
+La spine `architecture/architecture-jdr-master-2026-10-20-p10-4/ARCHITECTURE-SPINE.md` fait foi pour la technique (AD-1 à AD-17). Repères pour les stories : calendrier de partie ou du groupe = « atelier » (AD-5, AD-16), calendrier personnel = « vitrine » (AD-1, AD-2, AD-6) ; durée d'une plage = `Seance.durationSlots` (AD-10) ; une plage datée se lit entière (AD-14) ; échéance par défaut unique (AD-17). Les plages longues (FR-19 à FR-23) y portent le nom de lot `PL-1`.
 - Temps réel : le signal `changed` des scénarios et de la liste des événements suffit sans doute ; à évaluer pour chaque surface selon `docs/checklist.md`.

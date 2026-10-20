@@ -205,12 +205,17 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 
 ---
 
-## Palier 10.4 — Sondage et Destinée dans le calendrier *(avant le 10.5, vaut aussi pour le JDR — PRD et UX finals, prochaine étape : architecture)*
+## Palier 10.4 — Sondage et Destinée dans le calendrier *(avant le 10.5, vaut aussi pour le JDR — PRD et architecture finals, prochaine étape : delta UX des plages longues et de l'échéance, puis épics et stories)*
 
 > PRD : `_bmad-output/planning-artifacts/prds/prd-jdr-master-2026-10-19-p10-4/prd.md` (final, 2026-10-20) — FR-1 à FR-16 ;
 > ajoute aux demandes ci-dessous « Créer un sondage » dans les 3 calendriers (choix d'un rendez-vous à dater) et la
 > fixation de la date depuis la Destinée ; FR-17 (mode et nature expliqués à la création) ajoutée pendant l'UX.
 > UX : `_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-10-20/` (final, 2026-10-20).
+> Architecture : `_bmad-output/planning-artifacts/architecture/architecture-jdr-master-2026-10-20-p10-4/ARCHITECTURE-SPINE.md`
+> (final, 2026-10-20) — AD-1 à AD-17. PRD mis à jour après l'architecture : FR-18 (échéance proposée et modifiable dans
+> le composer) et **plages longues** FR-19 à FR-23 (une journée JDR, un week-end jeux : durée facultative du rendez-vous,
+> 15 jours au plus, corrigeable à tout moment). Le calendrier personnel suit et conclut les votes ; on compose dans le
+> calendrier de la partie ou du groupe.
 
 > Demandé pendant l'UX du Palier 10 (2026-10-08) : « j'ai galéré » à créer un sondage. Touche le calendrier **et** le
 > JDR ; lève, pour ce sujet seulement, la contrainte « le JDR ne change pas » du Palier 10. En attendant, le Palier 10
@@ -225,6 +230,9 @@ la dette technique et la synchro (cf. ordre ci-dessous).
       (options) du vote actif et déplacent le calendrier ; créer / éditer le sondage depuis la Destinée (MJ / hôte).
 - [ ] **Ouvrir le calendrier directement en Destinée sur un sondage précis** (paramètre d'URL) et **filtrer le
       calendrier par partie / groupe** (aujourd'hui le panneau « Affichage » filtre par nature, pas par partie).
+- [ ] **Échéance visible** dans le composer, avec un défaut (le plus tôt entre +14 jours et la veille du premier créneau).
+- [ ] **Plages longues** : un rendez-vous peut durer plusieurs créneaux (après-midi + soir, vendredi soir → dimanche
+      après-midi), voté, fixé, affiché et occupé sur toute la plage.
 
 ---
 
