@@ -369,6 +369,7 @@ L'organisateur voit et peut changer, dans le composer, la durée du rendez-vous.
 - La durée s'exprime en clair (« après-midi + soir », « 6 créneaux : du vendredi soir au dimanche après-midi » pour un départ un vendredi soir), pas seulement en nombre de créneaux.
 - Chaque créneau sélectionné est le **départ** d'une plage de cette durée, quel que soit son moment ; la sélection montre toute la plage en surbrillance, du départ à la fin, pour qu'on voie ce qu'on propose. *Choisi par l'utilisateur le 2026-10-20 : pas de moment de départ imposé, l'aperçu suffit.*
 - Tous les créneaux candidats d'un sondage ont la même durée.
+- Les plages d'un même sondage peuvent se chevaucher (par exemple, avec 6 créneaux : vendredi soir → dimanche après-midi, et samedi matin → lundi matin) ; deux créneaux candidats identiques sont impossibles. *Décidé par l'utilisateur le 2026-10-20 ; des durées différentes dans un même vote sont notées pour plus tard (backlog).*
 - Changer la durée d'un sondage qui a déjà des réponses efface toutes ses réponses, après un avertissement qui le dit.
 - Avec une durée de plus d'un créneau, la journée entière n'est pas proposée.
 - Durée maximale : 15 jours ; au-delà, on crée deux rendez-vous. *Décidé par l'utilisateur le 2026-10-20 : le vrai garde-fou est de pouvoir corriger (FR-23).*
@@ -380,6 +381,7 @@ Un créneau candidat ou une date fixée de plusieurs créneaux se voit sur chacu
 **Consequences (testable) :**
 - Mois, Semaine, Agenda, rail, plateau et tiroir montrent le départ et la fin de la plage ; aucun jour couvert n'est estompé en Destinée.
 - Une date fixée de plusieurs créneaux s'affiche en plage partout où une date fixée s'affiche : fiche de scénario (y compris la liste du vote), fenêtre de l'événement, liste des parties, confirmation « Fixer la date… ».
+- Un créneau couvert par plusieurs plages du même vote le montre ; y répondre précise à quelle plage on répond.
 - Les e-mails « date fixée », relance du vote et rappels de séance donnent la plage.
 - Le rappel part la veille du **départ**.
 

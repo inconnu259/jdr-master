@@ -360,4 +360,7 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 - **Créer directement un événement de groupe depuis le calendrier** : « Créer un sondage » (Palier 10.4) ne date
   que des rendez-vous existants ; proposer aussi d'y créer une conjonction. À réévaluer **après la mise en
   production**, sur l'app réelle et les retours de la bande. Idée notée le 2026-10-19 pendant le PRD du 10.4.
+- **Durées différentes dans un même vote** : proposer ensemble « ven. soir → dim. après-midi » et « sam. après-midi →
+  dim. après-midi » pour voir si une nuit de gîte en plus vaut le coup. Le 10.4 garde une seule durée par vote ; à
+  réévaluer selon les besoins réels. Idée notée le 2026-10-20 pendant l'UX du 10.4.
 - **Aperçu résumé + détail au clic pour les types (assistant de création)** : à l'étape Type, afficher les courts textes de `docs/assistant.md` (ex. "Le voyageur sait comment se débarrasser des monstres.") en aperçu par type, avec un clic pour afficher la description complète déjà seedée dans `types.json` (effets, avantages...). Idée notée le 2026-07-26 pendant la Story 23.3, non implémentée (hors scope).
