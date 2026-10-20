@@ -26,6 +26,14 @@ const member = (userId: string, displayName: string): PartieMemberDto => ({
   joinedAt: '2026-01-01T00:00:00.000Z',
 });
 
+/** Ce que le serveur sert à `userId` (Story 44.1) : l'hôte a les droits d'organisateur, un autre membre aucun. */
+function servedTo(card: EventCardDto, userId: string | null): EventCardDto {
+  // Une carte qui porte déjà des droits les garde (cas où le serveur retire un droit à l'hôte).
+  if (Object.values(card.can).some(Boolean)) return card;
+  const host = userId !== null && card.hostId === userId;
+  return { ...card, can: { propose: host, edit: host, choose: host, extend: host } };
+}
+
 /** Une conjonction à sondage : 3 créneaux, échéance le 20 octobre, votants éligibles donnés. */
 function pollCard(over: Partial<EventCardDto['poll'] & object> = {}, host = HOST): EventCardDto {
   return {
@@ -48,6 +56,7 @@ function pollCard(over: Partial<EventCardDto['poll'] & object> = {}, host = HOST
     ],
     myInscription: null,
     cancelled: false,
+    can: { propose: false, edit: false, choose: false, extend: false },
     poll: {
       id: 'p1',
       expiresAt: '2026-10-20T23:59:59.999Z',
@@ -117,7 +126,7 @@ describe('EventDialog — sondage de dates (Story 40.5)', () => {
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(Host);
-    fixture.componentInstance.card.set(card);
+    fixture.componentInstance.card.set(servedTo(card, userId));
     fixture.componentInstance.userId.set(userId);
     const settle = async () => {
       for (let i = 0; i < 8; i++) {
@@ -422,6 +431,16 @@ describe('EventDialog — sondage de dates (Story 40.5)', () => {
       expect(member.q('.ed__poll-extend')).toBeNull();
     });
 
+    it('« Prolonger » suit le droit servi (`can.extend`), pas l’identité de l’hôte', async () => {
+      const noExtend = {
+        ...pollCard(),
+        can: { propose: true, edit: true, choose: true, extend: false },
+      };
+      const { q } = await mount(noExtend, HOST);
+      // Le panneau de l'hôte reste affiché, mais le bouton est inactif : le serveur ne donne pas le droit.
+      expect(q<HTMLButtonElement>('.ed__poll-extend')?.disabled).toBe(true);
+    });
+
     it('le vote terminé (échéance dépassée) ne bloque pas l’hôte : le bouton reste actif', async () => {
       const { q } = await mount(pollCard({ expiresAt: '2026-10-16T23:59:59.999Z' }), HOST);
       expect(q<HTMLButtonElement>('.ed__poll-extend')?.disabled).toBe(false);
@@ -500,6 +519,7 @@ class FrozenHost {
     participants: [],
     myInscription: null,
     cancelled: false,
+    can: { propose: false, edit: false, choose: false, extend: false },
     poll: null,
   };
 }
@@ -545,6 +565,7 @@ describe('EventDialog — rendu en ligne d’une soirée isolée (Story 41.1)', 
       ],
       myInscription: null,
       cancelled: false,
+      can: { propose: false, edit: false, choose: false, extend: false },
       poll: null,
       ...over,
     };

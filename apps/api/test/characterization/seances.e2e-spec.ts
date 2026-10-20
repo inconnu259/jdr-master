@@ -152,6 +152,7 @@ describe('Caractérisation JDR — séances (Story 37.1)', () => {
         .find((s) => s.id === seanceId);
       expect(seance).toBeDefined();
       expect(keysOf(seance)).toEqual([
+        'can',
         'compteRendu',
         'createdAt',
         'dateValidee',

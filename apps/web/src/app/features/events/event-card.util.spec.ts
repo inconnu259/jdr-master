@@ -46,6 +46,11 @@ import {
 const TONE = TONE_MAP['grimoire-emeraude'];
 const TODAY = '2026-10-17';
 
+// Story 44.1 : par défaut, aucun droit d'organisateur (le lecteur n'est pas l'hôte) ; un test donne `can` à la carte.
+const NO_CAN = { propose: false, edit: false, choose: false, extend: false };
+const HOST_CAN = { propose: true, edit: true, choose: true, extend: true };
+const withCan = (c: EventCardDto, can = HOST_CAN): EventCardDto => ({ ...c, can });
+
 const card = (id: string, date: string | null, over: Partial<EventCardDto> = {}): EventCardDto => ({
   id,
   title: id,
@@ -65,6 +70,7 @@ const card = (id: string, date: string | null, over: Partial<EventCardDto> = {})
   myInscription: null,
   cancelled: false,
   poll: null,
+  can: NO_CAN,
   ...over,
 });
 
@@ -746,15 +752,18 @@ describe('event-card.util (Story 40.1)', () => {
       ).toBe('4 oui · 0 peut-être · 1 non');
     });
 
-    it('« Fixer la date… » : l’hôte seul, sondage ouvert (même échéance dépassée) avec au moins un créneau, séance sans date', () => {
-      expect(canFixDate(pollCard([]), HOST)).toBe(true);
+    it('« Fixer la date… » : seulement avec le droit `can.choose` du serveur, sondage ouvert (même échéance dépassée) avec au moins un créneau, séance sans date', () => {
+      expect(canFixDate(withCan(pollCard([])))).toBe(true);
       // L'échéance dépassée ne bloque pas l'hôte (le sondage reste ouvert côté serveur).
-      expect(canFixDate(pollCard([], { expiresAt: '2026-10-01T23:59:59.999Z' }), HOST)).toBe(true);
-      expect(canFixDate(pollCard([]), 'a')).toBe(false);
-      expect(canFixDate(pollCard([]), null)).toBe(false);
-      expect(canFixDate(pollCard([], { status: 'CLOSED' }), HOST)).toBe(false);
-      expect(canFixDate(pollCard([], { options: [] }), HOST)).toBe(false);
-      expect(canFixDate(card('d', '2026-10-24'), HOST)).toBe(false);
+      expect(canFixDate(withCan(pollCard([], { expiresAt: '2026-10-01T23:59:59.999Z' })))).toBe(
+        true,
+      );
+      // Un administrateur qui n'est pas l'hôte, ou tout autre membre : le serveur ne lui donne pas le droit.
+      expect(canFixDate(withCan(pollCard([]), NO_CAN))).toBe(false);
+      expect(canFixDate(pollCard([]))).toBe(false);
+      expect(canFixDate(withCan(pollCard([], { status: 'CLOSED' })))).toBe(false);
+      expect(canFixDate(withCan(pollCard([], { options: [] })))).toBe(false);
+      expect(canFixDate(withCan(card('d', '2026-10-24')))).toBe(false);
     });
   });
 
@@ -778,13 +787,15 @@ describe('event-card.util (Story 40.1)', () => {
         ...over,
       });
 
-    it('« Prolonger le vote » : l’hôte seul, sondage ouvert sans date — l’échéance dépassée ne le bloque pas', () => {
-      expect(canExtendVote(pollCard(), HOST)).toBe(true);
-      expect(canExtendVote(pollCard({ expiresAt: '2026-10-01T23:59:59.999Z' }), HOST)).toBe(true);
-      expect(canExtendVote(pollCard(), 'a')).toBe(false);
-      expect(canExtendVote(pollCard(), null)).toBe(false);
-      expect(canExtendVote(pollCard({ status: 'CLOSED' }), HOST)).toBe(false);
-      expect(canExtendVote(card('d', '2026-10-24'), HOST)).toBe(false);
+    it('« Prolonger le vote » : seulement avec le droit `can.extend` du serveur, sondage ouvert sans date — l’échéance dépassée ne le bloque pas', () => {
+      expect(canExtendVote(withCan(pollCard()))).toBe(true);
+      expect(canExtendVote(withCan(pollCard({ expiresAt: '2026-10-01T23:59:59.999Z' })))).toBe(
+        true,
+      );
+      expect(canExtendVote(withCan(pollCard(), NO_CAN))).toBe(false);
+      expect(canExtendVote(pollCard())).toBe(false);
+      expect(canExtendVote(withCan(pollCard({ status: 'CLOSED' })))).toBe(false);
+      expect(canExtendVote(withCan(card('d', '2026-10-24')))).toBe(false);
     });
 
     it('nextDayKey : le lendemain, passages de mois et d’année compris', () => {

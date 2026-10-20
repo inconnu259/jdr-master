@@ -24,7 +24,12 @@ import { parseDayKey, todayKeyUtc } from './day-key';
 import { InvitationCleanupService } from '../invitations/invitation-cleanup.service';
 import { EventCancellationMailer } from './event-cancellation-mailer.service';
 import { CreateEventDto } from './dto/create-event.dto';
-import { EventsService, POLL_MODE_MESSAGE, type EventSeanceInput } from './events.service';
+import {
+  EventsService,
+  POLL_MODE_MESSAGE,
+  type EventCardBase,
+  type EventSeanceInput,
+} from './events.service';
 import { formatSessionDate } from './session-date';
 
 /** Refus d'une clé de jour bien formée mais inexistante au calendrier (ex. `2026-02-31`). */
@@ -105,8 +110,7 @@ export class GroupEventsService {
     await this.partieSignals.notifyChanged(grant.partieId);
     await this.sendReservationEmails(grant, event.id, reservedUserIds);
 
-    const [card] = await this.events.listCards(grant, userId, [event.id]);
-    return card;
+    return this.cardOf(grant, userId, event.id);
   }
 
   /**
@@ -146,8 +150,7 @@ export class GroupEventsService {
     // Après validation et après `partie:{id}` (émis par `EventsService.updateHosted`) ; ne lève jamais.
     await this.partieSignals.notifyChanged(grant.partieId);
 
-    const [card] = await this.events.listCards(grant, userId, [eventId]);
-    return card;
+    return this.cardOf(grant, userId, eventId);
   }
 
   /**
@@ -176,8 +179,7 @@ export class GroupEventsService {
     await this.partieSignals.notifyChanged(grant.partieId);
     await this.cancellationMailer.send(grant.partieId, eventId, userId, extras.emails);
 
-    const [card] = await this.events.listCards(grant, userId, [eventId]);
-    return card;
+    return this.cardOf(grant, userId, eventId);
   }
 
   /**
@@ -293,8 +295,7 @@ export class GroupEventsService {
    *  (« mes conjonctions », statut) est prévenue — ne lève jamais —, puis la carte à jour. */
   private async afterRosterChange(grant: PartieGrant, viewerId: string): Promise<EventCardDto> {
     await this.partieSignals.notifyChanged(grant.partieId);
-    const [card] = await this.events.listCards(grant, viewerId, [grant.target.eventId!]);
-    return card;
+    return this.cardOf(grant, viewerId, grant.target.eventId!);
   }
 
   /**
@@ -369,6 +370,25 @@ export class GroupEventsService {
   /** Les conjonctions du groupe, passées comprises — tout membre du groupe les lit. */
   async list(partieId: string, userId: string): Promise<EventCardDto[]> {
     const grant = await this.permissions.assert(userId, 'EVENT_LIST', { partieId });
-    return this.events.listCards(grant, userId);
+    return this.withCan(userId, await this.events.listCards(grant, userId));
+  }
+
+  /** La carte d'un événement, droits d'organisateur compris (Story 44.1). */
+  private async cardOf(grant: PartieGrant, userId: string, eventId: string): Promise<EventCardDto> {
+    const [card] = await this.withCan(
+      userId,
+      await this.events.listCards(grant, userId, [eventId]),
+    );
+    return card;
+  }
+
+  /** Story 44.1 (AD-4) : complète chaque carte de `can`, les droits de `userId` calculés par
+   *  `PermissionService` en un nombre fixe de lectures — jamais déduits de `hostId` à l'écran. */
+  private async withCan(userId: string, cards: EventCardBase[]): Promise<EventCardDto[]> {
+    const can = await this.permissions.organizerCan(
+      userId,
+      cards.map((c) => ({ eventId: c.id })),
+    );
+    return cards.map((card, i) => ({ ...card, can: can[i] }));
   }
 }

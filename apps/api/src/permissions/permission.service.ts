@@ -9,6 +9,7 @@ import type {
   GameSystemCapability,
   GameSystemFamily,
   MembershipRole,
+  OrganizerCan,
   PartieRole,
   PermissionAction,
 } from '@master-jdr/shared';
@@ -76,6 +77,8 @@ declare const GRANT_BRAND: unique symbol;
  */
 export interface PartieGrant {
   readonly partieId: string;
+  /** Qui a été autorisé (Story 44.1) : sert aux projections qui portent ses droits (`can`). */
+  readonly userId: string;
   readonly role: PartieRole;
   readonly action: PermissionAction;
   readonly target: ResolvedTarget;
@@ -437,6 +440,94 @@ function roleFor(
   return jdrRole(partie.ownerId, userId, membership != null);
 }
 
+/** Cible d'un lot (`canMany`, `organizerCan` — Story 44.1) : une séance OU un événement, jamais une
+ *  partie seule (la règle « hôte » ne joue que sur un événement). */
+export type BatchTarget = OnlyTarget<'seanceId'> | OnlyTarget<'eventId'>;
+
+/** Ce que la décision d'un droit lit : la partie, le rôle déjà trouvé, la cible résolue et l'hôte de
+ *  l'événement visé. */
+interface DecisionContext {
+  readonly partie: Pick<Partie, 'gameSystemId'>;
+  readonly role: PartieRole;
+  readonly resolved: ResolvedTarget;
+  readonly eventOwnerId?: string | null;
+}
+
+/**
+ * Story 44.1 (AD-4) — action décidant chaque drapeau de `can`, par famille. Le JDR décide sur la séance
+ * (cellule du MJ) ; le ralliement sur l'événement (hôte seul, `EVENT_UPDATE` / `POLL_CHOOSE` /
+ * `POLL_EXTEND`). `POLL_EXTEND` n'existe pas en JDR : le MJ repousse l'échéance en modifiant le sondage.
+ * Cette correspondance vit ICI et nulle part ailleurs.
+ */
+const ORGANIZER_ACTIONS: Readonly<
+  Record<'jdr' | 'ralliement', Readonly<Record<keyof OrganizerCan, PermissionAction>>>
+> = {
+  jdr: {
+    propose: 'SEANCE_POLL_CREATE',
+    edit: 'POLL_OPTIONS_SET',
+    choose: 'POLL_CHOOSE',
+    extend: 'POLL_EXTEND',
+  },
+  ralliement: {
+    propose: 'EVENT_UPDATE',
+    edit: 'EVENT_UPDATE',
+    choose: 'POLL_CHOOSE',
+    extend: 'POLL_EXTEND',
+  },
+};
+
+/**
+ * LA décision d'un droit, une fois le rôle trouvé : `null` si accordé, sinon l'exception à lever. Partagée
+ * par `assert()` (qui la lève) et `canMany()` (qui n'en garde que l'issue) — elles ne peuvent donc pas
+ * diverger. Ordre : cellule de rôle, règles « hôte », capacité.
+ */
+function refusalFor(input: {
+  userId: string;
+  action: PermissionAction;
+  role: PartieRole;
+  partie: Pick<Partie, 'gameSystemId'>;
+  resolved: ResolvedTarget;
+  eventOwnerId?: string | null;
+}): ForbiddenException | BadRequestException | null {
+  const { userId, action, role, partie, resolved, eventOwnerId } = input;
+  const family = familyOf(partie.gameSystemId);
+  const allowed = policyFor(family)[action];
+  if (!allowed.includes(role)) {
+    if (family === 'ralliement') {
+      // Aucun rôle n'a ce droit : l'action n'existe pas pour ce type de partie ; sinon elle est
+      // réservée aux administrateurs.
+      return new ForbiddenException(
+        allowed.length === 0 ? RALLIEMENT_UNAVAILABLE_MESSAGE : ADMIN_ONLY_MESSAGE,
+      );
+    }
+    return new ForbiddenException(MJ_ONLY_MESSAGE);
+  }
+  // Story 40.2 : l'hôte de l'événement visé seul (cible `{ eventId }` ou, Story 40.4, `{ seanceId }`
+  // obligatoire ; une cible sans événement, ou un événement sans hôte — compte supprimé —, n'ouvre
+  // rien).
+  const hostOnly =
+    HOST_ONLY_ACTIONS.has(action) ||
+    (family === 'ralliement' &&
+      HOST_ONLY_WHEN_EVENT_TARGETED.has(action) &&
+      resolved.eventId !== undefined);
+  if (hostOnly && (eventOwnerId == null || eventOwnerId !== userId)) {
+    return new ForbiddenException(HOST_ONLY_MESSAGE);
+  }
+  // Story 42.1 : l'hôte de l'événement, ou un administrateur du groupe.
+  if (
+    HOST_OR_ADMIN_ACTIONS.has(action) &&
+    role !== 'admin' &&
+    (resolved.eventId === undefined || eventOwnerId == null || eventOwnerId !== userId)
+  ) {
+    return new ForbiddenException(HOST_OR_ADMIN_ONLY_MESSAGE);
+  }
+  const capability = ACTION_CAPABILITY[action];
+  if (capability !== undefined && !hasCapability(partie.gameSystemId, capability)) {
+    return new BadRequestException(CAPABILITY_UNAVAILABLE_MESSAGE);
+  }
+  return null;
+}
+
 /**
  * Service UNIQUE de décision des droits sur une partie, ses événements et ses séances (Story
  * 37.6, AD-6). Transverse : n'importe que `PrismaService` et le registre des systèmes — aucun
@@ -461,42 +552,105 @@ export class PermissionService {
     const { partie, resolved, eventOwnerId } = await this.resolveTarget(target);
     const role = await this.roleIn(partie, userId);
     if (role === null) throw new ForbiddenException(NO_ACCESS_MESSAGE);
-    const family = familyOf(partie.gameSystemId);
-    const allowed = policyFor(family)[action];
-    if (!allowed.includes(role)) {
-      if (family === 'ralliement') {
-        // Aucun rôle n'a ce droit : l'action n'existe pas pour ce type de partie ; sinon elle est
-        // réservée aux administrateurs.
-        throw new ForbiddenException(
-          allowed.length === 0 ? RALLIEMENT_UNAVAILABLE_MESSAGE : ADMIN_ONLY_MESSAGE,
-        );
+    const refusal = refusalFor({ userId, action, role, partie, resolved, eventOwnerId });
+    if (refusal) throw refusal;
+    return { partieId: partie.id, userId, role, action, target: resolved, partie } as PartieGrant;
+  }
+
+  /**
+   * Story 44.1 (AD-4) — `userId` peut-il faire `action` sur chacune des cibles ? Même décision que
+   * `assert()` (cellule de rôle, règles « hôte », capacité : UNE fonction, `refusalFor`), mais sans rien
+   * lever : une cible inconnue, d'une partie sans rôle pour `userId`, ou refusée vaut `false` — rien
+   * n'est révélé d'une partie dont on n'est pas membre. Résultat aligné sur `targets`.
+   *
+   * Cibles `{ seanceId }` ou `{ eventId }` seulement, jamais `{ partieId }` : la règle « hôte » ne joue
+   * que sur un événement. Trois lectures au plus (séances, événements, appartenances), quel que soit le
+   * nombre de cibles.
+   */
+  async canMany(
+    userId: string,
+    action: PermissionAction,
+    targets: readonly BatchTarget[],
+  ): Promise<boolean[]> {
+    const contexts = await this.resolveMany(userId, targets);
+    return contexts.map((ctx) => ctx !== null && refusalFor({ userId, action, ...ctx }) === null);
+  }
+
+  /**
+   * Story 44.1 (AD-4) — les droits d'organisateur (`can`) de `userId` sur chacune des cibles, alignés sur
+   * `targets`. Les cibles sont résolues UNE fois pour les quatre drapeaux (quatre actions ne coûtent pas
+   * quatre fois les lectures). La correspondance drapeau → action vit ici et nulle part ailleurs.
+   */
+  async organizerCan(userId: string, targets: readonly BatchTarget[]): Promise<OrganizerCan[]> {
+    const contexts = await this.resolveMany(userId, targets);
+    return contexts.map((ctx) => {
+      const can: OrganizerCan = { propose: false, edit: false, choose: false, extend: false };
+      if (ctx === null) return can;
+      // Un système inconnu du registre retombe sur la politique `jdr` (comme `policyFor`).
+      const mapping =
+        familyOf(ctx.partie.gameSystemId) === 'ralliement'
+          ? ORGANIZER_ACTIONS.ralliement
+          : ORGANIZER_ACTIONS.jdr;
+      for (const flag of Object.keys(mapping) as (keyof OrganizerCan)[]) {
+        can[flag] = refusalFor({ userId, action: mapping[flag], ...ctx }) === null;
       }
-      throw new ForbiddenException(MJ_ONLY_MESSAGE);
-    }
-    // Story 40.2 : l'hôte de l'événement visé seul (cible `{ eventId }` ou, Story 40.4, `{ seanceId }`
-    // obligatoire ; une cible sans événement, ou un événement sans hôte — compte supprimé —, n'ouvre
-    // rien).
-    const hostOnly =
-      HOST_ONLY_ACTIONS.has(action) ||
-      (family === 'ralliement' &&
-        HOST_ONLY_WHEN_EVENT_TARGETED.has(action) &&
-        resolved.eventId !== undefined);
-    if (hostOnly && (eventOwnerId == null || eventOwnerId !== userId)) {
-      throw new ForbiddenException(HOST_ONLY_MESSAGE);
-    }
-    // Story 42.1 : l'hôte de l'événement, ou un administrateur du groupe.
-    if (
-      HOST_OR_ADMIN_ACTIONS.has(action) &&
-      role !== 'admin' &&
-      (resolved.eventId === undefined || eventOwnerId == null || eventOwnerId !== userId)
-    ) {
-      throw new ForbiddenException(HOST_OR_ADMIN_ONLY_MESSAGE);
-    }
-    const capability = ACTION_CAPABILITY[action];
-    if (capability !== undefined && !hasCapability(partie.gameSystemId, capability)) {
-      throw new BadRequestException(CAPABILITY_UNAVAILABLE_MESSAGE);
-    }
-    return { partieId: partie.id, role, action, target: resolved, partie } as PartieGrant;
+      return can;
+    });
+  }
+
+  /** Résout un lot de cibles en un nombre fixe de lectures. `null` = cible inconnue, cible invalide ou
+   *  aucun rôle de `userId` sur sa partie. Aligné sur `targets`. */
+  private async resolveMany(
+    userId: string,
+    targets: readonly BatchTarget[],
+  ): Promise<(DecisionContext | null)[]> {
+    const seanceIds = [...new Set(targets.flatMap((t) => (t.seanceId ? [t.seanceId] : [])))];
+    const eventIds = [...new Set(targets.flatMap((t) => (t.eventId ? [t.eventId] : [])))];
+    if (seanceIds.length === 0 && eventIds.length === 0) return targets.map(() => null);
+    const [seances, events] = await Promise.all([
+      this.prisma.seance.findMany({
+        where: { id: { in: seanceIds } },
+        include: { event: { include: { partie: true } } },
+      }),
+      this.prisma.event.findMany({
+        where: { id: { in: eventIds } },
+        include: { partie: true },
+      }),
+    ]);
+    const bySeance = new Map(seances.map((s) => [s.id, s]));
+    const byEvent = new Map(events.map((e) => [e.id, e]));
+
+    const partieIds = [
+      ...new Set([...seances.map((s) => s.event.partieId), ...events.map((e) => e.partieId)]),
+    ];
+    const memberships = await this.prisma.membership.findMany({
+      where: { userId, partieId: { in: partieIds } },
+      select: { partieId: true, role: true },
+    });
+    const membershipByPartie = new Map(memberships.map((m) => [m.partieId, m]));
+
+    return targets.map((target): DecisionContext | null => {
+      let partie: Partie;
+      let resolved: ResolvedTarget;
+      let eventOwnerId: string | null;
+      if (target.seanceId) {
+        const seance = bySeance.get(target.seanceId);
+        if (!seance) return null;
+        partie = seance.event.partie;
+        resolved = { partieId: partie.id, eventId: seance.event.id, seanceId: seance.id };
+        eventOwnerId = seance.event.ownerId;
+      } else if (target.eventId) {
+        const event = byEvent.get(target.eventId);
+        if (!event) return null;
+        partie = event.partie;
+        resolved = { partieId: partie.id, eventId: event.id };
+        eventOwnerId = event.ownerId;
+      } else {
+        return null;
+      }
+      const role = roleFor(partie, userId, membershipByPartie.get(partie.id) ?? null);
+      return role === null ? null : { partie, role, resolved, eventOwnerId };
+    });
   }
 
   /** Rôle de `userId` sur une partie, `null` s'il n'en a aucun (ou si la partie n'existe pas).

@@ -57,6 +57,8 @@ const SCENARIO_DTO_KEYS = [
 
 /** Clés de `SeanceDto` d'une séance neuve (ni vote, ni capacité). */
 const SEANCE_DTO_KEYS = [
+  // Story 44.1 : droits d'organisateur de la personne qui lit.
+  'can',
   'compteRendu',
   'createdAt',
   'dateValidee',

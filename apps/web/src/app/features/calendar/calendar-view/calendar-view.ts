@@ -538,7 +538,8 @@ export class CalendarView implements OnInit {
         eventId: card.id,
         title: card.title,
         state,
-        canCompose: !!me && card.hostId === me,
+        // Story 44.1 : le droit de modifier les dates vient du serveur (`can.edit`), jamais de `hostId`.
+        canCompose: card.can.edit,
         armLabel: fillTone(tone['partie.ralliement_calendar_compose_arm'], { title: card.title }),
       };
     });
@@ -1449,9 +1450,8 @@ export class CalendarView implements OnInit {
    *  déjà composés (sans quoi « retiré s'il y était déjà » n'aurait aucun référent). */
   protected startGroupCompose(eventId: string): void {
     if (!this.isGroup() || this.composing()) return;
-    const me = this.authSvc.currentUser()?.id;
     const entry = this.groupPolls().find((e) => e.card.id === eventId);
-    if (!entry || !me || entry.card.hostId !== me) return;
+    if (!entry?.card.can.edit) return;
     this.composeTarget.set({ kind: 'group-poll', eventId });
     this.composedCells.set(
       entry.poll.options.map((o) => ({

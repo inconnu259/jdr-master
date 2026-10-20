@@ -178,8 +178,20 @@ function makeParties() {
 function makePermissions() {
   // Story 40.3 : par défaut une autorisation de partie JDR — `inscrire`/`desinscrire` lisent la famille
   // de la partie de l'autorisation dès que la séance est trouvée. Chaque test peut la remplacer.
-  return { assert: jest.fn().mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' })) };
+  return {
+    assert: jest.fn().mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' })),
+    // Story 44.1 : les droits d'organisateur des séances (`can`) sont calculés par `PermissionService`
+    // en un lot aligné sur les cibles — simulé ici (le calcul lui-même est testé dans permissions/).
+    organizerCan: jest
+      .fn()
+      .mockImplementation((_userId: string, targets: unknown[]) =>
+        Promise.resolve(targets.map(() => SEANCE_CAN)),
+      ),
+  };
 }
+
+/** Droits d'organisateur simulés d'une séance (Story 44.1) : un MJ de JDR — jamais `extend`. */
+const SEANCE_CAN = { propose: true, edit: true, choose: true, extend: false };
 
 function makeCharacters() {
   return {
@@ -1366,6 +1378,27 @@ describe('ScenariosService', () => {
         notePratique: null,
         createdAt: new Date('2026-07-01'),
       };
+
+      it('Story 44.1 : les droits d’organisateur des séances sont demandés en UN lot, pour le lecteur, et portés par chaque séance', async () => {
+        permissions.assert.mockResolvedValue(
+          testGrant({ id: 'p1', kind: 'CAMPAGNE_LINEAIRE' }, 'player'),
+        );
+        permissions.organizerCan.mockResolvedValue([
+          { propose: false, edit: false, choose: false, extend: false },
+          { propose: true, edit: true, choose: true, extend: false },
+        ]);
+        prisma.scenario.findMany.mockResolvedValue(withEvent([row('COURANT')]));
+        prisma.seance.findMany.mockResolvedValue([seanceRow, { ...seanceRow, id: 'se2' }]);
+
+        const [dto] = await service.findAllForPartie('p1', 'u1');
+
+        expect(permissions.organizerCan).toHaveBeenCalledTimes(1);
+        expect(permissions.organizerCan).toHaveBeenCalledWith('u1', [
+          { seanceId: 'se1' },
+          { seanceId: 'se2' },
+        ]);
+        expect(dto.seances.map((s) => s.can.edit)).toEqual([false, true]);
+      });
 
       it('A_VENIR : ni description, ni durées, ni compte rendu ; titre et séances (dates) conservés', async () => {
         permissions.assert.mockResolvedValue(
@@ -3272,6 +3305,8 @@ describe('ScenariosService', () => {
           lieu: null,
           notePratique: null,
           createdAt: '2026-07-13T00:00:00.000Z',
+          // Story 44.1 : les droits d'organisateur de la personne qui lit, servis par `PermissionService`.
+          can: SEANCE_CAN,
         },
       ]);
     });

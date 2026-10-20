@@ -4707,6 +4707,7 @@ describe('PartieDetail — les conjonctions d’un groupe (Story 40.1)', () => {
     participants: [],
     myInscription: null,
     cancelled: false,
+    can: { propose: false, edit: false, choose: false, extend: false },
     poll: null,
     ...over,
   });
@@ -4979,6 +4980,7 @@ describe('PartieDetail — la fenêtre d’une conjonction (Story 40.2)', () => 
     ],
     myInscription: null,
     cancelled: false,
+    can: { propose: false, edit: false, choose: false, extend: false },
     poll: null,
     ...over,
   });
@@ -6188,6 +6190,7 @@ describe('PartieDetail — du groupe vers son calendrier (Story 40.5b)', () => {
     ],
     myInscription: null,
     cancelled: false,
+    can: { propose: false, edit: false, choose: false, extend: false },
     poll: {
       id: 'p-a',
       expiresAt: '2099-12-30T23:59:59.999Z',
@@ -6404,6 +6407,7 @@ describe('PartieDetail — une soirée isolée sur une seule page (Story 41.1)',
     ],
     myInscription: null,
     cancelled: false,
+    can: { propose: false, edit: false, choose: false, extend: false },
     poll: null,
     ...over,
   });
@@ -6876,6 +6880,7 @@ describe('PartieDetail — annuler une conjonction (Story 42.1)', () => {
     ],
     myInscription: null,
     cancelled: false,
+    can: { propose: false, edit: false, choose: false, extend: false },
     poll: null,
     ...over,
   });

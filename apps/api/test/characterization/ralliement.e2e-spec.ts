@@ -1414,6 +1414,8 @@ describe('Ralliement — proposer une conjonction à date fixée (Story 40.1)', 
       poll: null,
       // Story 42.1 : une conjonction n'est pas annulée à sa création.
       cancelled: false,
+      // Story 44.1 : l'hôte a les droits d'organisateur de sa conjonction.
+      can: { propose: true, edit: true, choose: true, extend: true },
     });
 
     const events = await h.prisma.event.findMany({
@@ -1446,7 +1448,11 @@ describe('Ralliement — proposer une conjonction à date fixée (Story 40.1)', 
     const list = body<CardLike[]>(
       await admin.agent.get(`/parties/${groupId}/events/list`).expect(200),
     );
-    expect(list).toEqual([card]);
+    // Story 44.1 : même carte, mais les droits d'organisateur sont ceux de qui lit — un administrateur
+    // qui n'est pas l'hôte n'en a aucun.
+    expect(list).toEqual([
+      { ...card, can: { propose: false, edit: false, choose: false, extend: false } },
+    ]);
   });
 
   it('places limitées : N = 8 stocké tel quel (aucun plafond) ; N < 2 → 400, rien écrit', async () => {
@@ -1755,6 +1761,7 @@ describe('Ralliement — consulter et modifier une conjonction (Story 40.2)', ()
       myInscription: null,
       poll: null,
       cancelled: false,
+      can: { propose: true, edit: true, choose: true, extend: true },
     });
     const event = await stored(card.id);
     expect(event.title).toBe('Corrigée');

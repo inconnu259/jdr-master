@@ -3958,6 +3958,17 @@ describe('CalendarView — le calendrier d’un groupe (Story 40.5b)', () => {
     return `${d.toISOString().substring(0, 10)}T23:59:59.999Z`;
   }
 
+  // Story 44.1 : le serveur dit ce que la personne peut faire (`can`) ; ici l'hôte a tous les droits, les autres aucun.
+  const NO_CAN = { propose: false, edit: false, choose: false, extend: false };
+  const HOST_CAN = { propose: true, edit: true, choose: true, extend: true };
+  /** Cartes telles que le serveur les sert à `userId` : `can` calculé pour lui, sauf si la carte le fixe. */
+  function servedTo(userId: string, cards: any[]) {
+    return cards.map((c) => ({
+      ...c,
+      can: c.can !== NO_CAN ? c.can : c.hostId === userId ? HOST_CAN : NO_CAN,
+    }));
+  }
+
   /** Une conjonction à sondage ouvert : 3 créneaux, 3 votants éligibles, l'hôte est `HOST`. */
   function groupCard(over: Record<string, unknown> = {}, pollOver: Record<string, unknown> = {}) {
     return {
@@ -3977,6 +3988,8 @@ describe('CalendarView — le calendrier d’un groupe (Story 40.5b)', () => {
       },
       participants: [],
       myInscription: null,
+      cancelled: false,
+      can: NO_CAN,
       poll: {
         id: 'p1',
         expiresAt: deadline(3),
@@ -4022,7 +4035,7 @@ describe('CalendarView — le calendrier d’un groupe (Story 40.5b)', () => {
     };
     const scenariosSvc = makeScenariosService([]);
     const eventsApi = {
-      list: vi.fn().mockResolvedValue(opts.events ?? [groupCard()]),
+      list: vi.fn().mockResolvedValue(servedTo(opts.userId ?? ME, opts.events ?? [groupCard()])),
       update: vi.fn().mockResolvedValue(groupCard()),
     };
 
@@ -4311,6 +4324,16 @@ describe('CalendarView — le calendrier d’un groupe (Story 40.5b)', () => {
     const host = await createGroupView({ userId: HOST });
     const btn = host.fixture.nativeElement.querySelector('.compose-arm--group');
     expect(btn?.textContent?.trim()).toBe('Composer les créneaux : Soirée plateaux');
+  });
+
+  it('le bouton « composer » suit le droit servi (`can.edit`), pas l’identité de l’hôte', async () => {
+    const { comp, fixture } = await createGroupView({
+      userId: HOST,
+      events: [groupCard({ can: { ...HOST_CAN, edit: false } })],
+    });
+    expect(fixture.nativeElement.querySelector('.compose-arm--group')).toBeNull();
+    comp.startGroupCompose('e1');
+    expect(comp.composing()).toBe(false);
   });
 
   it('armer la composition part des créneaux actuels et passe en vue Semaine', async () => {

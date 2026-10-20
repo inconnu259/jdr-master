@@ -36,8 +36,8 @@ const PARTIE_D = partie('D', MJ, 'draconis');
 function makePrisma() {
   return {
     partie: { findUnique: jest.fn(), findMany: jest.fn() },
-    event: { findUnique: jest.fn() },
-    seance: { findUnique: jest.fn() },
+    event: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+    seance: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     character: { findUnique: jest.fn() },
     invitation: { findUnique: jest.fn() },
     inviteLink: { findUnique: jest.fn() },
@@ -1156,5 +1156,188 @@ describe('PermissionService', () => {
       expect(members).toEqual([{ userId: 'u1', pseudo: 'alice', displayName: 'Alice' }]);
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
     });
+  });
+
+  // Story 44.1 (AD-4) — `canMany` / `organizerCan` : MÊME décision que `assert()` (une seule fonction
+  // de refus), lue en lot, sans rien lever.
+  describe('canMany() / organizerCan() — Story 44.1', () => {
+    const HOST = 'hote';
+    const ADMIN = 'admin-r';
+    const MEMBRE = 'membre-r';
+    const GROUPE = partie('R', ADMIN, 'ralliement');
+    const ALL = { propose: true, edit: true, choose: true, extend: true };
+    const NONE = { propose: false, edit: false, choose: false, extend: false };
+
+    // Événements : trois du groupe (hôte, autre hôte, hôte disparu) et un du JDR (A).
+    const EVENTS: Record<string, { id: string; ownerId: string | null; partie: object }> = {
+      'ev-hote': { id: 'ev-hote', ownerId: HOST, partie: GROUPE },
+      'ev-autre': { id: 'ev-autre', ownerId: 'quelquun', partie: GROUPE },
+      'ev-orphelin': { id: 'ev-orphelin', ownerId: null, partie: GROUPE },
+      'ev-jdr': { id: 'ev-jdr', ownerId: MJ, partie: PARTIE_A },
+    };
+    const SEANCES: Record<string, { id: string; event: object }> = {
+      'se-hote': { id: 'se-hote', event: { ...EVENTS['ev-hote'], partieId: 'R' } },
+      'se-jdr': { id: 'se-jdr', event: { ...EVENTS['ev-jdr'], partieId: 'A' } },
+    };
+    const roleRows: Record<string, Record<string, 'ADMIN' | 'MEMBER'>> = {
+      R: { [ADMIN]: 'ADMIN', [MEMBRE]: 'MEMBER', [HOST]: 'MEMBER' },
+      A: { [PLAYER]: 'MEMBER' },
+    };
+
+    beforeEach(() => {
+      const withPartieId = (e: { id: string; ownerId: string | null; partie: object }) => ({
+        ...e,
+        partieId: (e.partie as { id: string }).id,
+      });
+      prisma.event.findMany.mockImplementation(({ where }: { where: { id: { in: string[] } } }) =>
+        Promise.resolve(
+          where.id.in.flatMap((id) => (EVENTS[id] ? [withPartieId(EVENTS[id])] : [])),
+        ),
+      );
+      prisma.seance.findMany.mockImplementation(({ where }: { where: { id: { in: string[] } } }) =>
+        Promise.resolve(where.id.in.flatMap((id) => (SEANCES[id] ? [SEANCES[id]] : []))),
+      );
+      prisma.membership.findMany.mockImplementation(
+        ({ where }: { where: { userId: string; partieId: { in: string[] } } }) =>
+          Promise.resolve(
+            where.partieId.in.flatMap((partieId) => {
+              const role = roleRows[partieId]?.[where.userId];
+              return role ? [{ partieId, role }] : [];
+            }),
+          ),
+      );
+      // `assert()` lit les mêmes données une cible à la fois.
+      prisma.event.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+        Promise.resolve(EVENTS[where.id] ?? null),
+      );
+      prisma.seance.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+        Promise.resolve(SEANCES[where.id] ?? null),
+      );
+      prisma.membership.findUnique.mockImplementation(
+        ({ where }: { where: { userId_partieId: { userId: string; partieId: string } } }) => {
+          const { userId, partieId } = where.userId_partieId;
+          const role = roleRows[partieId]?.[userId];
+          return Promise.resolve(role ? { userId, partieId, role } : null);
+        },
+      );
+    });
+
+    it('conjonction : l’hôte a tous les droits, un administrateur qui n’est pas l’hôte aucun', async () => {
+      const [mine, theirs] = await Promise.all([
+        service.organizerCan(HOST, [{ eventId: 'ev-hote' }]),
+        service.organizerCan(ADMIN, [{ eventId: 'ev-hote' }]),
+      ]);
+      expect(mine).toEqual([ALL]);
+      expect(theirs).toEqual([NONE]);
+    });
+
+    it('conjonction : un simple membre, un étranger et l’hôte disparu (ownerId null) n’ont aucun droit', async () => {
+      expect(await service.organizerCan(MEMBRE, [{ eventId: 'ev-hote' }])).toEqual([NONE]);
+      expect(await service.organizerCan(STRANGER, [{ eventId: 'ev-hote' }])).toEqual([NONE]);
+      expect(await service.organizerCan(ADMIN, [{ eventId: 'ev-orphelin' }])).toEqual([NONE]);
+      expect(await service.organizerCan(HOST, [{ eventId: 'ev-orphelin' }])).toEqual([NONE]);
+    });
+
+    it('JDR : le MJ propose, modifie et fixe la date mais ne « prolonge » jamais ; un joueur et un étranger rien', async () => {
+      const gm = { propose: true, edit: true, choose: true, extend: false };
+      expect(await service.organizerCan(MJ, [{ seanceId: 'se-jdr' }])).toEqual([gm]);
+      expect(await service.organizerCan(MJ, [{ eventId: 'ev-jdr' }])).toEqual([gm]);
+      expect(await service.organizerCan(PLAYER, [{ seanceId: 'se-jdr' }])).toEqual([NONE]);
+      expect(await service.organizerCan(STRANGER, [{ seanceId: 'se-jdr' }])).toEqual([NONE]);
+    });
+
+    it('cible inconnue : tous les drapeaux à faux, sans rien lever (ni 404, ni rien révéler)', async () => {
+      await expect(
+        service.organizerCan(MJ, [{ seanceId: 'inconnue' }, { eventId: 'inconnu' }]),
+      ).resolves.toEqual([NONE, NONE]);
+      await expect(service.canMany(MJ, 'POLL_CHOOSE', [{ eventId: 'inconnu' }])).resolves.toEqual([
+        false,
+      ]);
+      await expect(service.organizerCan(MJ, [])).resolves.toEqual([]);
+    });
+
+    it('le résultat est aligné sur les cibles, quel que soit leur mélange', async () => {
+      const result = await service.organizerCan(HOST, [
+        { eventId: 'ev-autre' },
+        { seanceId: 'se-hote' },
+        { eventId: 'ev-hote' },
+        { seanceId: 'inconnue' },
+      ]);
+      expect(result).toEqual([NONE, ALL, ALL, NONE]);
+    });
+
+    it('nombre de lectures FIXE : une cible ou beaucoup, les mêmes trois lectures groupées, aucune lecture unitaire', async () => {
+      const reads = () =>
+        prisma.event.findMany.mock.calls.length +
+        prisma.seance.findMany.mock.calls.length +
+        prisma.membership.findMany.mock.calls.length;
+      const unitary = () =>
+        prisma.event.findUnique.mock.calls.length +
+        prisma.seance.findUnique.mock.calls.length +
+        prisma.membership.findUnique.mock.calls.length +
+        prisma.partie.findUnique.mock.calls.length;
+
+      await service.organizerCan(HOST, [{ eventId: 'ev-hote' }]);
+      const one = reads();
+      prisma.event.findMany.mockClear();
+      prisma.seance.findMany.mockClear();
+      prisma.membership.findMany.mockClear();
+
+      await service.organizerCan(HOST, [
+        { eventId: 'ev-hote' },
+        { eventId: 'ev-autre' },
+        { eventId: 'ev-orphelin' },
+        { eventId: 'ev-jdr' },
+        { seanceId: 'se-hote' },
+        { seanceId: 'se-jdr' },
+      ]);
+      expect(reads()).toBe(one);
+      expect(reads()).toBeLessThanOrEqual(3);
+      expect(unitary()).toBe(0);
+    });
+
+    it('une cible `{ partieId }` (hors type) n’ouvre rien : la règle « hôte » ne joue que sur un événement', async () => {
+      const bad = [{ partieId: 'R' }] as unknown as Parameters<typeof service.organizerCan>[1];
+      await expect(service.organizerCan(ADMIN, bad)).resolves.toEqual([NONE]);
+    });
+
+    // Le garde-fou de l'AD-4 : `canMany` n'est vrai QUE si `assert()` accorde — mêmes cibles, mêmes
+    // personnes, mêmes actions. (La preuve contre les vraies routes est dans les tests e2e.)
+    const ACTIONS_OF_CAN: PermissionAction[] = [
+      'SEANCE_POLL_CREATE',
+      'POLL_OPTIONS_SET',
+      'POLL_CHOOSE',
+      'POLL_EXTEND',
+      'EVENT_UPDATE',
+    ];
+    const TARGETS = [
+      { eventId: 'ev-hote' },
+      { eventId: 'ev-autre' },
+      { eventId: 'ev-orphelin' },
+      { eventId: 'ev-jdr' },
+      { seanceId: 'se-hote' },
+      { seanceId: 'se-jdr' },
+    ] as const;
+
+    it.each(ACTIONS_OF_CAN)(
+      '%s : canMany(...) === true ⇔ assert(...) n’est pas refusé, pour chaque personne et chaque cible',
+      async (action) => {
+        for (const user of [MJ, PLAYER, HOST, ADMIN, MEMBRE, STRANGER]) {
+          const verdicts = await service.canMany(user, action, TARGETS);
+          for (const [i, target] of TARGETS.entries()) {
+            const granted = await service.assert(user, action, target).then(
+              () => true,
+              () => false,
+            );
+            expect({ user, target, action, can: verdicts[i] }).toEqual({
+              user,
+              target,
+              action,
+              can: granted,
+            });
+          }
+        }
+      },
+    );
   });
 });

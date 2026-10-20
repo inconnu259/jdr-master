@@ -658,6 +658,9 @@ export interface SeanceDto {
   lieu: string | null;
   notePratique: string | null;
   createdAt: string;
+  /** Story 44.1 : droits d'organisateur de la personne qui lit, sur cette séance (aucun écran du JDR
+   *  ne les lit encore). */
+  can: OrganizerCan;
 }
 
 /** État d'inscription à capacité limitée d'une Seance (Story 8.3). */
@@ -846,6 +849,22 @@ export interface EventPollDto {
   votes: EventPollVoteDto[];
 }
 
+/**
+ * Droits d'organisateur d'un rendez-vous pour la personne qui lit (Story 44.1, AD-4) — calculés par le
+ * serveur (`PermissionService`), jamais déduits à l'écran d'un `hostId` ou d'un rôle. Ils disent le DROIT,
+ * pas l'état : un sondage clos ou une date fixée restent des conditions d'écran à part.
+ * - `propose` : proposer des dates (créer un sondage) ;
+ * - `edit` : modifier les dates d'un sondage ouvert ;
+ * - `choose` : fixer la date ;
+ * - `extend` : prolonger le vote (jamais en JDR, où l'on repousse l'échéance en modifiant le sondage).
+ */
+export interface OrganizerCan {
+  propose: boolean;
+  edit: boolean;
+  choose: boolean;
+  extend: boolean;
+}
+
 /** Carte d'une conjonction (GET /parties/:id/events/list, Story 40.1) — projection explicite :
  *  l'hôte (immuable, `null` si son compte a disparu), la séance unique et, depuis la Story 40.2, ses
  *  participants (hôte en premier, puis les inscrits). */
@@ -862,6 +881,8 @@ export interface EventCardDto {
   poll: EventPollDto | null;
   /** Story 42.1 : la conjonction est annulée (définitif) — plus aucune action, sondage clos. */
   cancelled: boolean;
+  /** Story 44.1 : droits d'organisateur de la personne qui lit, sur cet événement. */
+  can: OrganizerCan;
 }
 
 // ─── Epic 9 : Annonces MJ ──────────────────────────────────────────────────

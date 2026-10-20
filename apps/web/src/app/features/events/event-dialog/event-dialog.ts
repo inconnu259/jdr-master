@@ -252,9 +252,9 @@ export class EventDialog {
     () => this.poll()?.kind === 'host' && this.card().poll?.status === 'OPEN',
   );
   /** Story 40.6 : « Fixer la date… » — l'hôte, sondage ouvert avec au moins un créneau. */
-  protected readonly canFix = computed(() => canFixDate(this.card(), this.currentUserId()));
+  protected readonly canFix = computed(() => canFixDate(this.card()));
   /** Story 40.7 : « Prolonger le vote » — l'hôte, sondage ouvert et sans date (échéance dépassée comprise). */
-  protected readonly canExtend = computed(() => canExtendVote(this.card(), this.currentUserId()));
+  protected readonly canExtend = computed(() => canExtendVote(this.card()));
   /** Créneaux candidats de la fiche, avec le nombre d'inscrits libres sur chacun. */
   protected readonly slotRows = computed(() => pollSlotRows(this.card(), this.theme.tone()));
   protected readonly dateLabel = computed(() => eventDateLabel(this.card(), this.theme.tone()));

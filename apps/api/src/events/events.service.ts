@@ -43,6 +43,10 @@ import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realt
 /** Données de base d'un événement (Story 37.3, AD-3). `ownerId` = propriétaire de la partie pour le
  *  JDR ; l'hôte pour une conjonction de groupe (Story 40.1). `seance` : données de la séance unique
  *  créée avec l'événement — absente, la séance est créée vide (comportement historique). */
+/** Carte d'une conjonction SANS ses droits d'organisateur (`can`, Story 44.1) : `EventsService` n'a pas
+ *  `PermissionService`, c'est `GroupEventsService` qui complète la carte avant de la servir. */
+export type EventCardBase = Omit<EventCardDto, 'can'>;
+
 export interface CreateEventInput {
   partieId: string;
   title: string;
@@ -493,7 +497,7 @@ export class EventsService
     grant: PartieGrant,
     viewerId: string,
     eventIds?: string[],
-  ): Promise<EventCardDto[]> {
+  ): Promise<EventCardBase[]> {
     const events = await this.prisma.event.findMany({
       where: {
         partieId: grant.partieId,
@@ -530,7 +534,7 @@ export class EventsService
     const undated = events.filter((e) => !e.seances[0]?.startDate);
     const pollBySeance = await this.pollsOf(grant.partieId, undated, rosterBySeance);
 
-    const cards = events.map((e): EventCardDto => {
+    const cards = events.map((e): EventCardBase => {
       const s = e.seances[0];
       const roster = s ? rosterBySeance.get(s.id) : undefined;
       return {

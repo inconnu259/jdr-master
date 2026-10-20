@@ -35,6 +35,7 @@ function pollCard(deadline: string): EventCardDto {
     participants: [],
     myInscription: null,
     cancelled: false,
+    can: { propose: false, edit: false, choose: false, extend: false },
     poll: {
       id: 'p1',
       expiresAt: `${deadline}T23:59:59.999Z`,

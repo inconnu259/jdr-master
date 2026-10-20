@@ -665,11 +665,12 @@ export function pollCountsLabel(slot: RankedPollSlot, tone: EventTone): string {
   });
 }
 
-/** L'hôte peut fixer la date : il est l'hôte, le sondage est OUVERT (l'échéance dépassée ne le bloque pas)
- *  et propose au moins un créneau. Le serveur reste juge. */
-export function canFixDate(card: EventCardDto, userId: string | null | undefined): boolean {
+/** La personne peut fixer la date : le serveur lui en donne le droit (`can.choose`, Story 44.1 — jamais déduit
+ *  de `hostId`), le sondage est OUVERT (l'échéance dépassée ne le bloque pas) et propose au moins un créneau.
+ *  Le serveur reste juge. */
+export function canFixDate(card: EventCardDto): boolean {
   return (
-    isHostOf(card, userId) &&
+    card.can.choose &&
     card.poll !== null &&
     card.poll.status === 'OPEN' &&
     !card.seance?.date &&
@@ -685,15 +686,11 @@ export function nextDayKey(key: string): string {
   return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().substring(0, 10);
 }
 
-/** L'hôte peut prolonger le vote : il est l'hôte, le sondage est OUVERT et sans date posée. L'échéance
- *  déjà dépassée ne le bloque pas (prolonger rouvre le vote). Le serveur reste juge. */
-export function canExtendVote(card: EventCardDto, userId: string | null | undefined): boolean {
-  return (
-    isHostOf(card, userId) &&
-    card.poll !== null &&
-    card.poll.status === 'OPEN' &&
-    !card.seance?.date
-  );
+/** La personne peut prolonger le vote : le serveur lui en donne le droit (`can.extend`, Story 44.1), le sondage
+ *  est OUVERT et sans date posée. L'échéance déjà dépassée ne le bloque pas (prolonger rouvre le vote). Le
+ *  serveur reste juge. */
+export function canExtendVote(card: EventCardDto): boolean {
+  return card.can.extend && card.poll !== null && card.poll.status === 'OPEN' && !card.seance?.date;
 }
 
 /** Plus petite « Nouvelle échéance » proposable : le lendemain de l'échéance actuelle — jamais avant

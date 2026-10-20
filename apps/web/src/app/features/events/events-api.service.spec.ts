@@ -18,6 +18,7 @@ describe('EventsApiService (Story 40.1)', () => {
     participants: [],
     myInscription: null,
     cancelled: false,
+    can: { propose: false, edit: false, choose: false, extend: false },
     poll: null,
   };
 

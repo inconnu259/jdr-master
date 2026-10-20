@@ -34,6 +34,7 @@ const card = (id: string, title: string): EventCardDto => ({
   participants: [],
   myInscription: null,
   cancelled: false,
+  can: { propose: false, edit: false, choose: false, extend: false },
   poll: null,
 });
 

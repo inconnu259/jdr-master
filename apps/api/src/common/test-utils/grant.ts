@@ -21,6 +21,7 @@ export function testGrant(
 ): PartieGrant {
   return {
     partieId: partie.id,
+    userId: partie.ownerId,
     role,
     action,
     target: { partieId: partie.id, ...target },

@@ -36,6 +36,7 @@ const SEANCE_NO_POLL: SeanceDto = {
   lieu: null,
   notePratique: null,
   createdAt: '2026-07-13T00:00:00.000Z',
+  can: { propose: false, edit: false, choose: false, extend: false },
 };
 
 const SEANCE_WITH_POLL: SeanceDto = {

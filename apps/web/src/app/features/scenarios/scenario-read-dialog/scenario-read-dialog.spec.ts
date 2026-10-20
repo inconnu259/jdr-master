@@ -682,6 +682,7 @@ describe('ScenarioReadDialog', () => {
               lieu: null,
               notePratique: null,
               createdAt: '2026-07-12T00:00:00.000Z',
+              can: { propose: false, edit: false, choose: false, extend: false },
               poll: {
                 id: 'poll1',
                 partieId: 'p1',

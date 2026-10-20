@@ -41,8 +41,12 @@ const CARD = {
   cancelled: false,
 };
 
+// Story 44.1 : la carte servie porte les droits d'organisateur de la personne qui lit (`PermissionService.organizerCan`).
+const CAN = { propose: true, edit: true, choose: false, extend: true };
+const SERVED = { ...CARD, can: CAN };
+
 describe('GroupEventsService (Story 40.1)', () => {
-  let permissions: { assert: jest.Mock };
+  let permissions: { assert: jest.Mock; organizerCan: jest.Mock };
   let events: {
     createHosted: jest.Mock;
     updateHosted: jest.Mock;
@@ -74,7 +78,14 @@ describe('GroupEventsService (Story 40.1)', () => {
 
   beforeEach(() => {
     order.length = 0;
-    permissions = { assert: jest.fn().mockResolvedValue(testGrant(GROUPE, 'member')) };
+    permissions = {
+      assert: jest.fn().mockResolvedValue(testGrant(GROUPE, 'member')),
+      organizerCan: jest
+        .fn()
+        .mockImplementation((_userId: string, targets: unknown[]) =>
+          Promise.resolve(targets.map(() => CAN)),
+        ),
+    };
     events = {
       createHosted: jest.fn(() => {
         order.push('create');
@@ -180,7 +191,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       expect(mailer.send).toHaveBeenCalledWith('g1', 'e1', 'u1', []);
       // Écriture validée, puis signaux de l'accueil, puis e-mail — jamais l'inverse.
       expect(order).toEqual(['cancel', 'signals', 'cancel-mail']);
-      expect(card).toBe(CARD);
+      expect(card).toEqual(SERVED);
     });
 
     it('la fermeture du sondage passée à l’écriture appelle PollService.closeInTx', async () => {
@@ -223,7 +234,7 @@ describe('GroupEventsService (Story 40.1)', () => {
         expect(cleanup.revokePendingInTx).toHaveBeenCalledWith(tx, 'g1');
         // Les adresses des invités sans réponse partent avec l'e-mail n° 7.
         expect(mailer.send).toHaveBeenCalledWith('g1', 'e1', 'u1', ['i1@example.com']);
-        expect(card).toBe(CARD);
+        expect(card).toEqual(SERVED);
       });
 
       it('un groupe ne passe aucun crochet : ses invitations ne bougent pas', async () => {
@@ -293,7 +304,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       expect(callArg<string[]>(events.listCards, 0, 2)).toEqual(['e1']);
       // La carte est celle de l'hôte (qui voit les places réservées en attente).
       expect(callArg<string>(events.listCards, 0, 1)).toBe('u1');
-      expect(card).toEqual(CARD);
+      expect(card).toEqual(SERVED);
       expect(email.sendMail).not.toHaveBeenCalled();
     });
 
@@ -337,12 +348,12 @@ describe('GroupEventsService (Story 40.1)', () => {
       email.sendMail.mockResolvedValue({ ok: false });
       await expect(
         service.create('g1', 'u1', dto({ capacity: 4, reservedUserIds: ['u2'] })),
-      ).resolves.toEqual(CARD);
+      ).resolves.toEqual(SERVED);
 
       events.reservationNotice.mockRejectedValue(new Error('base indisponible'));
       await expect(
         service.create('g1', 'u1', dto({ capacity: 4, reservedUserIds: ['u2'] })),
-      ).resolves.toEqual(CARD);
+      ).resolves.toEqual(SERVED);
     });
 
     it('capacité absente = « tous les membres » (null)', async () => {
@@ -426,7 +437,7 @@ describe('GroupEventsService (Story 40.1)', () => {
         bounds: GROUP_POLL_OPTION_BOUNDS,
       });
       expect(order).toEqual(['create', 'signals']);
-      expect(card).toEqual(CARD);
+      expect(card).toEqual(SERVED);
     });
 
     it('l’échéance d’aujourd’hui est acceptée', async () => {
@@ -580,7 +591,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       expect(order).toEqual(['update', 'signals']);
       expect(signals.notifyChanged).toHaveBeenCalledWith('g1');
       expect(callArg<string[]>(events.listCards, 0, 2)).toEqual(['e1']);
-      expect(card).toEqual(CARD);
+      expect(card).toEqual(SERVED);
     });
 
     it('les places réservées d’une modification sont ignorées (réservation tardive = route dédiée)', async () => {
@@ -621,7 +632,7 @@ describe('GroupEventsService (Story 40.1)', () => {
         ];
         expect(input.seance.capacity).toBeNull();
         expect(order).toEqual(['update', 'signals']);
-        expect(card).toEqual(CARD);
+        expect(card).toEqual(SERVED);
       });
 
       it('places limitées ou places réservées → 400, rien n’est écrit', async () => {
@@ -734,7 +745,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       expect(order).toEqual(['inscrire', 'signals']);
       expect(signals.notifyChanged).toHaveBeenCalledWith('g1');
       expect(callArg<string[]>(events.listCards, 0, 2)).toEqual(['e1']);
-      expect(card).toEqual(CARD);
+      expect(card).toEqual(SERVED);
     });
 
     it('desinscrire : retire puis signale, renvoie la carte', async () => {
@@ -744,7 +755,7 @@ describe('GroupEventsService (Story 40.1)', () => {
 
       expect(events.desinscrireConjonction).toHaveBeenCalledWith(grant, 'se1', 'u2');
       expect(order).toEqual(['desinscrire', 'signals']);
-      expect(card).toEqual(CARD);
+      expect(card).toEqual(SERVED);
     });
 
     it.each(['inscrire', 'desinscrire'] as const)(
@@ -803,7 +814,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       expect(signals.notifyChanged).toHaveBeenCalledWith('g1');
       expect(callArg<string>(events.listCards, 0, 1)).toBe('u1');
       expect(callArg<string[]>(events.listCards, 0, 2)).toEqual(['e1']);
-      expect(card).toEqual(CARD);
+      expect(card).toEqual(SERVED);
     });
 
     it('reserver : un refus de l’écriture (complet, déjà inscrit…) n’envoie aucun e-mail et ne signale rien', async () => {
@@ -818,7 +829,7 @@ describe('GroupEventsService (Story 40.1)', () => {
     it('reserver : un e-mail en échec n’annule pas la réservation (journalisé, jamais remonté)', async () => {
       email.sendMail.mockResolvedValue({ ok: false });
 
-      await expect(service.reserver(grantSeance(), 'u1', 'u2')).resolves.toEqual(CARD);
+      await expect(service.reserver(grantSeance(), 'u1', 'u2')).resolves.toEqual(SERVED);
       expect(signals.notifyChanged).toHaveBeenCalledWith('g1');
     });
 
@@ -831,7 +842,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       expect(order).toEqual(['retirer', 'signals']);
       expect(email.sendMail).not.toHaveBeenCalled();
       expect(callArg<string>(events.listCards, 0, 1)).toBe('u1');
-      expect(card).toEqual(CARD);
+      expect(card).toEqual(SERVED);
     });
 
     it('accepter : confirme la place de l’appelant puis signale, sans e-mail, renvoie sa carte', async () => {
@@ -843,7 +854,7 @@ describe('GroupEventsService (Story 40.1)', () => {
       expect(order).toEqual(['accepter', 'signals']);
       expect(email.sendMail).not.toHaveBeenCalled();
       expect(callArg<string>(events.listCards, 0, 1)).toBe('u2');
-      expect(card).toEqual(CARD);
+      expect(card).toEqual(SERVED);
     });
 
     it.each(['reserver', 'retirerReservation', 'accepter'] as const)(
@@ -879,7 +890,11 @@ describe('GroupEventsService (Story 40.1)', () => {
       expect(permissions.assert).toHaveBeenCalledWith('u2', 'EVENT_LIST', { partieId: 'g1' });
       expect(events.listCards).toHaveBeenCalledTimes(1);
       expect(callArg<string>(events.listCards, 0, 1)).toBe('u2');
-      expect(cards).toEqual([CARD]);
+      expect(cards).toEqual([SERVED]);
+      // Story 44.1 : les droits d'organisateur sont ceux de la personne qui lit, calculés en UN lot sur
+      // les événements listés — jamais déduits de `hostId`.
+      expect(permissions.organizerCan).toHaveBeenCalledTimes(1);
+      expect(permissions.organizerCan).toHaveBeenCalledWith('u2', [{ eventId: 'e1' }]);
     });
   });
 });
