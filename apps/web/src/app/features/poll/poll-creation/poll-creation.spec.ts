@@ -43,7 +43,28 @@ function makeScenariosService() {
 }
 
 function makeThemeService() {
-  return { tone: () => ({ 'success.poll_created': 'Vote créé !' }) };
+  return {
+    tone: () => ({
+      'success.poll_created': 'Vote créé !',
+      'common.annuler': 'Annuler',
+      'common.envoi': 'Envoi…',
+      'common.fermer': 'Fermer',
+      'common.supprimer': 'Supprimer',
+      'pollui.creation_title': 'Créer un vote de date',
+      'pollui.creation_computed_title': 'Créneaux calculés',
+      'pollui.creation_computed_empty': 'Aucun créneau calculé disponible.',
+      'pollui.creation_load_more_one': '{n} créneau calculé de plus',
+      'pollui.creation_load_more_many': '{n} créneaux calculés de plus',
+      'pollui.creation_all_shown': 'Tous les créneaux calculés sont affichés',
+      'pollui.creation_custom_title': 'Créneaux personnalisés',
+      'pollui.creation_add_custom': 'Ajouter un créneau personnalisé',
+      'pollui.creation_selected_count': '{n} option(s) sélectionnée(s)',
+      'pollui.creation_submit': 'Ouvrir le vote',
+      'pollui.creation_desync_error':
+        'Le vote a été créé, mais son état n’a pas pu être rafraîchi ici. Rechargez la page pour le voir plutôt que de recréer un vote.',
+      'pollui.creation_error': 'Impossible de créer le vote. Réessayez.',
+    }),
+  };
 }
 
 function makeSnackBar() {

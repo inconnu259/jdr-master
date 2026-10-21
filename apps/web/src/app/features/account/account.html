@@ -33,7 +33,9 @@
         <button
           type="button"
           class="field-edit-pencil__button"
-          [attr.aria-label]="'Modifier ' + theme.tone()['account.email_label']"
+          [attr.aria-label]="
+            theme.tone()['common.modifier'] + ' ' + theme.tone()['account.email_label']
+          "
           (click)="startEmailEdit()"
         >
           ✎
@@ -43,7 +45,14 @@
       <form [formGroup]="emailForm" (ngSubmit)="submitEmailChange()" class="inline-edit-form">
         <mat-form-field appearance="outline">
           <mat-label>{{ theme.tone()['account.current_password_for_email_label'] }}</mat-label>
-          <input matInput type="password" formControlName="currentPassword" />
+          <input
+            matInput
+            type="password"
+            formControlName="currentPassword"
+            appPasswordReveal
+            #emailPw="appPasswordReveal"
+          />
+          <app-password-toggle matSuffix [for]="emailPw" />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -55,11 +64,7 @@
           <button mat-button type="button" (click)="cancelEmailEdit()">
             {{ theme.tone()['account.cancel_btn'] }}
           </button>
-          <button
-            mat-flat-button
-            type="submit"
-            [disabled]="emailSaving() || emailForm.invalid"
-          >
+          <button mat-flat-button type="submit" [disabled]="emailSaving() || emailForm.invalid">
             {{ theme.tone()['account.email_change_save_btn'] }}
           </button>
         </div>
@@ -108,12 +113,26 @@
       <form [formGroup]="passwordForm" (ngSubmit)="submitPassword()" class="inline-edit-form">
         <mat-form-field appearance="outline">
           <mat-label>{{ theme.tone()['account.current_password_label'] }}</mat-label>
-          <input matInput type="password" formControlName="currentPassword" />
+          <input
+            matInput
+            type="password"
+            formControlName="currentPassword"
+            appPasswordReveal
+            #currentPw="appPasswordReveal"
+          />
+          <app-password-toggle matSuffix [for]="currentPw" />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>{{ theme.tone()['account.new_password_label'] }}</mat-label>
-          <input matInput type="password" formControlName="newPassword" />
+          <input
+            matInput
+            type="password"
+            formControlName="newPassword"
+            appPasswordReveal
+            #newPw="appPasswordReveal"
+          />
+          <app-password-toggle matSuffix [for]="newPw" />
         </mat-form-field>
 
         <div class="actions">
@@ -143,4 +162,27 @@
       {{ theme.tone()['nav.logout'] }}
     </button>
   </div>
+
+  <!-- ⚠️ Story 43.1 (UX-DR13) — zone sensible, sous « Fermer le grimoire » (la déconnexion), séparée
+       par un filet. -->
+  <section class="danger-zone" aria-labelledby="danger-zone-title">
+    <h2 id="danger-zone-title" class="lbl danger-zone__label">
+      {{ theme.tone()['account.danger_title'] }}
+    </h2>
+    <p class="danger-zone__explain">{{ theme.tone()['account.danger_explain'] }}</p>
+    <div class="actions actions--start">
+      <button
+        type="button"
+        class="danger-pill"
+        [disabled]="deleteLoading()"
+        (click)="openDeleteAccount()"
+      >
+        <mat-icon aria-hidden="true">delete</mat-icon>
+        {{ theme.tone()['account.delete_pill'] }}
+      </button>
+    </div>
+    @if (deleteError()) {
+      <p class="error" role="alert">{{ deleteError() }}</p>
+    }
+  </section>
 </mat-card>

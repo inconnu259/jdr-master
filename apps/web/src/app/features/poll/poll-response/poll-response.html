@@ -16,7 +16,7 @@
             [class.poll-response__btn--active]="getAnswer(opt.id) === a"
             [disabled]="isClosed() || saving() || withdrawingOptionIds().has(opt.id)"
             (click)="setAnswer(opt.id, a)"
-          >{{ a }}</button>
+          >{{ theme.tone()[VOTE_LABEL_KEYS[a]] }}</button>
         }
         @if (confirmedOptionIds().has(opt.id)) {
           <button
@@ -28,7 +28,7 @@
         }
       </div>
       @if (failedOptionIds().has(opt.id)) {
-        <span class="poll-response__option-error" aria-label="Non enregistré">⚠</span>
+        <span class="poll-response__option-error" [attr.aria-label]="theme.tone()['pollui.response_not_saved_aria']">⚠</span>
       }
     </div>
   }
@@ -46,7 +46,7 @@
         [disabled]="!hasSelection() || saving()"
         (click)="onConfirm()"
       >
-        @if (saving()) { Envoi… } @else { {{ theme.tone()['cta.confirm_votes'] }} }
+        @if (saving()) { {{ theme.tone()['common.envoi'] }} } @else { {{ theme.tone()['cta.confirm_votes'] }} }
       </button>
     </div>
   }

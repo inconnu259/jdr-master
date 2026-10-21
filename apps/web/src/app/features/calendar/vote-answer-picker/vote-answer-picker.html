@@ -5,7 +5,7 @@
   Motif ARIA de menu : le conteneur est nommé par le jour et le créneau, chaque choix est un
   `menuitemradio` dont `aria-checked` dit lequel est le mien, le retrait est un `menuitem`.
 -->
-<div class="picker" role="menu" [attr.aria-label]="'Répondre au vote — ' + slotLabel()">
+<div class="picker" role="menu" [attr.aria-label]="menuAriaLabel()">
   <!-- Nommer le créneau n'est pas décoratif : le sélecteur est ancré sur une bande de quelques
        pixels, et rien d'autre à l'écran ne dit sur QUEL créneau on est en train de répondre. -->
   <div class="picker__head">{{ slotLabel() }}</div>
@@ -38,7 +38,7 @@
       [disabled]="busy()"
       (click)="withdraw()"
     >
-      Retirer ma réponse
+      {{ theme.tone()['calendar.answer_withdraw'] }}
     </button>
   }
 </div>

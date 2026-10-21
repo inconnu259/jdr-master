@@ -1,0 +1,63 @@
+import { Module } from '@nestjs/common';
+import { EmailModule } from '../email/email.module';
+import { PermissionsModule } from '../permissions/permissions.module';
+import { InvitationCleanupService } from '../invitations/invitation-cleanup.service';
+import { PollModule } from '../poll/poll.module';
+import { EventCancellationMailer } from './event-cancellation-mailer.service';
+import { EventsController } from './events.controller';
+import { EventsService } from './events.service';
+import { GroupEventsService } from './group-events.service';
+import { GroupPollChoiceService } from './group-poll-choice.service';
+import { GroupPollExtensionService } from './group-poll-extension.service';
+
+/**
+ * Événement de base, séances et inscriptions (Story 37.3, couche 2 « rassemblement »).
+ * N'importe aucun module métier — seuls `PrismaService` et `RealtimeEventsService` (globaux) sont
+ * injectés — pour que `PartiesModule` (couche 2) comme `ScenariosModule` (couche 3) puissent
+ * l'importer sans cycle.
+ *
+ * Story 40.1 : les conjonctions d'un groupe (`EventsController` → `GroupEventsService`) ajoutent
+ * `PermissionsModule` (transverse, sans module métier) et le port des signaux de partie
+ * (`PARTIE_SIGNALS_PORT`, fourni par le `PortsModule` global) — jamais `PartiesModule`/
+ * `PartiesService`, qui importe ce module.
+ *
+ * Story 40.4 : `EmailModule` (transverse) envoie l'e-mail « une place vous est réservée » après le commit.
+ *
+ * Story 40.5 : `PollModule` (couche 1) — `GroupEventsService` fait écrire le sondage d'une conjonction par
+ * `PollService`, dans la transaction de l'événement. `PollModule` n'importe jamais `events/` (ports).
+ *
+ * Story 40.6 : `GroupPollChoiceService` (fixer la date d'une conjonction) est exporté pour `PortsModule`,
+ * qui le lie à `GroupPollChoosePort` — il dépend de `PermissionsModule` et `EmailModule`, jamais de `poll/`.
+ *
+ * Story 40.7 : `GroupPollExtensionService` (prolonger le vote) est exporté pour `PortsModule`, qui le lie à
+ * `GroupPollExtendPort` — il ne dépend que de `PermissionsModule`, jamais de `poll/`.
+ *
+ * Story 42.2 : `InvitationCleanupService` (code d'`invitations/`, sans dépendance) révoque les invitations d'une
+ * soirée isolée annulée — fourni ICI car `InvitationsModule` importe ce module (l'inverse ferait un cycle).
+ *
+ * Story 42.3 : `EventCancellationMailer` (e-mail n° 7) est exporté — `PartiesService.leave()` l'appelle après le
+ * commit du départ d'un hôte, sans passer par `GroupEventsService` (cycle de fournisseurs).
+ *
+ * Story 40.3 : `GroupEventsService` est exporté — les routes d'inscription partagées avec le JDR
+ * (`scenarios/seances/:id/inscription`) y délèguent la branche « groupe ».
+ */
+@Module({
+  imports: [PermissionsModule, EmailModule, PollModule],
+  controllers: [EventsController],
+  providers: [
+    EventsService,
+    EventCancellationMailer,
+    InvitationCleanupService,
+    GroupEventsService,
+    GroupPollChoiceService,
+    GroupPollExtensionService,
+  ],
+  exports: [
+    EventsService,
+    EventCancellationMailer,
+    GroupEventsService,
+    GroupPollChoiceService,
+    GroupPollExtensionService,
+  ],
+})
+export class EventsModule {}

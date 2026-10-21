@@ -1,5 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { InventoryItemRow } from './inventory-item-row';
+import { TONE_MAP } from '../../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 describe('InventoryItemRow', () => {
   afterEach(() => TestBed.resetTestingModule());
@@ -152,7 +155,9 @@ describe('InventoryItemRow', () => {
     await fixture.whenStable();
 
     expect(
-      fixture.nativeElement.querySelector('button[aria-label="Modifier l\'objet"]'),
+      fixture.nativeElement.querySelector(
+        `button[aria-label="${GRIMOIRE_TONE['characters_sheet.item_edit_aria']}"]`,
+      ),
     ).not.toBeNull();
     expect(
       fixture.nativeElement.querySelector('button[aria-label="Supprimer l\'objet"]'),

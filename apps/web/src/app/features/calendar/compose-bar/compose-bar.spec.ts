@@ -3,6 +3,10 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { ComposeBar } from './compose-bar';
+import { TONE_MAP } from '../../../core/theme/tones';
+import { fillTone } from '../../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 /** Story 36.10 — la barre persistante du mode de composition. Composant de rendu pur. */
 describe('ComposeBar (Story 36.10)', () => {
@@ -45,18 +49,22 @@ describe('ComposeBar (Story 36.10)', () => {
   it('AC1 — rendue même à zéro créneau : c’est la seule sortie visible du mode', async () => {
     const fixture = await render({ count: 0 });
     expect(fixture.nativeElement.querySelector('.compose-bar')).not.toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Aucun créneau désigné');
+    expect(fixture.nativeElement.textContent).toContain(
+      GRIMOIRE_TONE['calendar.compose_count_none'],
+    );
   });
 
   it('AC16 — le compte est annoncé, et accordé au singulier comme au pluriel', async () => {
     const one = await render({ count: 1 });
     const live = one.nativeElement.querySelector('[aria-live="polite"]');
-    expect(live.textContent.trim()).toBe('1 créneau désigné');
+    expect(live.textContent.trim()).toBe(
+      fillTone(GRIMOIRE_TONE['calendar.compose_count_one'], { n: 1 }),
+    );
 
     TestBed.resetTestingModule();
     const many = await render({ count: 3 });
     expect(many.nativeElement.querySelector('[aria-live="polite"]').textContent.trim()).toBe(
-      '3 créneaux désignés',
+      fillTone(GRIMOIRE_TONE['calendar.compose_count_many'], { n: 3 }),
     );
   });
 
@@ -93,7 +101,7 @@ describe('ComposeBar (Story 36.10)', () => {
 
     fixture.nativeElement.querySelector('.compose-bar__confirm').click();
     [...fixture.nativeElement.querySelectorAll('button')]
-      .find((b: HTMLButtonElement) => b.textContent?.trim() === 'Annuler')!
+      .find((b: HTMLButtonElement) => b.textContent?.trim() === GRIMOIRE_TONE['common.annuler'])!
       .click();
 
     expect(confirmed).toHaveBeenCalledTimes(1);

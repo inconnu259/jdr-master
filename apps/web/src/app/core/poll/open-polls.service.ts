@@ -18,7 +18,7 @@ export class OpenPollsService {
   // Parties) et refreshOne() (une seule Partie) faisait qu'un refreshOne() plus rapide pouvait
   // invalider un refresh() encore en vol alors que son résultat est un sur-ensemble — les polls
   // des AUTRES Parties de ce refresh() étaient alors silencieusement perdus pour le reste de la
-  // session (cas concret : rechargement direct d'une page Partie, où Shell.refreshPlayerParties()
+  // session (cas concret : rechargement direct d'une page Partie, où Shell.refreshAll()
   // et le canal SSE partie:{id} de la page démarrent quasi simultanément). Un compteur par Partie
   // permet à refresh()/refreshOne() de s'entrelacer sans s'invalider : seule la requête la plus
   // récente POUR CETTE PARTIE gagne, peu importe qu'elle vienne de l'une ou l'autre méthode.

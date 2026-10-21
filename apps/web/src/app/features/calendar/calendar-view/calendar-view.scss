@@ -178,6 +178,44 @@
   cursor: pointer;
 }
 
+/* Story 40.5b — calendrier d'un groupe : un bouton « composer » par sondage dont on est l'hôte (même
+   forme que l'armement ci-dessus) ; le panneau des votes occupe la colonne latérale du mode joueur. */
+.compose-arm--group {
+  min-height: 44px;
+}
+
+.group-polls__title {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.group-polls__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group-poll {
+  padding: 8px 10px;
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 8px;
+}
+
+.group-poll__title {
+  margin: 0 0 2px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.group-poll__state {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
 .poll-entry {
   margin-bottom: 20px;
   padding-bottom: 16px;

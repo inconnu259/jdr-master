@@ -1,7 +1,9 @@
-<div class="selection-bar" role="toolbar" aria-label="Actions sur la sélection">
-  <b class="selection-bar__count" aria-live="polite">
-    {{ count() }} {{ count() > 1 ? 'créneaux' : 'créneau' }} sélectionné{{ count() > 1 ? 's' : '' }}
-  </b>
+<div
+  class="selection-bar"
+  role="toolbar"
+  [attr.aria-label]="theme.tone()['calendar.selbar_toolbar_aria']"
+>
+  <b class="selection-bar__count" aria-live="polite">{{ countLabel() }}</b>
   @if (rangeLabel()) {
     <span class="selection-bar__range">{{ rangeLabel() }}</span>
   }
@@ -14,7 +16,7 @@
   <div
     class="selection-bar__scope"
     role="radiogroup"
-    aria-label="Portée de la sélection"
+    [attr.aria-label]="theme.tone()['calendar.selbar_scope_aria']"
     tabindex="0"
     (keydown)="onScopeKeydown($event)"
   >
@@ -70,7 +72,7 @@
       (focus)="armedKindChange.emit('AVAILABLE')"
       (click)="markAvailable.emit()"
     >
-      Disponible
+      {{ theme.tone()['common.disponible'] }}
     </button>
   } @else {
     <button
@@ -82,7 +84,7 @@
       (focus)="armedKindChange.emit('AVAILABLE')"
       (click)="markAvailable.emit()"
     >
-      Disponible
+      {{ theme.tone()['common.disponible'] }}
     </button>
   }
   @if (armedKind() === 'UNAVAILABLE') {
@@ -95,7 +97,7 @@
       (focus)="armedKindChange.emit('UNAVAILABLE')"
       (click)="markUnavailable.emit()"
     >
-      Indisponible
+      {{ theme.tone()['common.indisponible'] }}
     </button>
   } @else {
     <button
@@ -107,20 +109,19 @@
       (focus)="armedKindChange.emit('UNAVAILABLE')"
       (click)="markUnavailable.emit()"
     >
-      Indisponible
+      {{ theme.tone()['common.indisponible'] }}
     </button>
   }
 
   <!-- AC4 : SEUL chemin vers ConstraintPanel, donc vers la contrainte récurrente (story 1.7),
        la modification, la suppression et la découpe. -->
   <button mat-stroked-button type="button" class="other-btn" (click)="otherRequested.emit()">
-    Autre…
+    {{ theme.tone()['calendar.selbar_other'] }}
   </button>
-  <button mat-button type="button" (click)="cancelled.emit()">Annuler</button>
+  <button mat-button type="button" (click)="cancelled.emit()">
+    {{ theme.tone()['common.annuler'] }}
+  </button>
 
   <!-- AC14 : l'état de la barre en toutes lettres, pour qui ne la voit pas. -->
-  <span class="visually-hidden" aria-live="polite">
-    Portée : {{ scopeLabel() }}. Entrée validera :
-    {{ armedKind() === 'AVAILABLE' ? 'Disponible' : 'Indisponible' }}.
-  </span>
+  <span class="visually-hidden" aria-live="polite">{{ announcement() }}</span>
 </div>

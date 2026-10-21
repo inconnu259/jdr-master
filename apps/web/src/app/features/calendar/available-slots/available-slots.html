@@ -2,7 +2,11 @@
   <h2 class="available-slots__title">{{ theme.tone()['section.slots'] }}</h2>
 
   @if (loading()) {
-    <div class="available-slots__loading" aria-busy="true" aria-label="Chargement en cours">
+    <div
+      class="available-slots__loading"
+      aria-busy="true"
+      [attr.aria-label]="theme.tone()['common.chargement_en_cours']"
+    >
       <span class="available-slots__skeleton" aria-hidden="true"></span>
       <span class="available-slots__skeleton" aria-hidden="true"></span>
       <span class="available-slots__skeleton" aria-hidden="true"></span>
@@ -18,7 +22,7 @@
   }
 
   @if (!loading() && !error() && sortedSlots().length > 0) {
-    <ul class="available-slots__list" aria-label="Créneaux disponibles">
+    <ul class="available-slots__list" [attr.aria-label]="theme.tone()['calendar.slots_list_aria']">
       @for (s of sortedSlots(); track s.date + s.slot) {
         <li>
           @if (isMjSlot(s)) {

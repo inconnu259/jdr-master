@@ -265,6 +265,15 @@
   background: rgba(0, 0, 0, 0.45);
 }
 
+// Correctif de revue (session bmad-build, 2026-09-22) : indication qu'une section est masquée par
+// un cadenas de visibilité (Story 31.6/31.7), distincte d'une section vide — même style que
+// `.inventory-tab__empty`.
+.sheet__masked-note {
+  color: var(--mat-sys-on-surface-variant, #888);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
 // Story 31.2 — déclencheur de la surface de détail (talent/avantage/sort). Reset des styles de
 // bouton natif pour reprendre exactement l'apparence du <strong> qu'il remplace (AC7 : élément
 // interactif réel, mais visuellement identique à l'ancien texte inerte).

@@ -4,6 +4,10 @@ import { vi } from 'vitest';
 import type { AvailKind, DaySlot } from '@master-jdr/shared';
 import type { AgendaSealRequest } from '../calendar-agenda-view/calendar-agenda-view';
 import { SelectionBar } from './selection-bar';
+import { TONE_MAP } from '../../../core/theme/tones';
+import { fillTone } from '../../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const SEAL_CANDIDATE: AgendaSealRequest = {
   partieId: 'p1',
@@ -46,14 +50,20 @@ describe('SelectionBar', () => {
 
   it('affiche le nombre de créneaux sélectionnés', () => {
     create(4, 'mar. → ven., soirée');
-    expect(el.textContent).toContain('4 créneaux');
+    expect(el.textContent).toContain(
+      fillTone(GRIMOIRE_TONE['calendar.selbar_count_many'], { n: 4 }),
+    );
     expect(el.textContent).toContain('mar. → ven., soirée');
   });
 
   it('un seul créneau → singulier', () => {
     create(1);
-    expect(el.textContent).toContain('1 créneau');
-    expect(el.textContent).not.toContain('1 créneaux');
+    expect(el.textContent).toContain(
+      fillTone(GRIMOIRE_TONE['calendar.selbar_count_one'], { n: 1 }),
+    );
+    expect(el.textContent).not.toContain(
+      fillTone(GRIMOIRE_TONE['calendar.selbar_count_many'], { n: 1 }),
+    );
   });
 
   it('clic sur Disponible émet markAvailable', () => {
@@ -76,7 +86,7 @@ describe('SelectionBar', () => {
     create(2);
     const spy = vi.fn();
     fixture.componentInstance.cancelled.subscribe(spy);
-    buttonByText('Annuler').click();
+    buttonByText(GRIMOIRE_TONE['common.annuler']).click();
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
@@ -127,7 +137,7 @@ describe('SelectionBar', () => {
     create(2);
     const spy = vi.fn();
     fixture.componentInstance.otherRequested.subscribe(spy);
-    buttonByText('Autre…').click();
+    buttonByText(GRIMOIRE_TONE['calendar.selbar_other']).click();
     expect(spy).toHaveBeenCalledTimes(1);
   });
 

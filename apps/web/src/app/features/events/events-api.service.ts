@@ -1,0 +1,149 @@
+import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
+import type {
+  CreateEventDto,
+  EventCardDto,
+  ExtendPollDto,
+  UpdateEventDto,
+} from '@master-jdr/shared';
+import { API_BASE } from '../../core/api-base';
+
+/**
+ * Conjonctions d'un groupe de ralliement (Stories 40.1 et 40.2) — accès HTTP seul, aucun état.
+ *
+ * 🚨 La liste vit sur `GET /parties/:id/events/list` : `GET /parties/:id/events` est le flux temps
+ * réel (SSE) de la partie. Le rafraîchissement en direct ne passe PAS par un nouveau handler
+ * `'partie:'` (checklist) : l'onglet réagit au signal `PartiesService.changed()`, déjà câblé sur le
+ * canal `partie:{id}` de la page.
+ */
+@Injectable({ providedIn: 'root' })
+export class EventsApiService {
+  private readonly http = inject(HttpClient);
+
+  /** Une requête par appel, JAMAIS partagée avec une requête déjà en vol : la relecture qui suit
+   *  une création doit voir l'état validé, pas un instantané pris avant. La péremption des réponses
+   *  est gérée par l'appelant (compteur de requêtes de `ConjonctionsTab`). */
+  list(partieId: string): Promise<EventCardDto[]> {
+    return firstValueFrom(
+      this.http.get<EventCardDto[]>(`${API_BASE}/parties/${partieId}/events/list`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  create(partieId: string, dto: CreateEventDto): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.post<EventCardDto>(`${API_BASE}/parties/${partieId}/events`, dto, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  /** Story 40.3 : s'inscrire à la conjonction dont la séance est `seanceId` — route partagée avec le
+   *  JDR (`POST /scenarios/seances/:id/inscription`), qui répond ici la carte à jour. Idempotent côté
+   *  serveur ; refus en français (complet 409, passée 400). */
+  inscrire(seanceId: string): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.post<EventCardDto>(
+        `${API_BASE}/scenarios/seances/${seanceId}/inscription`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  /** Story 40.3 : se désinscrire (`DELETE /scenarios/seances/:id/inscription`) — la carte à jour. */
+  desinscrire(seanceId: string): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.delete<EventCardDto>(`${API_BASE}/scenarios/seances/${seanceId}/inscription`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  /** Story 40.4 : accepter la place qui m'est réservée (`PATCH /scenarios/seances/:id/inscription/accept`)
+   *  — la carte à jour. Décliner réutilise `desinscrire`. */
+  accepter(seanceId: string): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.patch<EventCardDto>(
+        `${API_BASE}/scenarios/seances/${seanceId}/inscription/accept`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  /** Story 40.4 : l'hôte réserve une place à un membre (`POST /scenarios/seances/:id/reservations`) —
+   *  la carte à jour, vue de l'hôte. Refus en français (complet 409, déjà inscrit 409, passée 400…). */
+  reserver(seanceId: string, userId: string): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.post<EventCardDto>(
+        `${API_BASE}/scenarios/seances/${seanceId}/reservations`,
+        { userId },
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  /** Story 40.4 : l'hôte retire la réservation d'un membre
+   *  (`DELETE /scenarios/seances/:id/reservations/:userId`) — la carte à jour. */
+  retirerReservation(seanceId: string, userId: string): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.delete<EventCardDto>(
+        `${API_BASE}/scenarios/seances/${seanceId}/reservations/${userId}`,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  /** Story 40.6 : l'hôte fixe la date de sa conjonction depuis son sondage
+   *  (`PATCH /parties/:id/poll/:pollId/choose`, route partagée avec le JDR — la famille de la partie décide).
+   *  Rien n'est renvoyé : la carte à jour arrive par la relecture de la liste. Refus en français (pas
+   *  l'hôte 403, date déjà fixée 400…). */
+  choose(partieId: string, pollId: string, optionId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.patch<void>(
+        `${API_BASE}/parties/${partieId}/poll/${pollId}/choose`,
+        { optionId },
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  /** Story 40.7 : l'hôte prolonge le vote de sa conjonction (`PATCH /parties/:id/poll/:pollId/extend`,
+   *  `expiresAt` = clé `YYYY-MM-DD` du nouveau jour d'échéance). Rien n'est renvoyé : la carte à jour arrive
+   *  par la relecture de la liste. Refus en français (pas l'hôte 403, jour non postérieur 400…). */
+  extend(partieId: string, pollId: string, expiresAt: string): Promise<void> {
+    const dto: ExtendPollDto = { expiresAt };
+    return firstValueFrom(
+      this.http.patch<void>(`${API_BASE}/parties/${partieId}/poll/${pollId}/extend`, dto, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  /** Story 42.1 : l'hôte, ou un administrateur du groupe, annule la conjonction (`POST /parties/:id/events/:eventId/cancel`,
+   *  définitif) — renvoie la carte à jour, `cancelled` posé. */
+  cancel(partieId: string, eventId: string): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.post<EventCardDto>(
+        `${API_BASE}/parties/${partieId}/events/${eventId}/cancel`,
+        null,
+        {
+          withCredentials: true,
+        },
+      ),
+    );
+  }
+
+  /** Story 40.2 : l'hôte remplace sa conjonction (`PATCH /parties/:id/events/:eventId`) — renvoie
+   *  la carte à jour, participants compris. */
+  update(partieId: string, eventId: string, dto: UpdateEventDto): Promise<EventCardDto> {
+    return firstValueFrom(
+      this.http.patch<EventCardDto>(`${API_BASE}/parties/${partieId}/events/${eventId}`, dto, {
+        withCredentials: true,
+      }),
+    );
+  }
+}

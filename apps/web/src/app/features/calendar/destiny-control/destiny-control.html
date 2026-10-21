@@ -18,7 +18,7 @@
         <button
           type="button"
           class="destiny__arrow"
-          aria-label="Vote précédent"
+          [attr.aria-label]="theme.tone()['calendar.destiny_prev_aria']"
           (click)="prevRequested.emit()"
         >
           ‹
@@ -27,7 +27,7 @@
         <button
           type="button"
           class="destiny__arrow"
-          aria-label="Vote suivant"
+          [attr.aria-label]="theme.tone()['calendar.destiny_next_aria']"
           (click)="nextRequested.emit()"
         >
           ›

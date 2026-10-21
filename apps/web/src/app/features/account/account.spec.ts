@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { of } from 'rxjs';
 import { provideRouter, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { vi } from 'vitest';
@@ -9,6 +10,9 @@ import { Account } from './account';
 import { AuthService } from '../../core/auth/auth.service';
 import { AccountService } from '../../core/account/account.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
+import { TONE_MAP } from '../../core/theme/tones';
+import { MatDialog } from '@angular/material/dialog';
+import { DeleteAccountDialog } from './delete-account-dialog/delete-account-dialog';
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 
 function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
@@ -41,10 +45,10 @@ function makeThemeService() {
   return {
     tone: () => ({
       'account.title': 'Mon grimoire personnel',
+      'characters_sheet.field_edit_aria': 'Modifier {label}',
       'account.pseudo_label': 'Signe de reconnaissance',
       'account.email_label': 'Sceau de correspondance',
       'account.display_name_label': 'Nom affiché',
-      'account.save_btn': 'Sceller',
       'account.cancel_btn': 'Renoncer',
       'account.saved': 'Le grimoire a retenu ce nom.',
       'account.error': "Le grimoire n'a pas pu retenir ce changement. Réessayez.",
@@ -55,7 +59,6 @@ function makeThemeService() {
       'account.password_saved': 'Le mot de passe a été changé.',
       'account.password_wrong_current': 'Mot de passe actuel incorrect.',
       'account.password_error': 'Le changement a échoué. Réessayez.',
-      'account.email_change_title': "Changer d'adresse e-mail",
       'account.current_password_for_email_label': 'Mot de passe actuel',
       'account.new_email_label': 'Nouvelle adresse e-mail',
       'account.email_change_save_btn': 'Envoyer la demande',
@@ -78,14 +81,20 @@ function makeThemeService() {
       'account.calendar_intent.votes': 'Les votes en cours',
       'account.calendar_intent.groupe': 'La disponibilité du groupe',
       'nav.logout': 'Fermer le grimoire',
+      // Story 35.2 — textes ex-codés en dur (libellé de section du sélecteur, libellé commun).
+      'account.appearance_label': 'Apparence',
+      'common.modifier': 'Modifier',
+      // Story 34.2 — libellés du bouton de révélation du mot de passe.
+      'auth.password_show': 'Afficher le mot de passe',
+      'auth.password_hide': 'Masquer le mot de passe',
     }),
     // ThemeSelector (intégré à l'écran de compte, Story 28.4) a besoin de ces membres.
     activeTheme: signal('grimoire-emeraude'),
-    themes: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
+    themes: ['grimoire-emeraude', 'foret-ancienne', 'atelier-cuivre'],
     themeNames: {
       'grimoire-emeraude': 'Grimoire Émeraude',
       'foret-ancienne': 'Forêt Ancienne',
-      'medieval-steampunk': 'Médiéval Steampunk',
+      'atelier-cuivre': 'Atelier Cuivré',
     },
     setTheme: vi.fn(),
   };
@@ -639,6 +648,134 @@ describe('Account — jeu de couches du calendrier par défaut (Story 30.4, Task
   });
 });
 
+describe('Account — champs de mot de passe révélables (Story 34.2)', () => {
+  function passwordFields(root: HTMLElement) {
+    return {
+      inputs: Array.from(root.querySelectorAll('input[formControlName]')).filter((i) =>
+        ['currentPassword', 'newPassword'].includes(i.getAttribute('formControlName')!),
+      ) as HTMLInputElement[],
+      toggles: Array.from(
+        root.querySelectorAll('app-password-toggle button'),
+      ) as HTMLButtonElement[],
+    };
+  }
+
+  it('mot de passe : champs actuel et nouveau indépendants, chacun masqué au départ', async () => {
+    const { fixture } = await createFixture();
+    const component = fixture.componentInstance as any;
+    component.startPasswordEdit();
+    fixture.detectChanges();
+
+    const { inputs, toggles } = passwordFields(fixture.nativeElement);
+    expect(inputs.map((i) => i.type)).toEqual(['password', 'password']);
+    expect(toggles.length).toBe(2);
+
+    toggles[1].click();
+    fixture.detectChanges();
+    expect(inputs.map((i) => i.type)).toEqual(['password', 'text']);
+    expect(toggles.map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+
+    toggles[0].click();
+    fixture.detectChanges();
+    expect(inputs.map((i) => i.type)).toEqual(['text', 'text']);
+
+    toggles[1].click();
+    fixture.detectChanges();
+    expect(inputs.map((i) => i.type)).toEqual(['text', 'password']);
+  });
+
+  it('mot de passe : la valeur saisie et la validité sont conservées à la bascule', async () => {
+    const { fixture } = await createFixture();
+    const component = fixture.componentInstance as any;
+    component.startPasswordEdit();
+    fixture.detectChanges();
+    component.passwordForm.setValue({ currentPassword: 'oldpw', newPassword: 'newpassword123' });
+    fixture.detectChanges();
+
+    passwordFields(fixture.nativeElement).toggles[1].click();
+    fixture.detectChanges();
+
+    expect(component.passwordForm.getRawValue()).toEqual({
+      currentPassword: 'oldpw',
+      newPassword: 'newpassword123',
+    });
+    expect(component.passwordForm.valid).toBe(true);
+  });
+
+  it('formulaire de mot de passe refermé puis rouvert : à nouveau masqué', async () => {
+    const { fixture } = await createFixture();
+    const component = fixture.componentInstance as any;
+    component.startPasswordEdit();
+    fixture.detectChanges();
+    for (const b of passwordFields(fixture.nativeElement).toggles) b.click();
+    fixture.detectChanges();
+    expect(passwordFields(fixture.nativeElement).inputs.map((i) => i.type)).toEqual([
+      'text',
+      'text',
+    ]);
+
+    component.cancelPasswordEdit();
+    fixture.detectChanges();
+    component.startPasswordEdit();
+    fixture.detectChanges();
+
+    const { inputs, toggles } = passwordFields(fixture.nativeElement);
+    expect(inputs.map((i) => i.type)).toEqual(['password', 'password']);
+    expect(toggles.map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'false']);
+  });
+
+  it('demande de changement d’e-mail : le mot de passe actuel est révélable, pas le champ e-mail', async () => {
+    const { fixture } = await createFixture();
+    const component = fixture.componentInstance as any;
+    component.startEmailEdit();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const pw = root.querySelector('input[formControlName="currentPassword"]') as HTMLInputElement;
+    const email = root.querySelector('input[formControlName="newEmail"]') as HTMLInputElement;
+    const toggles = Array.from(
+      root.querySelectorAll('app-password-toggle button'),
+    ) as HTMLButtonElement[];
+    expect(toggles.length).toBe(1);
+    expect(pw.type).toBe('password');
+
+    toggles[0].click();
+    fixture.detectChanges();
+    expect(pw.type).toBe('text');
+    expect(email.type).toBe('email');
+    expect(toggles[0].getAttribute('aria-label')).toBe('Masquer le mot de passe');
+
+    component.cancelEmailEdit();
+    fixture.detectChanges();
+    component.startEmailEdit();
+    fixture.detectChanges();
+    const reopened = root.querySelector(
+      'input[formControlName="currentPassword"]',
+    ) as HTMLInputElement;
+    expect(reopened.type).toBe('password');
+  });
+
+  it('le bouton de révélation ne soumet pas le formulaire de mot de passe', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn().mockResolvedValue({ ok: true }),
+      requestEmailChange: vi.fn(),
+      updatePreferences: vi.fn(),
+    };
+    const { fixture } = await createFixture(makeUser(), accountSvc);
+    const component = fixture.componentInstance as any;
+    component.startPasswordEdit();
+    fixture.detectChanges();
+    component.passwordForm.setValue({ currentPassword: 'oldpw', newPassword: 'newpassword123' });
+
+    passwordFields(fixture.nativeElement).toggles[0].click();
+    fixture.detectChanges();
+
+    expect(accountSvc.changePassword).not.toHaveBeenCalled();
+  });
+});
+
 describe('Account — déconnexion (Story 29.3, foyer déplacé depuis le menu du Shell)', () => {
   it('un bouton de déconnexion est rendu', async () => {
     const { fixture } = await createFixture();
@@ -806,5 +943,126 @@ describe('Account — « Ce que révèle mon calendrier » en intentions (Story 
     (fixture.componentInstance as any).onIntentToggle('votes', true);
 
     expect(currentUserSignal()?.defaultCalendarLayers).toContain('votes-en-cours');
+  });
+});
+
+describe('Account — zone sensible (Story 43.1)', () => {
+  const IMPACT = {
+    groups: [{ id: 'g1', name: 'La Bande du Jeudi', memberCount: 14, eventCount: 6 }],
+    jdrParties: [],
+  };
+
+  async function createDangerFixture(
+    accountSvc: Record<string, ReturnType<typeof vi.fn>>,
+    closedWith: boolean | undefined = undefined,
+  ) {
+    const dialog = { open: vi.fn(() => ({ afterClosed: () => of(closedWith) })) };
+    const currentUser = signal<AuthUser | null>(makeUser({ pseudo: 'alice' }));
+    await TestBed.configureTestingModule({
+      imports: [Account],
+      providers: [
+        provideRouter([]),
+        { provide: AuthService, useValue: { currentUser } },
+        { provide: AccountService, useValue: accountSvc },
+        { provide: MatDialog, useValue: dialog },
+        {
+          provide: ThemeToneService,
+          useValue: {
+            tone: signal(TONE_MAP['grimoire-emeraude']),
+            activeTheme: signal('grimoire-emeraude'),
+            themes: ['grimoire-emeraude', 'foret-ancienne', 'atelier-cuivre'],
+            themeNames: {},
+            setTheme: vi.fn(),
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(Account);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    return { fixture, dialog, currentUser, navigate, el: fixture.nativeElement as HTMLElement };
+  }
+
+  const pill = (el: HTMLElement) => el.querySelector<HTMLButtonElement>('.danger-pill')!;
+
+  it('la section vient après « Fermer le grimoire », avec son étiquette, sa phrase et la pilule', async () => {
+    const { el } = await createDangerFixture({ getDeletionImpact: vi.fn() });
+
+    const zone = el.querySelector('.danger-zone')!;
+    expect(zone.textContent).toContain('Zone sensible');
+    expect(zone.textContent).toContain(TONE_MAP['grimoire-emeraude']['account.danger_explain']);
+    expect(pill(el).textContent).toContain('Effacer mon compte');
+    expect(pill(el).querySelector('mat-icon')?.textContent?.trim()).toBe('delete');
+    const logout = el.querySelector('.logout-row')!;
+    expect(logout.compareDocumentPosition(zone) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('un clic lit l’aperçu et ouvre la fenêtre avec le pseudo et l’aperçu', async () => {
+    const getDeletionImpact = vi.fn().mockResolvedValue(IMPACT);
+    const { fixture, dialog, el } = await createDangerFixture({ getDeletionImpact });
+
+    pill(el).click();
+    await fixture.whenStable();
+
+    expect(getDeletionImpact).toHaveBeenCalledTimes(1);
+    expect(dialog.open).toHaveBeenCalledWith(DeleteAccountDialog, {
+      data: { pseudo: 'alice', impact: IMPACT },
+    });
+  });
+
+  it('l’aperçu est relu à chaque ouverture', async () => {
+    const getDeletionImpact = vi.fn().mockResolvedValue(IMPACT);
+    const { fixture, el } = await createDangerFixture({ getDeletionImpact });
+
+    pill(el).click();
+    await fixture.whenStable();
+    pill(el).click();
+    await fixture.whenStable();
+
+    expect(getDeletionImpact).toHaveBeenCalledTimes(2);
+  });
+
+  it('échec de lecture : aucune fenêtre, un message sous la pilule', async () => {
+    const getDeletionImpact = vi.fn().mockRejectedValue(new Error('boom'));
+    const { fixture, dialog, el } = await createDangerFixture({ getDeletionImpact });
+
+    pill(el).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(dialog.open).not.toHaveBeenCalled();
+    expect(el.querySelector('.danger-zone .error')?.textContent).toContain(
+      TONE_MAP['grimoire-emeraude']['account.danger_load_error'],
+    );
+  });
+
+  it('compte effacé (fenêtre fermée sur true) : utilisateur local oublié, accueil public avec le message de confirmation (Story 43.2)', async () => {
+    const getDeletionImpact = vi.fn().mockResolvedValue(IMPACT);
+    const { fixture, currentUser, navigate, el } = await createDangerFixture(
+      { getDeletionImpact },
+      true,
+    );
+
+    pill(el).click();
+    await fixture.whenStable();
+
+    expect(currentUser()).toBeNull();
+    expect(navigate).toHaveBeenCalledWith(['/login'], { queryParams: { compte: 'efface' } });
+  });
+
+  it('fenêtre refermée sans effacement (Renoncer) : l’utilisateur reste connecté sur la page', async () => {
+    const getDeletionImpact = vi.fn().mockResolvedValue(IMPACT);
+    const { fixture, currentUser, navigate, el } = await createDangerFixture(
+      { getDeletionImpact },
+      false,
+    );
+
+    pill(el).click();
+    await fixture.whenStable();
+
+    expect(currentUser()).not.toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

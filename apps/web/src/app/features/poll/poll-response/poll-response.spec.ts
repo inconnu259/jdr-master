@@ -58,6 +58,13 @@ function makeThemeService() {
       'poll.withdraw_error': 'Le retrait a échoué.',
       'poll.vote_closed': 'Vote clos',
       'poll.status_title': 'Vote en cours',
+      'common.envoi': 'Envoi…',
+      'common.oui': 'Oui-registre',
+      'common.non': 'Non-registre',
+      'common.peut_etre': 'Peut-être-registre',
+      'pollui.response_not_saved_aria': 'Non enregistré',
+      'pollui.response_partial_error':
+        '{success}/{total} réponse(s) enregistrée(s). Réessayez pour les autres.',
     }),
   };
 }
@@ -89,6 +96,15 @@ async function createComponent(poll = fakePoll, userId = 'u1') {
 
 describe('PollResponseComponent', () => {
   afterEach(() => TestBed.resetTestingModule());
+
+  it('les boutons de vote affichent les textes du registre (oui, non, peut-être), dans cet ordre', async () => {
+    const { fixture } = await createComponent();
+    const first = fixture.nativeElement.querySelector('.poll-response__option');
+    const labels = Array.from(
+      first.querySelectorAll('.poll-response__buttons button:not(.poll-response__withdraw)'),
+    ).map((b) => (b as HTMLElement).textContent?.trim());
+    expect(labels).toEqual(['Oui-registre', 'Non-registre', 'Peut-être-registre']);
+  });
 
   it("contient autant d'options que le poll", async () => {
     const { fixture } = await createComponent();

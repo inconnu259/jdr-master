@@ -28,6 +28,7 @@ import { ScenariosService } from './scenarios.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
 import { CreateSeancePollDto } from './dto/create-seance-poll.dto';
+import { ReservePlaceDto } from './dto/reserve-place.dto';
 import { SetSeanceCapacityDto } from './dto/set-seance-capacity.dto';
 import { SetCompteRenduDto } from './dto/set-compte-rendu.dto';
 import { SetInfosPratiquesDto } from './dto/set-infos-pratiques.dto';
@@ -153,6 +154,32 @@ export class ScenariosController {
     return this.scenarios.desinscrire(seanceId, user.id);
   }
 
+  /** Story 40.4 : accepter la place qui m'est réservée (groupe de ralliement). */
+  @Patch('scenarios/seances/:id/inscription/accept')
+  accepterReservation(@Param('id', ParseUUIDPipe) seanceId: string, @CurrentUser() user: AuthUser) {
+    return this.scenarios.accepterReservation(seanceId, user.id);
+  }
+
+  /** Story 40.4 : l'hôte d'une conjonction réserve une place à un membre. */
+  @Post('scenarios/seances/:id/reservations')
+  reserver(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ReservePlaceDto,
+  ) {
+    return this.scenarios.reserver(seanceId, user.id, dto.userId);
+  }
+
+  /** Story 40.4 : l'hôte retire la réservation d'un membre. */
+  @Delete('scenarios/seances/:id/reservations/:userId')
+  retirerReservation(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @Param('userId', ParseUUIDPipe) targetUserId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.scenarios.retirerReservation(seanceId, user.id, targetUserId);
+  }
+
   @Patch('scenarios/seances/:id/compte-rendu')
   setCompteRendu(
     @Param('id', ParseUUIDPipe) seanceId: string,
@@ -164,7 +191,7 @@ export class ScenariosController {
 
   // Story 36.5 — informations pratiques (D-15). Un seul PATCH pour les trois champs : le MJ les
   // saisit ensemble. Comme partout dans ce contrôleur, l'autorisation MJ est vérifiée EN SERVICE
-  // (parties.getOwned), pas par un guard de route.
+  // (PermissionService.assert), pas par un guard de route.
   @Patch('scenarios/seances/:id/infos-pratiques')
   setInfosPratiques(
     @Param('id', ParseUUIDPipe) seanceId: string,

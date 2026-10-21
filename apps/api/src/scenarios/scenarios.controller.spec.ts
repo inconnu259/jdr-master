@@ -35,6 +35,9 @@ function makeScenariosService() {
     setSeanceCapacity: jest.fn(),
     inscrire: jest.fn(),
     desinscrire: jest.fn(),
+    accepterReservation: jest.fn(),
+    reserver: jest.fn(),
+    retirerReservation: jest.fn(),
     setCompteRendu: jest.fn(),
     setInfosPratiques: jest.fn(),
     setResumeFin: jest.fn(),
@@ -154,6 +157,21 @@ describe('ScenariosController', () => {
   it('inscrire() route seanceId/user vers ScenariosService.inscrire', async () => {
     await controller.inscrire('seance1', user);
     expect(scenarios.inscrire).toHaveBeenCalledWith('seance1', 'mj1');
+  });
+
+  it('accepterReservation() route seanceId/user vers ScenariosService.accepterReservation (Story 40.4)', async () => {
+    await controller.accepterReservation('seance1', user);
+    expect(scenarios.accepterReservation).toHaveBeenCalledWith('seance1', 'mj1');
+  });
+
+  it('reserver() route seanceId/user et l’identifiant du membre vers ScenariosService.reserver (Story 40.4)', async () => {
+    await controller.reserver('seance1', user, { userId: 'membre1' });
+    expect(scenarios.reserver).toHaveBeenCalledWith('seance1', 'mj1', 'membre1');
+  });
+
+  it('retirerReservation() route seanceId, utilisateur et membre vers ScenariosService.retirerReservation (Story 40.4)', async () => {
+    await controller.retirerReservation('seance1', 'membre1', user);
+    expect(scenarios.retirerReservation).toHaveBeenCalledWith('seance1', 'mj1', 'membre1');
   });
 
   it('desinscrire() route seanceId/user vers ScenariosService.desinscrire', async () => {

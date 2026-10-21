@@ -81,3 +81,53 @@ mat-form-field {
     border-color: var(--jdr-accent-2, currentColor);
   }
 }
+
+/* ⚠️ Story 43.1 (UX-DR13) — zone sensible : filet, étiquette, phrase en 13 px, pilule à contour rouge.
+   Le rouge dit « irréversible » ; l'état est aussi écrit (mot + corbeille), jamais la couleur seule. */
+.danger-zone {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--mat-sys-outline-variant, #ddd);
+}
+
+.danger-zone__label {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+}
+
+.danger-zone__explain {
+  margin: 0 0 0.75rem;
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+.danger-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 1rem;
+  border: 1.5px solid var(--color-unavailable, #b00020);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-unavailable, #b00020);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  mat-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+    line-height: 18px;
+  }
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    background: color-mix(in srgb, var(--color-unavailable, #b00020) 12%, transparent);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: progress;
+  }
+}

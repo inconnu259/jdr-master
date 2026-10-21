@@ -1,19 +1,25 @@
 import { Component, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatDialog } from '@angular/material/dialog';
+import { MatIconModule } from '@angular/material/icon';
 import { CALENDAR_LAYER_KEYS, type CalendarLayerKey } from '@master-jdr/shared';
 import { AuthService } from '../../core/auth/auth.service';
 import { AccountService } from '../../core/account/account.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
+import { DeleteAccountDialog } from './delete-account-dialog/delete-account-dialog';
 import { ThemeSelector } from './theme-selector/theme-selector';
 import { FieldEditPencil } from '../characters/character-sheet/field-edit-pencil/field-edit-pencil';
+import { PasswordReveal } from '../../shared/password-reveal/password-reveal';
+import { PasswordToggle } from '../../shared/password-reveal/password-toggle';
 
 const DISPLAY_NAME_MAX_LENGTH = 60;
 
@@ -56,8 +62,11 @@ const CALENDAR_INTENTS: readonly CalendarIntent[] = [
     MatInputModule,
     MatButtonModule,
     MatCheckboxModule,
+    MatIconModule,
     ThemeSelector,
     FieldEditPencil,
+    PasswordReveal,
+    PasswordToggle,
   ],
   templateUrl: './account.html',
   styleUrl: './account.scss',
@@ -68,6 +77,7 @@ export class Account {
   private readonly account = inject(AccountService);
   private readonly router = inject(Router);
   private readonly contextualNav = inject(ContextualNavService);
+  private readonly dialog = inject(MatDialog);
 
   protected readonly theme = inject(ThemeToneService);
 
@@ -108,6 +118,35 @@ export class Account {
   protected readonly emailSaving = signal(false);
   protected readonly emailError = signal<string | null>(null);
   protected readonly emailSaved = signal(false);
+
+  // Story 43.1 — zone sensible : l'aperçu est relu à CHAQUE ouverture (on peut aller nommer un autre
+  // administrateur puis revenir) ; en cas d'échec aucune fenêtre ne s'ouvre. L'effacement lui-même est
+  // celui de la fenêtre (Story 43.2).
+  protected readonly deleteLoading = signal(false);
+  protected readonly deleteError = signal<string | null>(null);
+
+  async openDeleteAccount(): Promise<void> {
+    if (this.deleteLoading()) return;
+    this.deleteLoading.set(true);
+    this.deleteError.set(null);
+    let closed: Promise<boolean | undefined>;
+    try {
+      const impact = await this.account.getDeletionImpact();
+      const ref = this.dialog.open(DeleteAccountDialog, { data: { pseudo: this.pseudo, impact } });
+      closed = firstValueFrom(ref.afterClosed());
+    } catch {
+      this.deleteError.set(this.theme.tone()['account.danger_load_error']);
+      return;
+    } finally {
+      this.deleteLoading.set(false);
+    }
+    // Story 43.2 : la fenêtre ne se ferme sur `true` que si le compte est effacé. Plus de session : on
+    // oublie l'utilisateur local et on arrive sur l'accueil public avec un message qui le confirme.
+    if (await closed) {
+      this.auth.currentUser.set(null);
+      void this.router.navigate(['/login'], { queryParams: { compte: 'efface' } });
+    }
+  }
 
   constructor() {
     // Revue de code Story 29.4 : effect() plutôt qu'un appel statique en ngOnInit — cet écran

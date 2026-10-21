@@ -1,4 +1,5 @@
 import type { DaySlot, VoteAnswer } from '@master-jdr/shared';
+import { fillTone } from '../../core/theme/tone-format';
 
 /**
  * Story 36.6 — la piste de participation d'un vote.
@@ -75,10 +76,14 @@ export interface TrackSegments {
  *  dire d'elles-mêmes, plutôt qu'un budget en pixels. */
 export type TrackDensity = 'full' | 'compact';
 
-const ANSWER_WORDS: Record<VoteAnswer, string> = {
-  YES: 'oui',
-  MAYBE: 'peut-être',
-  NO: 'non',
+/** Dictionnaire de ton lisible par les fonctions pures (`theme.tone()` d'un composant). */
+type ToneDict = Readonly<Record<string, string>>;
+
+/** Clés de ton des trois avis, résolues par `answerWord()`. */
+const ANSWER_WORD_KEYS: Record<VoteAnswer, string> = {
+  YES: 'calendar.util_answer_yes',
+  MAYBE: 'calendar.util_answer_maybe',
+  NO: 'calendar.util_answer_no',
 };
 
 /**
@@ -127,9 +132,12 @@ export function trackSegments(vote: VoteParticipation): TrackSegments {
  *
  *  Borné comme `trackSegments()` (revue de code du 36.6) : un effectif périmé (membre retiré
  *  après avoir voté) ne doit jamais afficher « 5 / 4 » à côté d'une piste rendue pleine à 100 %. */
-export function counterLabel(vote: VoteParticipation): string {
+export function counterLabel(vote: VoteParticipation, tone: ToneDict): string {
   const total = safeCount(vote.total);
-  return `${Math.min(respondedCount(vote), total)} / ${total}`;
+  return fillTone(tone['calendar.util_counter'], {
+    n: Math.min(respondedCount(vote), total),
+    total,
+  });
 }
 
 /**
@@ -139,10 +147,14 @@ export function counterLabel(vote: VoteParticipation): string {
  * (« oui »), le rail phrase (« tu as dit oui »). Un seul point de vérité pour les deux, sans quoi
  * les surfaces diraient la même chose de deux façons.
  */
-export function answerLabel(answer: VoteAnswer | null, density: TrackDensity = 'full'): string {
+export function answerLabel(
+  answer: VoteAnswer | null,
+  density: TrackDensity,
+  tone: ToneDict,
+): string {
   if (!answer) return '';
-  const word = ANSWER_WORDS[answer];
-  return density === 'full' ? `tu as dit ${word}` : word;
+  const word = tone[ANSWER_WORD_KEYS[answer]];
+  return density === 'full' ? fillTone(tone['calendar.util_answer_mine'], { answer: word }) : word;
 }
 
 /**
@@ -152,22 +164,23 @@ export function answerLabel(answer: VoteAnswer | null, density: TrackDensity = '
  * Il dit le total, le détail des avis donnés (jamais un avis à zéro, qui n'apprendrait rien) et
  * ma réponse.
  */
-export function participationAriaLabel(vote: VoteParticipation): string {
+export function participationAriaLabel(vote: VoteParticipation, tone: ToneDict): string {
   const total = safeCount(vote.total);
   // Borné comme `trackSegments()`/`counterLabel()` (revue de code du 36.6) : un effectif périmé
   // ne doit jamais annoncer « 5 réponses sur 4 ».
   const n = Math.min(respondedCount(vote), total);
-  const parts = [`${n} ${n > 1 ? 'réponses' : 'réponse'} sur ${total}`];
+  const countKey = n > 1 ? 'calendar.util_participation_many' : 'calendar.util_participation_one';
+  const parts = [fillTone(tone[countKey], { n, total })];
 
   const detail = (['YES', 'MAYBE', 'NO'] as const)
     .map(
       (a) => [a, safeCount(a === 'YES' ? vote.yes : a === 'MAYBE' ? vote.maybe : vote.no)] as const,
     )
     .filter(([, count]) => count > 0)
-    .map(([a, count]) => `${count} ${ANSWER_WORDS[a]}`);
+    .map(([a, count]) => `${count} ${tone[ANSWER_WORD_KEYS[a]]}`);
   if (detail.length > 0) parts.push(detail.join(', '));
 
-  const mine = answerLabel(vote.myAnswer, 'full');
+  const mine = answerLabel(vote.myAnswer, 'full', tone);
   if (mine) parts.push(mine);
 
   return parts.join(' — ');

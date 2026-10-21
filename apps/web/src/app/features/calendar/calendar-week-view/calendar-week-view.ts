@@ -1,4 +1,13 @@
-import { Component, computed, effect, input, output, signal, untracked } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -11,6 +20,7 @@ import type {
   SlotStatus,
 } from '@master-jdr/shared';
 import { computeDisplayStatus } from '../../../core/availability/compute-display-status';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { SLOT_LABELS } from '../agenda-badge.utils';
 import type { AgendaEntry, AgendaSealRequest } from '../calendar-agenda-view/calendar-agenda-view';
 import {
@@ -31,9 +41,6 @@ import {
   composeCellKey,
   weekRangeCells,
 } from '../selection.utils';
-
-/** Story 36.10, AC16 — même mot qu'en vue Mois pour un créneau désigné. */
-const COMPOSED_ARIA = 'désigné pour le vote';
 
 /** Story 36.15 — MÊME format que `OPTION_DATE_FORMAT` de `calendar-agenda-view.ts` : le libellé
  *  du dialogue de confirmation doit se lire pareil, que le scellement parte de l'Agenda ou d'ici.
@@ -88,9 +95,15 @@ function toUTCMidnight(isoDate: string): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
-function formatDeclLabel(d: AvailabilityDeclarationDto): string {
-  const kind = d.kind === 'UNAVAILABLE' ? 'Indispo' : 'Dispo';
-  const recur = d.recurKind === 'RECURRING' ? 'Récurrent' : 'Ponctuel';
+function formatDeclLabel(d: AvailabilityDeclarationDto, tone: Record<string, string>): string {
+  const kind =
+    d.kind === 'UNAVAILABLE'
+      ? tone['calendar.week_decl_unavailable']
+      : tone['calendar.week_decl_available'];
+  const recur =
+    d.recurKind === 'RECURRING'
+      ? tone['calendar.week_decl_recurring']
+      : tone['calendar.week_decl_punctual'];
   return `${kind} · ${recur}`;
 }
 
@@ -159,6 +172,9 @@ export function buildWeek(
   weekStart: Date,
   decls: AvailabilityDeclarationDto[],
   pendingDecl: AvailabilityDeclarationDto | null,
+  // Textes du thème actif, pour le libellé de déclaration (« Dispo · Récurrent »). Obligatoire : le
+  // composant passe le ton courant, aucun appelant ne retombe sur le thème de référence.
+  tone: Record<string, string>,
   details?: Map<string, DayDetail>,
   previewDetails?: Map<string, DayDetail> | null,
 ): WeekCell[] {
@@ -208,7 +224,7 @@ export function buildWeek(
       return {
         status: finalStatus,
         preview,
-        declLabel: matchingDecl ? formatDeclLabel(matchingDecl) : null,
+        declLabel: matchingDecl ? formatDeclLabel(matchingDecl, tone) : null,
         detail,
       };
     };
@@ -265,6 +281,8 @@ import {
   styleUrl: './calendar-week-view.scss',
 })
 export class CalendarWeekView {
+  protected readonly theme = inject(ThemeToneService);
+
   readonly declarations = input<AvailabilityDeclarationDto[]>([]);
   readonly loading = input(false);
   readonly pendingDto = input<CreateAvailabilityDto | null>(null);
@@ -356,6 +374,7 @@ export class CalendarWeekView {
       this.displayWeekStart(),
       this.declarations(),
       this.pendingDecl(),
+      this.theme.tone(),
       this.weekDetails(),
       this.weekPreviewDetails(),
     ),
@@ -519,7 +538,7 @@ export class CalendarWeekView {
     const scope = this.scope();
     const slotLabel =
       scope === null
-        ? 'créneaux variés'
+        ? this.theme.tone()['common.creneaux_varies']
         : scope === 'FULL_DAY'
           ? 'journée'
           : (this.SLOT_ROWS.find((r) => r.slot === scope)?.label ?? '');
@@ -699,10 +718,11 @@ export class CalendarWeekView {
     slotName: string,
     slot?: DaySlot,
   ): string {
+    const tone = this.theme.tone();
     const labels: Record<SlotStatus, string> = {
-      AVAILABLE: 'disponible',
-      UNAVAILABLE: 'indisponible',
-      UNKNOWN: 'inconnu',
+      AVAILABLE: tone['calendar.week_status_available'],
+      UNAVAILABLE: tone['calendar.week_status_unavailable'],
+      UNKNOWN: tone['calendar.week_status_unknown'],
     };
     const status = slotData.preview ?? slotData.status;
     const fullDate = new Intl.DateTimeFormat('fr-FR', {
@@ -722,17 +742,17 @@ export class CalendarWeekView {
     // Story 36.6, AC14 — la piste code par la PROPORTION : elle n'existe pour un lecteur d'écran
     // que si le nom accessible la dit. Même garde `winner` que `eventInfo()`.
     const participation = this.eventVote(slotData);
-    if (participation) parts.push(participationAriaLabel(participation));
+    if (participation) parts.push(participationAriaLabel(participation, tone));
     // Story 36.8, AC15 — 🚨 `.slot-cell` porte son propre `aria-label`, qui ÉCRASE le nom
     // accessible de `<app-group-gauge>` qu'elle contient désormais. Sans ce repli, le canal
     // serait purement visuel en vue Semaine — même régression que celle corrigée en revue de la
     // 36.7 pour la piste dans le rail.
     const groupe = this.eventGroup(slotData);
-    if (groupe) parts.push(groupAriaLabel(groupe));
+    if (groupe) parts.push(groupAriaLabel(groupe, tone));
     // Story 36.10, AC16 — l'état composé est annoncé, comme en vue Mois. Le créneau TYPÉ est
     // passé par le gabarit (`row.slot`) plutôt que redéduit du libellé : `slotName` est du texte
     // d'affichage, s'en servir de clé le rendrait intraduisible.
-    if (slot && this.isCellComposed(cell, slot)) parts.push(COMPOSED_ARIA);
+    if (slot && this.isCellComposed(cell, slot)) parts.push(tone['common.designe_pour_le_vote']);
     return parts.join(' — ');
   }
 

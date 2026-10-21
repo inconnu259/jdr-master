@@ -1,10 +1,25 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { PollService } from './poll.service';
+import {
+  DATE_ALREADY_FIXED_MESSAGE,
+  EXTEND_INVALID_DAY_MESSAGE,
+  EXTEND_NOT_LATER_MESSAGE,
+  GROUP_POLL_OPTION_BOUNDS,
+  PAST_OPTION_MESSAGE,
+  POLL_DEADLINE_PAST_MESSAGE,
+  PollService,
+} from './poll.service';
+import { GROUP_POLL_CHOOSE_PORT } from './ports/group-poll-choose.port';
+import { GROUP_POLL_EXTEND_PORT } from './ports/group-poll-extend.port';
+import { GROUP_POLL_VOTE_PORT } from './ports/group-poll-vote.port';
+import { PARTIE_SIGNALS_PORT } from './ports/partie-signals.port';
+import { SEANCE_DATE_PORT } from './ports/seance-date.port';
 import { PrismaService } from '../prisma/prisma.service';
-import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
+import { testGrant } from '../common/test-utils/grant';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
-import { callArg, mockCalls } from '../common/test-utils/jest-typed';
+import { anyOf, callArg, mockCalls } from '../common/test-utils/jest-typed';
+import { HIDDEN_DRAFT_POLL_WHERE, VISIBLE_POLL_WHERE } from '../permissions/scenario-visibility';
 import type { DaySlot } from '@master-jdr/shared';
 
 /**
@@ -19,6 +34,8 @@ function makePrisma() {
       create: jest.fn(),
       update: jest.fn(),
       findUnique: jest.fn(),
+      // Anti-spoil serveur : « ce vote est-il celui d'un brouillon caché ? » (0 = non, par défaut).
+      count: jest.fn().mockResolvedValue(0),
     },
     pollVote: {
       upsert: jest.fn(),
@@ -52,12 +69,26 @@ function makePrisma() {
   };
 }
 
-function makePartiesService() {
+/** Story 37.8 : `PartieSignalsPort` — port de la couche 1, implémenté par `parties/`. */
+function makePartieSignals() {
   return {
-    getOwned: jest.fn(),
-    getViewable: jest.fn(),
-    notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
+    notifyChanged: jest.fn().mockResolvedValue(undefined),
   };
+}
+
+/** Story 37.6 — les droits sont décidés par `PermissionService.assert()`, simulé ici. */
+function makePermissions() {
+  // Par défaut l'appelant est le MJ de `p1` (aucune restriction anti-spoil) ; les tests joueurs
+  // reconfigurent l'autorisation.
+  return { assert: jest.fn().mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }, 'mj')) };
+}
+
+/** Autorisation délivrée par `ScenariosService.createSeancePoll()` à `create()` (MJ de `p1`). */
+const GRANT_P1 = testGrant({ id: 'p1', ownerId: 'mj1' });
+
+/** Story 37.8 : `SeanceDatePort` — port de la couche 1, implémenté par `events/`. */
+function makeSeanceDate() {
+  return { chooseDate: jest.fn().mockResolvedValue(undefined) };
 }
 
 function makeRealtimeEvents() {
@@ -86,19 +117,41 @@ function makePoll() {
 describe('PollService', () => {
   let service: PollService;
   let prisma: ReturnType<typeof makePrisma>;
-  let parties: ReturnType<typeof makePartiesService>;
+  let partieSignals: ReturnType<typeof makePartieSignals>;
+  let permissions: ReturnType<typeof makePermissions>;
   let realtimeEvents: ReturnType<typeof makeRealtimeEvents>;
+  let seanceDate: ReturnType<typeof makeSeanceDate>;
+  let groupVotes: { assertCanVote: jest.Mock; lockConjonction: jest.Mock };
+  let groupChoice: { assertCanChoose: jest.Mock; notifyDateFixed: jest.Mock };
+  let groupExtension: { assertCanExtend: jest.Mock };
 
   beforeEach(async () => {
     prisma = makePrisma();
-    parties = makePartiesService();
+    partieSignals = makePartieSignals();
+    permissions = makePermissions();
     realtimeEvents = makeRealtimeEvents();
+    seanceDate = makeSeanceDate();
+    groupVotes = {
+      assertCanVote: jest.fn().mockResolvedValue(undefined),
+      // Story 40.6 : verrou de la conjonction pris dans la transaction d'écriture d'un vote de groupe.
+      lockConjonction: jest.fn().mockResolvedValue({ dated: false }),
+    };
+    groupChoice = {
+      assertCanChoose: jest.fn().mockResolvedValue(undefined),
+      notifyDateFixed: jest.fn().mockResolvedValue(undefined),
+    };
+    groupExtension = { assertCanExtend: jest.fn().mockResolvedValue(undefined) };
     const module = await Test.createTestingModule({
       providers: [
         PollService,
         { provide: PrismaService, useValue: prisma },
-        { provide: PartiesService, useValue: parties },
+        { provide: PARTIE_SIGNALS_PORT, useValue: partieSignals },
+        { provide: PermissionService, useValue: permissions },
         { provide: RealtimeEventsService, useValue: realtimeEvents },
+        { provide: SEANCE_DATE_PORT, useValue: seanceDate },
+        { provide: GROUP_POLL_VOTE_PORT, useValue: groupVotes },
+        { provide: GROUP_POLL_CHOOSE_PORT, useValue: groupChoice },
+        { provide: GROUP_POLL_EXTEND_PORT, useValue: groupExtension },
       ],
     }).compile();
     service = module.get(PollService);
@@ -106,7 +159,7 @@ describe('PollService', () => {
 
   it('create() → crée sans jamais appeler findFirst/updateMany (Story 8.8)', async () => {
     prisma.sessionPoll.create.mockResolvedValue(makePoll());
-    await service.create('p1', 'mj1', {
+    await service.create(GRANT_P1, 'mj1', {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
     expect(prisma.sessionPoll.findFirst).not.toHaveBeenCalled();
@@ -116,7 +169,7 @@ describe('PollService', () => {
 
   it('create() avec un poll OPEN déjà existant sur la Partie → ne le ferme pas (Story 8.8, un vote par Séance, pas par Partie)', async () => {
     prisma.sessionPoll.create.mockResolvedValue(makePoll());
-    await service.create('p1', 'mj1', {
+    await service.create(GRANT_P1, 'mj1', {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
     expect(prisma.sessionPoll.findFirst).not.toHaveBeenCalled();
@@ -126,7 +179,7 @@ describe('PollService', () => {
 
   it('create() → exécute create dans une transaction Prisma', async () => {
     prisma.sessionPoll.create.mockResolvedValue(makePoll());
-    await service.create('p1', 'mj1', {
+    await service.create(GRANT_P1, 'mj1', {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
@@ -135,7 +188,7 @@ describe('PollService', () => {
   it('create() → écrit expiresAt à ~14 jours dans le futur (jamais null)', async () => {
     prisma.sessionPoll.create.mockResolvedValue(makePoll());
     const before = Date.now();
-    await service.create('p1', 'mj1', {
+    await service.create(GRANT_P1, 'mj1', {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
     const after = Date.now();
@@ -148,25 +201,25 @@ describe('PollService', () => {
 
   it('create() → émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
     prisma.sessionPoll.create.mockResolvedValue(makePoll());
-    await service.create('p1', 'mj1', {
+    await service.create(GRANT_P1, 'mj1', {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
-  it('create() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal AUCUNE_DATE_NI_VOTE)', async () => {
+  it('create() → notifie aussi PartieSignalsPort.notifyChanged (Story 29.7, AD-14, signal AUCUNE_DATE_NI_VOTE)', async () => {
     prisma.sessionPoll.create.mockResolvedValue(makePoll());
-    await service.create('p1', 'mj1', {
+    await service.create(GRANT_P1, 'mj1', {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    expect(partieSignals.notifyChanged).toHaveBeenCalledWith('p1');
   });
 
   describe('membersCount — effectif de la troupe (Story 36.6, AC7/AC9)', () => {
     it('create() → renvoie un membersCount = MJ + Membership', async () => {
       prisma.membership.count.mockResolvedValue(3);
       prisma.sessionPoll.create.mockResolvedValue(makePoll());
-      const dto = await service.create('p1', 'mj1', {
+      const dto = await service.create(GRANT_P1, 'mj1', {
         options: [opt('2026-08-01', 'MORNING')],
       });
       expect(dto.membersCount).toBe(4);
@@ -182,7 +235,7 @@ describe('PollService', () => {
       expect(dto?.membersCount).toBe(4);
     });
 
-    it('une partie sans aucun membre a un effectif de 1 — le MJ, qui vote (castVote garde par getViewable)', async () => {
+    it('une partie sans aucun membre a un effectif de 1 — le MJ, qui vote (castVote ouvert au MJ comme aux membres, POLL_VOTE)', async () => {
       prisma.membership.count.mockResolvedValue(0);
       prisma.sessionPoll.findFirst.mockResolvedValue(makePoll());
       const dto = await service.findOpen('p1', 'mj1');
@@ -197,9 +250,94 @@ describe('PollService', () => {
     });
   });
 
+  describe('anti-spoil serveur — vote de la séance d’un brouillon caché', () => {
+    const joueur = () => permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
+
+    it('findOpen() : un joueur ne lit que les votes hors brouillon caché (fragment partagé), le MJ lit tout', async () => {
+      prisma.sessionPoll.findFirst.mockResolvedValue(null);
+
+      joueur();
+      await service.findOpen('p1', 'u1');
+      expect(prisma.sessionPoll.findFirst).toHaveBeenLastCalledWith({
+        where: { AND: [{ partieId: 'p1', status: 'OPEN' }, VISIBLE_POLL_WHERE] },
+        include: expect.anything() as unknown,
+      });
+
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'mj'));
+      await service.findOpen('p1', 'mj1');
+      expect(prisma.sessionPoll.findFirst).toHaveBeenLastCalledWith({
+        where: { partieId: 'p1', status: 'OPEN' },
+        include: expect.anything() as unknown,
+      });
+    });
+
+    it('échec FERMÉ : un rôle autre que MJ (ici admin) est filtré comme un joueur', async () => {
+      prisma.sessionPoll.findFirst.mockResolvedValue(null);
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'admin'));
+
+      await service.findOpen('p1', 'u1');
+
+      expect(prisma.sessionPoll.findFirst).toHaveBeenLastCalledWith({
+        where: { AND: [{ partieId: 'p1', status: 'OPEN' }, VISIBLE_POLL_WHERE] },
+        include: expect.anything() as unknown,
+      });
+    });
+
+    it('castVote() : un joueur sur le vote d’un brouillon caché reçoit l’erreur d’un vote inconnu, aucun vote écrit', async () => {
+      joueur();
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        id: 'poll1',
+        partieId: 'p1',
+        status: 'OPEN',
+      });
+      prisma.sessionPoll.count.mockResolvedValue(1);
+
+      const promise = service.castVote('p1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' });
+
+      await expect(promise).rejects.toThrow(BadRequestException);
+      await expect(promise).rejects.toThrow('Poll introuvable ou fermé');
+      expect(prisma.sessionPoll.count).toHaveBeenCalledWith({
+        where: { AND: [{ id: 'poll1' }, HIDDEN_DRAFT_POLL_WHERE] },
+      });
+      expect(prisma.pollVote.upsert).not.toHaveBeenCalled();
+      expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
+    });
+
+    it('withdrawVote() : même refus pour un joueur, aucune suppression', async () => {
+      joueur();
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        id: 'poll1',
+        partieId: 'p1',
+        status: 'OPEN',
+      });
+      prisma.sessionPoll.count.mockResolvedValue(1);
+
+      await expect(service.withdrawVote('p1', 'poll1', 'opt1', 'u1')).rejects.toThrow(
+        'Poll introuvable ou fermé',
+      );
+      expect(prisma.pollVote.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('le MJ vote sur le vote d’un brouillon : aucune requête de masquage', async () => {
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'mj'));
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        id: 'poll1',
+        partieId: 'p1',
+        status: 'OPEN',
+      });
+      prisma.pollOption.findUnique.mockResolvedValue({ id: 'opt1', pollId: 'poll1' });
+      prisma.pollVote.upsert.mockResolvedValue({});
+
+      await service.castVote('p1', 'poll1', 'mj1', { optionId: 'opt1', answer: 'YES' });
+
+      expect(prisma.sessionPoll.count).not.toHaveBeenCalled();
+      expect(prisma.pollVote.upsert).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('create() avec deux options (date,slot) identiques → BadRequestException', async () => {
     await expect(
-      service.create('p1', 'mj1', {
+      service.create(GRANT_P1, 'mj1', {
         options: [opt('2026-08-01', 'MORNING'), opt('2026-08-01', 'MORNING')],
       }),
     ).rejects.toThrow(BadRequestException);
@@ -211,7 +349,7 @@ describe('PollService', () => {
     // chaînes brutes : avant la revue de code, la dédup de create() comparait la chaîne reçue, et
     // ce doublon serait passé — divergent de la clé normalisée qu'utilise setOptions().
     await expect(
-      service.create('p1', 'mj1', {
+      service.create(GRANT_P1, 'mj1', {
         options: [opt('2026-08-01', 'MORNING'), opt('2026-08-01T00:00:00.000Z', 'MORNING')],
       }),
     ).rejects.toThrow(BadRequestException);
@@ -219,7 +357,7 @@ describe('PollService', () => {
   });
 
   it('castVote() deux fois sur la même option → upsert (pas de doublon)', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1' });
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -249,7 +387,7 @@ describe('PollService', () => {
   });
 
   it('castVote() → émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1' });
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -267,8 +405,8 @@ describe('PollService', () => {
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
-  it('castVote() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal VOTE_EN_COURS_SANS_REPONSE)', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+  it('castVote() → notifie aussi PartieSignalsPort.notifyChanged (Story 29.7, AD-14, signal VOTE_EN_COURS_SANS_REPONSE)', async () => {
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }, 'player'));
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -283,12 +421,12 @@ describe('PollService', () => {
       optionId: 'opt1',
       answer: 'YES',
     });
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    expect(partieSignals.notifyChanged).toHaveBeenCalledWith('p1');
   });
 
   describe('withdrawVote() (Story 30.1, AD-10)', () => {
     beforeEach(() => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }, 'player'));
       prisma.sessionPoll.findUnique.mockResolvedValue({
         id: 'poll1',
         partieId: 'p1',
@@ -366,22 +504,22 @@ describe('PollService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
-    it('notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal VOTE_EN_COURS_SANS_REPONSE)', async () => {
+    it('notifie aussi PartieSignalsPort.notifyChanged (Story 29.7, AD-14, signal VOTE_EN_COURS_SANS_REPONSE)', async () => {
       await service.withdrawVote('p1', 'poll1', 'opt1', 'u1');
-      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+      expect(partieSignals.notifyChanged).toHaveBeenCalledWith('p1');
     });
   });
 
   it('choose() par non-MJ → ForbiddenException', async () => {
-    parties.getOwned.mockRejectedValue(new ForbiddenException());
+    permissions.assert.mockRejectedValue(new ForbiddenException());
     await expect(service.choose('p1', 'poll1', 'joueur1', { optionId: 'opt1' })).rejects.toThrow(
       ForbiddenException,
     );
   });
 
-  it('choose() → positionne chosenDate/chosenSlot, ferme le poll, met à jour Partie', async () => {
+  it('choose() → positionne chosenDate/chosenSlot, ferme le poll, délègue la date de séance au port', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -396,23 +534,73 @@ describe('PollService', () => {
     prisma.sessionPoll.update.mockResolvedValue({});
     prisma.partie.update.mockResolvedValue({});
     await service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' });
+    expect(permissions.assert).toHaveBeenCalledWith('mj1', 'POLL_CHOOSE', { partieId: 'p1' });
     expect(prisma.sessionPoll.update).toHaveBeenCalledWith({
       where: { id: 'poll1' },
       data: { status: 'CLOSED', chosenDate: d, chosenSlot: 'MORNING' },
     });
-    expect(prisma.partie.update).toHaveBeenCalledWith({
-      where: { id: 'p1' },
-      data: {
-        nextSessionDate: d,
-        nextSessionSlot: 'MORNING',
-        reminderSentAt: null,
-      },
+    // Story 37.8 (AD-15) : la date de séance et `nextSessionDate/Slot` sont écrites par le port.
+    expect(seanceDate.chooseDate).toHaveBeenCalledWith(anyOf(Object), 'poll1', d, 'MORNING');
+    // PollService n'écrit JAMAIS `Partie` : `events/` est l'unique écrivain de la prochaine séance.
+    expect(prisma.partie.update).not.toHaveBeenCalled();
+  });
+
+  it('choose() → ferme le poll ET délègue la plage de la séance au port dans la même transaction (Stories 37.4, 37.8)', async () => {
+    const d = new Date('2026-08-01T00:00:00.000Z');
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'OPEN',
     });
+    prisma.pollOption.findUnique.mockResolvedValue({
+      id: 'opt1',
+      pollId: 'poll1',
+      date: d,
+      slot: 'MORNING',
+    });
+    prisma.partie.update.mockResolvedValue({});
+    // Client de transaction DISTINCT du client racine : une écriture faite hors transaction
+    // passerait par `prisma.sessionPoll.update` et ferait échouer ce test.
+    const tx = { sessionPoll: { update: jest.fn().mockResolvedValue({}) } };
+    prisma.$transaction.mockImplementationOnce((fn: (t: never) => unknown) => fn(tx as never));
+    await service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(tx.sessionPoll.update).toHaveBeenCalledWith({
+      where: { id: 'poll1' },
+      data: { status: 'CLOSED', chosenDate: d, chosenSlot: 'MORNING' },
+    });
+    expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+    expect(seanceDate.chooseDate).toHaveBeenCalledWith(tx, 'poll1', d, 'MORNING');
+  });
+
+  it('choose() → échec du port : ni émission ni notification des signaux (tout ou rien, Stories 37.4, 37.8)', async () => {
+    const d = new Date('2026-08-01T00:00:00.000Z');
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'OPEN',
+    });
+    prisma.pollOption.findUnique.mockResolvedValue({
+      id: 'opt1',
+      pollId: 'poll1',
+      date: d,
+      slot: 'MORNING',
+    });
+    prisma.sessionPoll.update.mockResolvedValue({});
+    seanceDate.chooseDate.mockRejectedValue(new Error('boom'));
+    await expect(service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' })).rejects.toThrow(
+      'boom',
+    );
+    expect(prisma.partie.update).not.toHaveBeenCalled();
+    expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
   });
 
   it('choose() → émet un événement temps réel scopé sur la Partie, après la résolution des DEUX écritures (Story 18.1, AC1)', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -430,9 +618,9 @@ describe('PollService', () => {
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
-  it('choose() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14)', async () => {
+  it('choose() → notifie aussi PartieSignalsPort.notifyChanged (Story 29.7, AD-14)', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -447,17 +635,19 @@ describe('PollService', () => {
     prisma.sessionPoll.update.mockResolvedValue({});
     prisma.partie.update.mockResolvedValue({});
     await service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' });
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    expect(partieSignals.notifyChanged).toHaveBeenCalledWith('p1');
   });
 
-  it('choose() sur le même créneau déjà actif → ne remet PAS reminderSentAt à null', async () => {
+  it('choose() sur le même créneau déjà actif → PollService n’écrit pas Partie (la remise à zéro du rappel est décidée par events/, Story 37.8)', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
-    parties.getOwned.mockResolvedValue({
-      id: 'p1',
-      mjId: 'mj1',
-      nextSessionDate: d,
-      nextSessionSlot: 'MORNING',
-    });
+    permissions.assert.mockResolvedValue(
+      testGrant({
+        id: 'p1',
+        ownerId: 'mj1',
+        nextSessionDate: d,
+        nextSessionSlot: 'MORNING',
+      }),
+    );
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -470,16 +660,13 @@ describe('PollService', () => {
       slot: 'MORNING',
     });
     prisma.sessionPoll.update.mockResolvedValue({});
-    prisma.partie.update.mockResolvedValue({});
     await service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' });
-    expect(prisma.partie.update).toHaveBeenCalledWith({
-      where: { id: 'p1' },
-      data: { nextSessionDate: d, nextSessionSlot: 'MORNING' },
-    });
+    expect(prisma.partie.update).not.toHaveBeenCalled();
+    expect(seanceDate.chooseDate).toHaveBeenCalledWith(anyOf(Object), 'poll1', d, 'MORNING');
   });
 
   it('close() sur un poll OPEN → le ferme', async () => {
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -487,6 +674,7 @@ describe('PollService', () => {
     });
     prisma.sessionPoll.update.mockResolvedValue({});
     await service.close('p1', 'poll1', 'mj1');
+    expect(permissions.assert).toHaveBeenCalledWith('mj1', 'POLL_CLOSE', { partieId: 'p1' });
     expect(prisma.sessionPoll.update).toHaveBeenCalledWith({
       where: { id: 'poll1' },
       data: { status: 'CLOSED' },
@@ -494,7 +682,7 @@ describe('PollService', () => {
   });
 
   it('close() → émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -505,8 +693,8 @@ describe('PollService', () => {
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
-  it('close() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14)', async () => {
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+  it('close() → notifie aussi PartieSignalsPort.notifyChanged (Story 29.7, AD-14)', async () => {
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -514,11 +702,11 @@ describe('PollService', () => {
     });
     prisma.sessionPoll.update.mockResolvedValue({});
     await service.close('p1', 'poll1', 'mj1');
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    expect(partieSignals.notifyChanged).toHaveBeenCalledWith('p1');
   });
 
   it('close() sur un poll déjà CLOSED → BadRequestException', async () => {
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -567,12 +755,12 @@ describe('PollService', () => {
     }
 
     beforeEach(() => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       prisma.sessionPoll.findUnique.mockResolvedValue(pollWithOptions());
     });
 
-    it('→ MJ seul : getOwned qui rejette fait rejeter la mutation, sans aucune écriture (AC8)', async () => {
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+    it('→ MJ seul : un refus du service de permission fait rejeter la mutation, sans aucune écriture (AC8)', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
       await expect(
         service.setOptions('p1', 'poll1', 'joueur1', {
           options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
@@ -651,6 +839,9 @@ describe('PollService', () => {
         options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
       });
 
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'POLL_OPTIONS_SET', {
+        partieId: 'p1',
+      });
       // B retirée — et B seule.
       expect(prisma.pollOption.deleteMany).toHaveBeenCalledTimes(1);
       expect(prisma.pollOption.deleteMany).toHaveBeenCalledWith({
@@ -692,7 +883,7 @@ describe('PollService', () => {
         options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
       });
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
-      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+      expect(partieSignals.notifyChanged).toHaveBeenCalledWith('p1');
     });
 
     it('→ renvoie le DTO relu, avec membersCount (AC5)', async () => {
@@ -702,6 +893,662 @@ describe('PollService', () => {
       });
       expect(dto.membersCount).toBe(4);
       expect(dto.id).toBe('poll1');
+    });
+  });
+
+  // ─── Sondage de dates d'une conjonction de groupe (Story 40.5) ───────────────────────────────
+  describe('createInTx() — sondage de groupe (Story 40.5)', () => {
+    const day = (key: string) => new Date(`${key}T00:00:00.000Z`);
+    const options = [
+      { date: day('2026-11-14'), slot: 'EVENING' as DaySlot },
+      { date: day('2026-11-15'), slot: 'MORNING' as DaySlot },
+    ];
+
+    it('écrit dans la transaction de l’appelant, avec l’échéance choisie, sans émettre ni notifier', async () => {
+      const tx = { sessionPoll: { create: jest.fn().mockResolvedValue({ id: 'poll-9' }) } };
+      const expiresAt = new Date('2026-11-10T23:59:59.999Z');
+
+      const poll = await service.createInTx(tx as never, 'g1', 'host', {
+        options,
+        expiresAt,
+        bounds: GROUP_POLL_OPTION_BOUNDS,
+      });
+
+      expect(poll).toEqual({ id: 'poll-9' });
+      const data = callArg<{ data: { partieId: string; createdById: string; expiresAt: Date } }>(
+        tx.sessionPoll.create,
+      ).data;
+      expect(data).toEqual(
+        expect.objectContaining({ partieId: 'g1', createdById: 'host', expiresAt }),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+      expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
+    });
+
+    it('sans échéance : l’échéance par défaut du JDR (14 jours), jamais null', async () => {
+      const tx = { sessionPoll: { create: jest.fn().mockResolvedValue({ id: 'p' }) } };
+      await service.createInTx(tx as never, 'p1', 'mj1', { options });
+      const data = callArg<{ data: { expiresAt: Date } }>(tx.sessionPoll.create).data;
+      expect(data.expiresAt.getTime()).toBeGreaterThan(Date.now() + 13 * 24 * 3_600_000);
+    });
+
+    it('un seul créneau → 400 ; au-delà de la garde technique → 400 ; 41 créneaux acceptés (aucun plafond métier)', async () => {
+      const tx = { sessionPoll: { create: jest.fn().mockResolvedValue({ id: 'p' }) } };
+      await expect(
+        service.createInTx(tx as never, 'g1', 'h', {
+          options: options.slice(0, 1),
+          bounds: GROUP_POLL_OPTION_BOUNDS,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      const many = (n: number): { date: Date; slot: DaySlot }[] =>
+        Array.from({ length: n }, (_, i) => ({
+          date: new Date(Date.UTC(2027, 0, 1 + i)),
+          slot: 'EVENING',
+        }));
+      await service.createInTx(tx as never, 'g1', 'h', {
+        options: many(41),
+        bounds: GROUP_POLL_OPTION_BOUNDS,
+      });
+      await expect(
+        service.createInTx(tx as never, 'g1', 'h', {
+          options: many(GROUP_POLL_OPTION_BOUNDS.max + 1),
+          bounds: GROUP_POLL_OPTION_BOUNDS,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(tx.sessionPoll.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('doublons (même date et créneau) → 400, rien n’est écrit', async () => {
+      const tx = { sessionPoll: { create: jest.fn() } };
+      await expect(
+        service.createInTx(tx as never, 'g1', 'h', {
+          options: [options[0], { ...options[0] }],
+          bounds: GROUP_POLL_OPTION_BOUNDS,
+        }),
+      ).rejects.toThrow('Options dupliquées');
+      expect(tx.sessionPoll.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('closeInTx() — fermeture du sondage d’une conjonction annulée (Story 42.1)', () => {
+    it('ferme le sondage OUVERT dans la transaction de l’appelant, sans rien émettre', async () => {
+      const tx = { sessionPoll: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) } };
+
+      await service.closeInTx(tx as never, 'poll1');
+
+      expect(tx.sessionPoll.updateMany).toHaveBeenCalledWith({
+        where: { id: 'poll1', status: 'OPEN' },
+        data: { status: 'CLOSED' },
+      });
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('un sondage déjà fermé n’est pas touché (le filtre OPEN) et ne lève rien', async () => {
+      const tx = { sessionPoll: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) } };
+
+      await expect(service.closeInTx(tx as never, 'poll1')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('updateInTx() — modification du sondage d’une conjonction (Story 40.5)', () => {
+    const day = (key: string) => new Date(`${key}T00:00:00.000Z`);
+    const future = new Date(Date.now() + 5 * 86_400_000);
+    const existing = [
+      { id: 'o1', date: day('2026-11-14'), slot: 'EVENING' },
+      { id: 'o2', date: day('2026-11-15'), slot: 'MORNING' },
+    ];
+    const keep = [
+      { date: day('2026-11-14'), slot: 'EVENING' as DaySlot },
+      { date: day('2026-11-15'), slot: 'MORNING' as DaySlot },
+    ];
+    let tx: {
+      sessionPoll: { findUnique: jest.Mock; update: jest.Mock };
+      pollOption: { deleteMany: jest.Mock; createMany: jest.Mock; update: jest.Mock };
+    };
+    beforeEach(() => {
+      tx = {
+        sessionPoll: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({ status: 'OPEN', expiresAt: future, options: existing }),
+          update: jest.fn(),
+        },
+        pollOption: { deleteMany: jest.fn(), createMany: jest.fn(), update: jest.fn() },
+      };
+    });
+    const input = (opts: { date: Date; slot: DaySlot }[], expiresAt = future) => ({
+      options: opts,
+      expiresAt,
+      bounds: GROUP_POLL_OPTION_BOUNDS,
+    });
+
+    it('réconcilie sur la clé date|slot : le créneau conservé n’est pas touché, le retiré est supprimé, le nouveau créé', async () => {
+      await service.updateInTx(
+        tx as never,
+        'poll1',
+        input([
+          { date: day('2026-11-14'), slot: 'EVENING' }, // conservé (o1)
+          { date: day('2026-11-20'), slot: 'AFTERNOON' }, // nouveau ; o2 retiré
+        ]),
+      );
+
+      expect(tx.pollOption.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['o2'] } } });
+      expect(tx.pollOption.createMany).toHaveBeenCalledWith({
+        data: [{ pollId: 'poll1', date: day('2026-11-20'), slot: 'AFTERNOON' }],
+      });
+      expect(tx.pollOption.update).not.toHaveBeenCalled();
+    });
+
+    it('l’échéance modifiée est écrite ; inchangée, rien n’est écrit', async () => {
+      await service.updateInTx(tx as never, 'poll1', input(keep));
+      expect(tx.sessionPoll.update).not.toHaveBeenCalled();
+      expect(tx.pollOption.deleteMany).not.toHaveBeenCalled();
+
+      const later = new Date(future.getTime() + 86_400_000);
+      await service.updateInTx(tx as never, 'poll1', input(keep, later));
+      expect(tx.sessionPoll.update).toHaveBeenCalledWith({
+        where: { id: 'poll1' },
+        // Story 40.7 : une nouvelle échéance ré-arme la relance de la veille.
+        data: { expiresAt: later, relanceSentAt: null },
+      });
+    });
+
+    it('une NOUVELLE échéance passée → 400, rien n’est écrit ; une échéance passée INCHANGÉE est acceptée', async () => {
+      const past = new Date(Date.now() - 86_400_000);
+      await expect(service.updateInTx(tx as never, 'poll1', input(keep, past))).rejects.toThrow(
+        POLL_DEADLINE_PAST_MESSAGE,
+      );
+      expect(tx.sessionPoll.update).not.toHaveBeenCalled();
+
+      tx.sessionPoll.findUnique.mockResolvedValue({
+        status: 'OPEN',
+        expiresAt: past,
+        options: existing,
+      });
+      await expect(
+        service.updateInTx(tx as never, 'poll1', input(keep, past)),
+      ).resolves.toBeUndefined();
+    });
+
+    it('sondage fermé → 400 ; introuvable → 404 ; moins de 2 créneaux → 400', async () => {
+      tx.sessionPoll.findUnique.mockResolvedValueOnce({
+        status: 'CLOSED',
+        expiresAt: future,
+        options: existing,
+      });
+      await expect(service.updateInTx(tx as never, 'poll1', input(keep))).rejects.toThrow(
+        'déjà fermé',
+      );
+      tx.sessionPoll.findUnique.mockResolvedValueOnce(null);
+      await expect(service.updateInTx(tx as never, 'poll1', input(keep))).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(service.updateInTx(tx as never, 'poll1', input([keep[0]]))).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(tx.pollOption.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('vote sur le sondage d’un groupe de ralliement (Story 40.5)', () => {
+    const GROUPE = { id: 'g1', kind: 'CAMPAGNE_EPISODIQUE', gameSystemId: 'ralliement' };
+    const poll = { id: 'poll1', partieId: 'g1', status: 'OPEN', expiresAt: new Date('2099-01-01') };
+    beforeEach(() => {
+      permissions.assert.mockResolvedValue(testGrant(GROUPE, 'member'));
+      prisma.sessionPoll.findUnique.mockResolvedValue(poll);
+      prisma.pollOption.findUnique.mockResolvedValue({ id: 'opt1', pollId: 'poll1' });
+      prisma.pollVote.upsert.mockResolvedValue({});
+    });
+
+    it('castVote : le port décide AVANT toute écriture ; accepté, le vote est écrit', async () => {
+      await service.castVote('g1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' });
+
+      expect(permissions.assert).toHaveBeenCalledWith('u1', 'POLL_VOTE', { partieId: 'g1' });
+      expect(groupVotes.assertCanVote).toHaveBeenCalledWith(poll, GROUPE, 'u1');
+      expect(prisma.pollVote.upsert).toHaveBeenCalledTimes(1);
+    });
+
+    it('castVote refusé par le port : erreur remontée telle quelle, rien n’est écrit ni émis', async () => {
+      groupVotes.assertCanVote.mockRejectedValue(new ForbiddenException('pas éligible'));
+
+      await expect(
+        service.castVote('g1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' }),
+      ).rejects.toThrow('pas éligible');
+      expect(prisma.pollVote.upsert).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+      expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
+    });
+
+    it('withdrawVote refusé par le port : rien n’est supprimé', async () => {
+      groupVotes.assertCanVote.mockRejectedValue(new BadRequestException('vote terminé'));
+
+      await expect(service.withdrawVote('g1', 'poll1', 'opt1', 'u1')).rejects.toThrow(
+        'vote terminé',
+      );
+      expect(prisma.pollVote.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('un sondage fermé est refusé avant le port', async () => {
+      prisma.sessionPoll.findUnique.mockResolvedValue({ ...poll, status: 'CLOSED' });
+      await expect(
+        service.castVote('g1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' }),
+      ).rejects.toThrow('Poll introuvable ou fermé');
+      expect(groupVotes.assertCanVote).not.toHaveBeenCalled();
+    });
+
+    it('castVote : l’écriture se fait dans UNE transaction, sous le verrou de la conjonction (Story 40.6)', async () => {
+      const order: string[] = [];
+      groupVotes.lockConjonction.mockImplementation(() => {
+        order.push('lock');
+        return Promise.resolve({ dated: false });
+      });
+      prisma.pollVote.upsert.mockImplementation(() => {
+        order.push('upsert');
+        return Promise.resolve({});
+      });
+
+      await service.castVote('g1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' });
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(groupVotes.lockConjonction).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ id: 'poll1', partieId: 'g1' }),
+      );
+      expect(order).toEqual(['lock', 'upsert']);
+    });
+
+    it('castVote / withdrawVote : date fixée entre-temps (sous le verrou) → 400, rien n’est écrit', async () => {
+      groupVotes.lockConjonction.mockResolvedValue({ dated: true });
+
+      await expect(
+        service.castVote('g1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' }),
+      ).rejects.toThrow(BadRequestException);
+      await expect(service.withdrawVote('g1', 'poll1', 'opt1', 'u1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.pollVote.upsert).not.toHaveBeenCalled();
+      expect(prisma.pollVote.deleteMany).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('castVote : sondage clos entre-temps (relu sous le verrou) → 400, rien n’est écrit', async () => {
+      prisma.sessionPoll.findUnique
+        .mockResolvedValueOnce(poll) // lecture initiale, ouvert
+        .mockResolvedValueOnce({ status: 'CLOSED' }); // relecture sous le verrou
+
+      await expect(
+        service.castVote('g1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' }),
+      ).rejects.toThrow('Poll introuvable ou fermé');
+      expect(prisma.pollVote.upsert).not.toHaveBeenCalled();
+    });
+
+    it('JDR : le port n’est jamais consulté (règles de la Story 37.1 inchangées)', async () => {
+      permissions.assert.mockResolvedValue(
+        testGrant({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }, 'player'),
+      );
+      prisma.sessionPoll.findUnique.mockResolvedValue({ ...poll, partieId: 'p1' });
+
+      await service.castVote('p1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' });
+      await service.withdrawVote('p1', 'poll1', 'opt1', 'u1');
+
+      expect(groupVotes.assertCanVote).not.toHaveBeenCalled();
+      // Story 40.6 : ni verrou ni transaction pour un vote de JDR.
+      expect(groupVotes.lockConjonction).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  // Story 40.6 — fixer la date d'une conjonction : branche « groupe » de la route partagée `choose`.
+  describe('choose() — date d’une conjonction (Story 40.6)', () => {
+    const GROUPE = { id: 'g1', kind: 'CAMPAGNE_EPISODIQUE', gameSystemId: 'ralliement' };
+    // Un jour à venir (le créneau d'un sondage de groupe ne peut pas être déjà passé).
+    const d = new Date(
+      `${new Date(Date.now() + 30 * 86_400_000).toISOString().substring(0, 10)}T00:00:00.000Z`,
+    );
+    const poll = { id: 'poll1', partieId: 'g1', status: 'OPEN', expiresAt: new Date('2020-01-01') };
+    beforeEach(() => {
+      permissions.assert.mockResolvedValue(testGrant(GROUPE, 'member'));
+      prisma.sessionPoll.findUnique.mockResolvedValue(poll);
+      prisma.pollOption.findUnique.mockResolvedValue({
+        id: 'opt1',
+        pollId: 'poll1',
+        date: d,
+        slot: 'EVENING',
+      });
+      prisma.sessionPoll.update.mockResolvedValue({});
+    });
+
+    it('cellule de rôle sur la partie, droit d’hôte par le port, puis sondage clos + date écrite dans UNE transaction', async () => {
+      const order: string[] = [];
+      groupChoice.assertCanChoose.mockImplementation(() => {
+        order.push('droit');
+        return Promise.resolve();
+      });
+      groupVotes.lockConjonction.mockImplementation(() => {
+        order.push('verrou');
+        return Promise.resolve({ dated: false });
+      });
+      prisma.sessionPoll.update.mockImplementation(() => {
+        order.push('ferme');
+        return Promise.resolve({});
+      });
+      seanceDate.chooseDate.mockImplementation(() => {
+        order.push('date');
+        return Promise.resolve();
+      });
+
+      await service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' });
+
+      expect(permissions.assert).toHaveBeenCalledWith('hote', 'POLL_CHOOSE', { partieId: 'g1' });
+      expect(groupChoice.assertCanChoose).toHaveBeenCalledWith(
+        { id: 'poll1', partieId: 'g1' },
+        GROUPE,
+        'hote',
+      );
+      expect(prisma.sessionPoll.update).toHaveBeenCalledWith({
+        where: { id: 'poll1' },
+        data: { status: 'CLOSED', chosenDate: d, chosenSlot: 'EVENING' },
+      });
+      expect(seanceDate.chooseDate).toHaveBeenCalledWith(anyOf(Object), 'poll1', d, 'EVENING');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      // Le droit précède toute écriture ; le verrou précède la fermeture, elle-même suivie de la date.
+      expect(order).toEqual(['droit', 'verrou', 'ferme', 'date']);
+    });
+
+    it('après le commit : partie:{id}, signaux de l’accueil, puis l’e-mail — dans cet ordre', async () => {
+      const order: string[] = [];
+      realtimeEvents.emit.mockImplementation(() => order.push('emit'));
+      partieSignals.notifyChanged.mockImplementation(() => {
+        order.push('signaux');
+        return Promise.resolve();
+      });
+      groupChoice.notifyDateFixed.mockImplementation(() => {
+        order.push('mail');
+        return Promise.resolve();
+      });
+
+      await service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' });
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('g1'));
+      expect(groupChoice.notifyDateFixed).toHaveBeenCalledWith({ id: 'poll1', partieId: 'g1' });
+      expect(order).toEqual(['emit', 'signaux', 'mail']);
+    });
+
+    it('l’échéance dépassée ne bloque pas l’hôte', async () => {
+      await expect(
+        service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('droit refusé par le port (non-hôte, rencontre isolée) : rien n’est écrit, ni émis, ni envoyé', async () => {
+      groupChoice.assertCanChoose.mockRejectedValue(new ForbiddenException('hôte seul'));
+
+      await expect(service.choose('g1', 'poll1', 'autre', { optionId: 'opt1' })).rejects.toThrow(
+        'hôte seul',
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+      expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+    });
+
+    it('date déjà fixée (sous le verrou) → 400, rien n’est écrit ni envoyé', async () => {
+      groupVotes.lockConjonction.mockResolvedValue({ dated: true });
+
+      const refusal = service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' });
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(DATE_ALREADY_FIXED_MESSAGE);
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(seanceDate.chooseDate).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('sondage déjà fermé (relu sous le verrou) → 400', async () => {
+      prisma.sessionPoll.findUnique.mockResolvedValue({ ...poll, status: 'CLOSED' });
+
+      await expect(service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' })).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+    });
+
+    it('sondage d’une AUTRE partie ou inconnu → 404 (le port le refuse avant tout droit, la relecture sous verrou aussi)', async () => {
+      groupChoice.assertCanChoose.mockRejectedValue(new NotFoundException('Poll introuvable'));
+      await expect(service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' })).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+
+      groupChoice.assertCanChoose.mockResolvedValue(undefined);
+      prisma.sessionPoll.findUnique.mockResolvedValue({ ...poll, partieId: 'autre' });
+      await expect(service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' })).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+    });
+
+    it('option d’un AUTRE sondage ou inconnue → 404, sondage non fermé', async () => {
+      prisma.pollOption.findUnique.mockResolvedValue({ id: 'opt1', pollId: 'autre', date: d });
+      await expect(service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' })).rejects.toThrow(
+        NotFoundException,
+      );
+      prisma.pollOption.findUnique.mockResolvedValue(null);
+      await expect(service.choose('g1', 'poll1', 'hote', { optionId: 'zzz' })).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+    });
+
+    it('créneau dont le jour est passé → 400 français sous le verrou, rien n’est écrit ; aujourd’hui est accepté', async () => {
+      const day = (offset: number) =>
+        new Date(
+          `${new Date(Date.now() + offset * 86_400_000).toISOString().substring(0, 10)}T00:00:00.000Z`,
+        );
+      prisma.pollOption.findUnique.mockResolvedValue({
+        id: 'opt1',
+        pollId: 'poll1',
+        date: day(-1),
+        slot: 'EVENING',
+      });
+
+      const refusal = service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' });
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(PAST_OPTION_MESSAGE);
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(seanceDate.chooseDate).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+
+      prisma.pollOption.findUnique.mockResolvedValue({
+        id: 'opt1',
+        pollId: 'poll1',
+        date: day(0),
+        slot: 'EVENING',
+      });
+      await expect(
+        service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('échec de l’écriture de la date : tout est annulé, ni émission ni e-mail', async () => {
+      seanceDate.chooseDate.mockRejectedValue(new Error('boom'));
+
+      await expect(service.choose('g1', 'poll1', 'hote', { optionId: 'opt1' })).rejects.toThrow(
+        'boom',
+      );
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+      expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+    });
+
+    it('JDR : le port de groupe n’est jamais consulté, chemin inchangé (Story 37.1)', async () => {
+      permissions.assert.mockResolvedValue(
+        testGrant({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }, 'mj'),
+      );
+      prisma.sessionPoll.findUnique.mockResolvedValue({ ...poll, partieId: 'p1' });
+
+      await service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' });
+
+      expect(groupChoice.assertCanChoose).not.toHaveBeenCalled();
+      expect(groupChoice.notifyDateFixed).not.toHaveBeenCalled();
+      expect(groupVotes.lockConjonction).not.toHaveBeenCalled();
+      expect(seanceDate.chooseDate).toHaveBeenCalledWith(anyOf(Object), 'poll1', d, 'EVENING');
+    });
+  });
+
+  describe('extend() — prolonger le vote d’une conjonction (Story 40.7)', () => {
+    const GROUPE = { id: 'g1', kind: 'CAMPAGNE_EPISODIQUE', gameSystemId: 'ralliement' };
+    const dayKey = (offset: number) =>
+      new Date(Date.now() + offset * 86_400_000).toISOString().substring(0, 10);
+    const endOfDay = (key: string) => new Date(`${key}T23:59:59.999Z`);
+    // Échéance actuelle : dans 3 jours (fin de journée UTC).
+    const poll = {
+      id: 'poll1',
+      partieId: 'g1',
+      status: 'OPEN',
+      expiresAt: endOfDay(dayKey(3)),
+    };
+    beforeEach(() => {
+      permissions.assert.mockResolvedValue(testGrant(GROUPE, 'member'));
+      prisma.sessionPoll.findUnique.mockResolvedValue(poll);
+      prisma.sessionPoll.update.mockResolvedValue({});
+    });
+
+    it('cellule de rôle, droit d’hôte par le port, puis verrou, relecture et écriture dans UNE transaction', async () => {
+      const order: string[] = [];
+      groupExtension.assertCanExtend.mockImplementation(() => {
+        order.push('droit');
+        return Promise.resolve();
+      });
+      groupVotes.lockConjonction.mockImplementation(() => {
+        order.push('verrou');
+        return Promise.resolve({ dated: false });
+      });
+      prisma.sessionPoll.update.mockImplementation(() => {
+        order.push('prolonge');
+        return Promise.resolve({});
+      });
+
+      await service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(10) });
+
+      expect(permissions.assert).toHaveBeenCalledWith('hote', 'POLL_EXTEND', { partieId: 'g1' });
+      expect(groupExtension.assertCanExtend).toHaveBeenCalledWith(
+        { id: 'poll1', partieId: 'g1' },
+        GROUPE,
+        'hote',
+      );
+      // Fin du jour choisi (UTC), comme à la création ; la relance est ré-armée.
+      expect(prisma.sessionPoll.update).toHaveBeenCalledWith({
+        where: { id: 'poll1' },
+        data: { expiresAt: endOfDay(dayKey(10)), relanceSentAt: null },
+      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(['droit', 'verrou', 'prolonge']);
+    });
+
+    it('après le commit : partie:{id} puis les signaux de l’accueil', async () => {
+      const order: string[] = [];
+      realtimeEvents.emit.mockImplementation(() => order.push('emit'));
+      partieSignals.notifyChanged.mockImplementation(() => {
+        order.push('signaux');
+        return Promise.resolve();
+      });
+
+      await service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(10) });
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('g1'));
+      expect(order).toEqual(['emit', 'signaux']);
+    });
+
+    it('échéance déjà dépassée mais sondage ouvert : accepté (le vote se rouvre)', async () => {
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        ...poll,
+        expiresAt: endOfDay(dayKey(-5)),
+      });
+
+      await expect(
+        service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(0) }),
+      ).resolves.toBeUndefined();
+      expect(prisma.sessionPoll.update).toHaveBeenCalledWith({
+        where: { id: 'poll1' },
+        data: { expiresAt: endOfDay(dayKey(0)), relanceSentAt: null },
+      });
+    });
+
+    it('même jour ou jour antérieur à l’échéance actuelle → 400, rien n’est écrit ni émis', async () => {
+      for (const offset of [3, 2]) {
+        const refusal = service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(offset) });
+        await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+        await expect(refusal).rejects.toThrow(EXTEND_NOT_LATER_MESSAGE);
+      }
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+      expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
+    });
+
+    it('jour passé → 400 avant toute transaction', async () => {
+      const refusal = service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(-1) });
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(POLL_DEADLINE_PAST_MESSAGE);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+    });
+
+    it('jour qui n’existe pas au calendrier → 400 français', async () => {
+      const refusal = service.extend('g1', 'poll1', 'hote', { expiresAt: '2099-02-30' });
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(EXTEND_INVALID_DAY_MESSAGE);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('date déjà fixée (sous le verrou) → 400, rien n’est écrit', async () => {
+      groupVotes.lockConjonction.mockResolvedValue({ dated: true });
+
+      const refusal = service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(10) });
+      await expect(refusal).rejects.toBeInstanceOf(BadRequestException);
+      await expect(refusal).rejects.toThrow(DATE_ALREADY_FIXED_MESSAGE);
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('sondage fermé (relu sous le verrou) → 400 ; sondage d’une AUTRE partie → 404', async () => {
+      prisma.sessionPoll.findUnique.mockResolvedValue({ ...poll, status: 'CLOSED' });
+      await expect(
+        service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(10) }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      prisma.sessionPoll.findUnique.mockResolvedValue({ ...poll, partieId: 'autre' });
+      await expect(
+        service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(10) }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+    });
+
+    it('droit refusé par le port (non-hôte, rencontre isolée, sondage inconnu) : rien n’est écrit ni émis', async () => {
+      groupExtension.assertCanExtend.mockRejectedValue(new ForbiddenException('hôte seul'));
+
+      await expect(
+        service.extend('g1', 'poll1', 'autre', { expiresAt: dayKey(10) }),
+      ).rejects.toThrow('hôte seul');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+      expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
+    });
+
+    it('cellule de rôle refusée (JDR, étranger) : le port n’est jamais consulté', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException('non'));
+
+      await expect(
+        service.extend('g1', 'poll1', 'hote', { expiresAt: dayKey(10) }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(groupExtension.assertCanExtend).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 });

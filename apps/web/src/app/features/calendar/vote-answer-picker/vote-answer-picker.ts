@@ -3,11 +3,14 @@ import {
   ElementRef,
   afterNextRender,
   computed,
+  inject,
   input,
   output,
   viewChildren,
 } from '@angular/core';
 import type { VoteAnswer } from '@master-jdr/shared';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import { type VoteParticipation, answerLabel } from '../poll-track.utils';
 
 /** L'ordre du contrat d'UI : **oui, peut-être, non** (`contrat-ui-calendrier.html:628-631`).
@@ -19,9 +22,10 @@ const ANSWERS: readonly VoteAnswer[] = ['YES', 'MAYBE', 'NO'] as const;
 /**
  * Story 36.7 — le sélecteur de réponse de vote.
  *
- * **Composant de RENDU PUR.** Il n'injecte aucun service, n'appelle rien, ne connaît ni HTTP ni
- * routes : il affiche trois choix et émet celui qu'on lui désigne. C'est `CalendarView` qui écrit
- * (patron `PollTrack`, `SelectionBar`, `CalendarDetailRail`).
+ * **Composant de RENDU PUR.** Il n'injecte aucun service de données (seulement le ton du thème),
+ * n'appelle rien, ne connaît ni HTTP ni routes : il affiche trois choix et émet celui qu'on lui
+ * désigne. C'est `CalendarView` qui écrit (patron `PollTrack`, `SelectionBar`,
+ * `CalendarDetailRail`).
  *
  * **Pourquoi un sélecteur et pas un tap qui répond** — arbitrage de la collision 4
  * (`EXPERIENCE.md` §6 bis, 2026-08-17) : *un tap est binaire, une réponse de vote ne l'est pas.*
@@ -56,6 +60,12 @@ export class VoteAnswerPicker {
   readonly withdrawRequested = output<void>();
 
   protected readonly ANSWERS = ANSWERS;
+  protected readonly theme = inject(ThemeToneService);
+
+  /** Nom accessible du menu : il nomme le jour et le créneau sur lesquels on répond. */
+  protected readonly menuAriaLabel = computed(() =>
+    fillTone(this.theme.tone()['calendar.answer_menu_aria'], { slot: this.slotLabel() }),
+  );
 
   private readonly answerButtons = viewChildren<ElementRef<HTMLButtonElement>>('answerBtn');
 
@@ -77,7 +87,7 @@ export class VoteAnswerPicker {
    *  bande, le rail, l'Agenda et ce sélecteur disent « oui », « peut-être », « non » de la même
    *  façon. Aucun second vocabulaire ici. */
   protected label(answer: VoteAnswer): string {
-    return answerLabel(answer, 'compact');
+    return answerLabel(answer, 'compact', this.theme.tone());
   }
 
   protected isMine(answer: VoteAnswer): boolean {

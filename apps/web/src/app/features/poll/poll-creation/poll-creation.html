@@ -1,7 +1,7 @@
 <div class="poll-creation-panel">
   <div class="poll-creation-panel__header">
-    <h2>Créer un vote de date</h2>
-    <button mat-icon-button (click)="cancelled.emit()" aria-label="Fermer">
+    <h2>{{ theme.tone()['pollui.creation_title'] }}</h2>
+    <button mat-icon-button (click)="cancelled.emit()" [attr.aria-label]="theme.tone()['common.fermer']">
       <mat-icon>close</mat-icon>
     </button>
   </div>
@@ -11,7 +11,7 @@
   }
 
   <section class="poll-creation-panel__section">
-    <h3>Créneaux calculés</h3>
+    <h3>{{ theme.tone()['pollui.creation_computed_title'] }}</h3>
     @for (slot of visiblePreselected(); track slot.date + slot.slot; let i = $index) {
       <label class="poll-creation-panel__slot">
         <input
@@ -23,7 +23,7 @@
       </label>
     }
     @if (preselectedSlots().length === 0) {
-      <p class="poll-creation-panel__empty">Aucun créneau calculé disponible.</p>
+      <p class="poll-creation-panel__empty">{{ theme.tone()['pollui.creation_computed_empty'] }}</p>
     }
     <button
       mat-stroked-button
@@ -33,15 +33,15 @@
     >
       @if (canLoadMore()) {
         <mat-icon>expand_more</mat-icon>
-        {{ nextBatchSize() }} créneau{{ nextBatchSize() > 1 ? 'x' : '' }} calculé{{ nextBatchSize() > 1 ? 's' : '' }} de plus
+        {{ loadMoreLabel() }}
       } @else {
-        Tous les créneaux calculés sont affichés
+        {{ theme.tone()['pollui.creation_all_shown'] }}
       }
     </button>
   </section>
 
   <section class="poll-creation-panel__section">
-    <h3>Créneaux personnalisés</h3>
+    <h3>{{ theme.tone()['pollui.creation_custom_title'] }}</h3>
     @for (c of customSlots(); track $index; let i = $index) {
       <div class="poll-creation-panel__custom-slot">
         <input type="date" [(ngModel)]="c.date" class="poll-creation-panel__date-input" />
@@ -50,26 +50,26 @@
             <mat-button-toggle [value]="s">{{ SLOT_LABELS[s] }}</mat-button-toggle>
           }
         </mat-button-toggle-group>
-        <button mat-icon-button (click)="removeCustomSlot(i)" aria-label="Supprimer">
+        <button mat-icon-button (click)="removeCustomSlot(i)" [attr.aria-label]="theme.tone()['common.supprimer']">
           <mat-icon>delete</mat-icon>
         </button>
       </div>
     }
     <button mat-stroked-button (click)="addOneCustomSlot()">
-      <mat-icon>add</mat-icon> Ajouter un créneau personnalisé
+      <mat-icon>add</mat-icon> {{ theme.tone()['pollui.creation_add_custom'] }}
     </button>
   </section>
 
   <div class="poll-creation-panel__footer">
-    <span class="poll-creation-panel__count">{{ totalSelected() }} option(s) sélectionnée(s)</span>
-    <button mat-stroked-button (click)="cancelled.emit()">Annuler</button>
+    <span class="poll-creation-panel__count">{{ selectedCountLabel() }}</span>
+    <button mat-stroked-button (click)="cancelled.emit()">{{ theme.tone()['common.annuler'] }}</button>
     <button
       mat-flat-button
       color="primary"
       [disabled]="!isValid() || saving()"
       (click)="onSubmit()"
     >
-      @if (saving()) { Envoi… } @else { Ouvrir le vote }
+      @if (saving()) { {{ theme.tone()['common.envoi'] }} } @else { {{ theme.tone()['pollui.creation_submit'] }} }
     </button>
   </div>
 </div>

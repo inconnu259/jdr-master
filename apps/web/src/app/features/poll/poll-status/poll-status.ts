@@ -11,6 +11,7 @@ import type {
 } from '@master-jdr/shared';
 import { getMissingVoters, getMissingVotersForOption } from '../../../core/poll/poll.util';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
 import { ConfirmDialog } from '../../parties/confirm-dialog/confirm-dialog';
 
@@ -21,10 +22,11 @@ const SLOT_LABELS: Record<DaySlot, string> = {
   FULL_DAY: 'Journée',
 };
 
-const ANSWER_LABELS: Record<VoteAnswer, string> = {
-  YES: 'Oui',
-  NO: 'Non',
-  MAYBE: 'Peut-être',
+/** Clés du registre de ton (libellés « Oui / Non / Peut-être »), résolues par le gabarit. */
+const ANSWER_LABEL_KEYS: Record<VoteAnswer, string> = {
+  YES: 'common.oui',
+  NO: 'common.non',
+  MAYBE: 'common.peut_etre',
 };
 
 const ANSWER_ICONS: Record<VoteAnswer, string> = {
@@ -55,7 +57,7 @@ export class PollStatusPanel {
   protected readonly dialogPending = signal(false);
 
   readonly SLOT_LABELS = SLOT_LABELS;
-  readonly ANSWER_LABELS = ANSWER_LABELS;
+  readonly ANSWER_LABEL_KEYS = ANSWER_LABEL_KEYS;
   readonly ANSWER_ICONS = ANSWER_ICONS;
 
   protected formatDate(iso: string): string {
@@ -98,11 +100,17 @@ export class PollStatusPanel {
     if (this.busy() || this.dialogPending()) return;
     this.dialogPending.set(true);
     try {
-      const warning = opt.votes.length === 0 ? " ⚠️ Aucun membre n'a voté pour cette date." : '';
+      const tone = this.theme.tone();
+      const noVoteWarning = tone['pollui.status_choose_no_vote_warning'];
+      const warning = opt.votes.length === 0 ? ` ${noVoteWarning}` : '';
       const ref = this.dialog.open(ConfirmDialog, {
         data: {
-          message: `Confirmer ${this.formatDate(opt.date)} — ${SLOT_LABELS[opt.slot]} comme date de la prochaine séance ?${warning}`,
-          confirmLabel: this.theme.tone()['cta.choose_date'],
+          message:
+            fillTone(tone['pollui.status_choose_confirm'], {
+              date: this.formatDate(opt.date),
+              slot: SLOT_LABELS[opt.slot],
+            }) + warning,
+          confirmLabel: tone['cta.choose_date'],
         },
       });
       const confirmed = await firstValueFrom(ref.afterClosed());

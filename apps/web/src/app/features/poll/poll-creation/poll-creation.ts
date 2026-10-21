@@ -7,6 +7,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import type { AvailableSlotDto, DaySlot, SessionPollDto } from '@master-jdr/shared';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 
 interface CustomSlot {
   date: string;
@@ -64,6 +65,18 @@ export class PollCreationComponent {
 
   protected readonly nextBatchSize = computed(() =>
     Math.min(4, this.preselectedSlots().length - this.visibleSlotsCount()),
+  );
+
+  /** Libellé du bouton « en voir plus » — une clé par forme (singulier / pluriel). */
+  protected readonly loadMoreLabel = computed(() => {
+    const n = this.nextBatchSize();
+    const key = n > 1 ? 'pollui.creation_load_more_many' : 'pollui.creation_load_more_one';
+    return fillTone(this.theme.tone()[key], { n });
+  });
+
+  /** Compteur d'options sélectionnées, en pied de panneau. */
+  protected readonly selectedCountLabel = computed(() =>
+    fillTone(this.theme.tone()['pollui.creation_selected_count'], { n: this.totalSelected() }),
   );
 
   protected readonly totalSelected = computed(
@@ -184,8 +197,8 @@ export class PollCreationComponent {
       // soumission et créerait un doublon (revue de code Story 8.7).
       this.error.set(
         err instanceof Error && err.message === POLL_DESYNC_MESSAGE
-          ? 'Le vote a été créé, mais son état n’a pas pu être rafraîchi ici. Rechargez la page pour le voir plutôt que de recréer un vote.'
-          : 'Impossible de créer le vote. Réessayez.',
+          ? this.theme.tone()['pollui.creation_desync_error']
+          : this.theme.tone()['pollui.creation_error'],
       );
     } finally {
       this.saving.set(false);

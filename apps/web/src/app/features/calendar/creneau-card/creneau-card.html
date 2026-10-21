@@ -3,11 +3,13 @@
     <span class="creneau-card__date">{{ formatDate(slot().date) }}</span>
     <span class="creneau-card__slot">{{ slotLabel(slot().slot) }}</span>
     @if (allAvailable()) {
-      <span class="creneau-card__tag creneau-card__tag--full">Guilde complète</span>
+      <span class="creneau-card__tag creneau-card__tag--full">{{
+        theme.tone()['calendar.card_full_guild']
+      }}</span>
     }
   </header>
 
-  <ul class="creneau-card__members" aria-label="Membres">
+  <ul class="creneau-card__members" [attr.aria-label]="theme.tone()['calendar.card_members_aria']">
     @for (member of slot().members; track member.userId) {
       <li class="creneau-card__member">
         <app-identity-label
@@ -23,7 +25,7 @@
   </ul>
 
   @if (unknownMembers().length > 0) {
-    <ul class="creneau-card__alerts" aria-label="Alertes disponibilité">
+    <ul class="creneau-card__alerts" [attr.aria-label]="theme.tone()['calendar.card_alerts_aria']">
       @for (member of unknownMembers(); track member.userId) {
         <li class="creneau-card__alert">{{ missingAlert(member.displayName) }}</li>
       }

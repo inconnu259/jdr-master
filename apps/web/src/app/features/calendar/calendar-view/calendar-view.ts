@@ -2,6 +2,7 @@ import {
   Component,
   DestroyRef,
   type ElementRef,
+  Injector,
   OnInit,
   computed,
   effect,
@@ -36,14 +37,23 @@ import type {
   CreateAvailabilityBatchItem,
   CreateAvailabilityDto,
   DaySlot,
+  EventCardDto,
+  EventPollDto,
+  EventPollOptionInput,
+  EventSlot,
   MeCalendarDto,
   PartieMemberDto,
   ScenarioDto,
   SeanceDto,
   SessionPollDto,
+  UpdateEventDto,
   VoteAnswer,
 } from '@master-jdr/shared';
-import { CALENDAR_LAYER_KEYS, DEFAULT_CALENDAR_LAYER_KEYS } from '@master-jdr/shared';
+import {
+  CALENDAR_LAYER_KEYS,
+  DEFAULT_CALENDAR_LAYER_KEYS,
+  familyOf,
+} from '@master-jdr/shared';
 import {
   AvailabilityService,
   ConflictError,
@@ -54,6 +64,7 @@ import { PollService } from '../../../core/poll/poll.service';
 import { getMissingVoters } from '../../../core/poll/poll.util';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import {
   CalendarSessionLayersService,
   calendarSessionKey,
@@ -98,6 +109,13 @@ import { AvailableSlotsPanel, isNamedSlot } from '../available-slots/available-s
 import { VoteAnswerPicker } from '../vote-answer-picker/vote-answer-picker';
 import type { VoteOptionActivatedEvent, VoteParticipation } from '../poll-track.utils';
 import { PollCreationComponent } from '../../poll/poll-creation/poll-creation';
+import {
+  ConjonctionDraftService,
+  type ConjonctionDraft,
+} from '../../events/conjonction-draft.service';
+import { EventsApiService } from '../../events/events-api.service';
+import { refusalMessage } from '../../events/refusal-message';
+import { shortDayLabel } from '../../events/event-card.util';
 import { PollMissingPanel } from '../poll-missing/poll-missing';
 
 /** Story 8.8, AC7/AC8 : un vote actif, étiqueté par son scénario (et sa séance si le scénario en a
@@ -166,7 +184,24 @@ const CALENDAR_CELL_DATE_FORMAT = new Intl.DateTimeFormat('fr-FR', {
  *  validation serait une question dont il a déjà donné la réponse. Renseigné, il restreint
  *  `composeSeanceChoices()` à cette séance — ce qui suffit à pré-remplir `ComposeConfirmDialog`,
  *  qui le fait déjà quand il n'y a qu'un choix. Aucune ligne à changer dans le dialogue. */
-export type ComposeTarget = { kind: 'poll'; pollId: string } | { kind: 'new'; seanceId?: string };
+export type ComposeTarget =
+  | { kind: 'poll'; pollId: string }
+  | { kind: 'new'; seanceId?: string }
+  // Story 40.5b — les deux cibles d'un GROUPE : les créneaux du sondage d'une conjonction déjà
+  // ouverte (par l'identifiant de la conjonction, jamais un index : la liste est rechargée en direct),
+  // ou ceux d'une conjonction qui n'existe pas encore (aucun appel au serveur : le brouillon de la
+  // fenêtre de création les reçoit au retour).
+  | { kind: 'group-poll'; eventId: string }
+  | { kind: 'group-new' };
+
+/** Story 40.5b — un sondage de dates de conjonction ouvert (statut `OPEN`, séance sans date). */
+export interface GroupPollEntry {
+  card: EventCardDto;
+  poll: EventPollDto;
+}
+
+/** Story 40.5b — au moins deux créneaux pour un sondage ; aucun plafond métier (le serveur garde le sien). */
+const GROUP_MIN_SLOTS = 2;
 
 /** Story 8.8, AC9 : une séance sans vote encore lancé — sert désormais à rattacher un vote neuf
  *  composé sur la grille (Story 36.10, AC11). */
@@ -222,6 +257,10 @@ export class CalendarView implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly breakpointObserver = inject(BreakpointObserver);
   private readonly sessionLayers = inject(CalendarSessionLayersService);
+  // Story 40.5b — `EventsApiService` n'est résolu qu'à la demande (groupe seulement) : il tire HttpClient,
+  // et le calendrier d'une quête ou du MJ n'a pas à en dépendre.
+  private readonly injector = inject(Injector);
+  private readonly drafts = inject(ConjonctionDraftService);
 
   /** Même seuil que `partie-detail` et `list-control-bar` — pas un troisième vocabulaire de
    *  largeur dans l'application. */
@@ -281,13 +320,17 @@ export class CalendarView implements OnInit {
   protected readonly availableLayerKeys = computed<CalendarLayerKey[]>(() =>
     CALENDAR_LAYER_KEYS.filter(
       (k) =>
-        k !== 'inscriptions-ouvertes' && (this.partieId() ? true : k !== 'disponibilite-groupe'),
+        k !== 'inscriptions-ouvertes' &&
+        // Story 40.5b — un groupe n'a pas de couche « disponibilité du groupe » (jamais d'agrégat nominatif).
+        (this.partieId() && !this.isGroup() ? true : k !== 'disponibilite-groupe'),
     ),
   );
 
   private defaultLayersForContext(partieContext: boolean): CalendarLayerKey[] {
     const base = this.authSvc.currentUser()?.defaultCalendarLayers ?? DEFAULT_CALENDAR_LAYER_KEYS;
-    return partieContext ? base : base.filter((k) => k !== 'disponibilite-groupe');
+    return partieContext && !this.isGroup()
+      ? base
+      : base.filter((k) => k !== 'disponibilite-groupe');
   }
 
   /**
@@ -434,6 +477,74 @@ export class CalendarView implements OnInit {
 
   protected readonly isMjMode = computed(() => this.mode() === 'mj');
 
+  // ─── Story 40.5b — le calendrier d'un GROUPE (ralliement, `CAMPAGNE_EPISODIQUE`) ───────────────
+  //
+  // Même page, même composant : un groupe n'a ni scénarios, ni MJ, ni disponibilité agrégée. Ses
+  // votes sont les sondages de dates de ses conjonctions, servis par `GET /parties/:id/events/list`
+  // (`EventCardDto.poll`) ; ils se votent par les routes de vote partagées, et leur hôte en compose
+  // les créneaux sur la grille. 🚨 Le mode MJ n'est jamais un groupe (aucune lecture de la partie).
+  protected readonly isGroup = signal(false);
+  /** La nature de la partie est connue (groupe ou non) : tant qu'elle ne l'est pas, le panneau latéral
+   *  du mode joueur n'est pas rendu — il afficherait un instant des créneaux calculés à un groupe. */
+  protected readonly groupResolved = signal(false);
+  protected readonly groupEvents = signal<EventCardDto[]>([]);
+  protected readonly groupEventsError = signal<string | null>(null);
+  /** Pourquoi la dernière désignation d'un créneau a été refusée (journée entière) ; vide sinon. */
+  protected readonly composeRefusal = signal<string | null>(null);
+  private groupEventsReqId = 0;
+
+  /** Les sondages de dates ouverts du groupe (une conjonction sans date, sondage `OPEN`). */
+  protected readonly groupPolls = computed<GroupPollEntry[]>(() => {
+    const out: GroupPollEntry[] = [];
+    for (const card of this.groupEvents()) {
+      if (card.poll && card.poll.status === 'OPEN' && !card.seance?.date) {
+        out.push({ card, poll: card.poll });
+      }
+    }
+    return out;
+  });
+
+  /** Le vote est ouvert à cet instant : statut `OPEN` et échéance non dépassée (le serveur tranche en
+   *  dernier : `now > expiresAt` est refusé). */
+  private pollOpenNow(poll: EventPollDto): boolean {
+    if (poll.status !== 'OPEN') return false;
+    return poll.expiresAt === null || Date.parse(poll.expiresAt) >= Date.now();
+  }
+
+  /** La personne connectée peut répondre à ce sondage : votant éligible, avant l'échéance. */
+  private canVoteGroupPoll(poll: EventPollDto): boolean {
+    const me = this.authSvc.currentUser()?.id;
+    return !!me && poll.eligibleVoterIds.includes(me) && this.pollOpenNow(poll);
+  }
+
+  /** Une ligne par sondage ouvert : son nom, l'état du vote EN TOUTES LETTRES (répondre jusqu'au…, ou
+   *  lecture seule et pourquoi), et le bouton « composer » de son hôte. */
+  protected readonly groupPollRows = computed(() => {
+    const tone = this.theme.tone();
+    const me = this.authSvc.currentUser()?.id;
+    return this.groupPolls().map(({ card, poll }) => {
+      let state: string;
+      if (!this.pollOpenNow(poll)) {
+        state = tone['partie.ralliement_event_poll_ended'];
+      } else if (!me || !poll.eligibleVoterIds.includes(me)) {
+        state = tone['partie.ralliement_event_poll_not_eligible'];
+      } else {
+        const deadline = poll.expiresAt ? shortDayLabel(poll.expiresAt.substring(0, 10)) : '';
+        state = fillTone(tone['partie.ralliement_calendar_poll_can_vote'], {
+          date: deadline.replace(/\.$/, ''),
+        });
+      }
+      return {
+        eventId: card.id,
+        title: card.title,
+        state,
+        // Story 44.1 : le droit de modifier les dates vient du serveur (`can.edit`), jamais de `hostId`.
+        canCompose: card.can.edit,
+        armLabel: fillTone(tone['partie.ralliement_calendar_compose_arm'], { title: card.title }),
+      };
+    });
+  });
+
   // Story 8.8, AC9 : source unique de vérité — `activePolls`/`eligibleSeances` en sont dérivés
   // (computed), pas peuplés séparément, pour rester cohérents après tout rechargement.
   protected readonly scenarios = signal<ScenarioDto[]>([]);
@@ -504,6 +615,7 @@ export class CalendarView implements OnInit {
   private readonly allCalendarEntries = computed<AgendaEntry[]>(() => {
     const entries: AgendaEntry[] = [];
     const pid = this.partieId();
+    const tone = this.theme.tone();
 
     if (pid) {
       for (const scenario of this.scenarios()) {
@@ -577,13 +689,44 @@ export class CalendarView implements OnInit {
           });
         }
       }
+      // Story 40.5b — les sondages de dates des conjonctions d'un groupe : UNE entrée par option, comme
+      // ci-dessus. Compteurs et ma réponse se dérivent de `poll.votes` (réponses des votants éligibles) ;
+      // le dénominateur est le nombre de votants éligibles, jamais le nombre de membres.
+      for (const { card, poll } of this.groupPolls()) {
+        const eligible = new Set(poll.eligibleVoterIds);
+        for (const option of poll.options) {
+          const votes = poll.votes.filter((v) => v.optionId === option.id && eligible.has(v.userId));
+          const mine = votes.find((v) => v.userId === myId);
+          entries.push({
+            key: `poll-${poll.id}-${option.id}`,
+            type: 'votes-en-cours',
+            date: option.date.substring(0, 10),
+            label: card.title,
+            detail: SLOT_LABELS[option.slot],
+            slot: option.slot,
+            vote: {
+              partieId: pid,
+              pollId: poll.id,
+              optionId: option.id,
+              yes: votes.filter((v) => v.answer === 'YES').length,
+              maybe: votes.filter((v) => v.answer === 'MAYBE').length,
+              no: votes.filter((v) => v.answer === 'NO').length,
+              total: poll.eligibleVoterIds.length,
+              myAnswer: mine ? mine.answer : null,
+            },
+          });
+        }
+      }
       for (const { scenario, seance } of this.openInscriptionSeances()) {
         entries.push({
           key: `inscription-${seance.id}`,
           type: 'inscriptions-ouvertes',
           date: '',
           label: scenario.title,
-          detail: `${seance.inscription!.inscrits.length}/${seance.inscription!.max} inscrits`,
+          detail: fillTone(tone['common.n_max_inscrits'], {
+            n: seance.inscription!.inscrits.length,
+            max: seance.inscription!.max,
+          }),
           // Story 36.11 — commande le badge (« S'inscrire » contre « Inscrit »), jamais
           // l'appartenance à la section : une inscription reste dans « Ça t'attend » même une
           // fois prise, c'est le libellé qui change (même règle que pour un vote répondu).
@@ -611,7 +754,7 @@ export class CalendarView implements OnInit {
             date: '',
             label:
               e.scenario.seances.length > 1
-                ? `${e.scenario.title} — Séance ${e.seanceIndex}`
+                ? this.scenarioSeanceTitle(e.scenario.title, e.seanceIndex)
                 : e.scenario.title,
             partieId: pid,
             scenarioId: e.scenario.id,
@@ -624,8 +767,15 @@ export class CalendarView implements OnInit {
           key: `groupe-${slot.date}-${slot.slot}`,
           type: 'disponibilite-groupe',
           date: slot.date,
-          label: `${slot.slot} — ${slot.available}/${slot.total} disponibles`,
-          detail: slot.unavailable > 0 ? `${slot.unavailable} indisponible(s)` : undefined,
+          label: fillTone(tone['calendar.view_group_label'], {
+            slot: slot.slot,
+            available: slot.available,
+            total: slot.total,
+          }),
+          detail:
+            slot.unavailable > 0
+              ? fillTone(tone['calendar.view_group_unavailable_detail'], { n: slot.unavailable })
+              : undefined,
           slot: slot.slot,
           // La charge utile STRUCTURÉE que la grille et le rail consomment (le `label` ci-dessus
           // reste le texte de l'Agenda). `members` vient du serveur et n'existe que pour le MJ :
@@ -710,7 +860,10 @@ export class CalendarView implements OnInit {
             type: 'inscriptions-ouvertes',
             date: '',
             label: `${i.partieName} — ${i.scenarioTitle}`,
-            detail: `${i.inscritsCount}/${i.inscriptionMax} inscrits`,
+            detail: fillTone(tone['common.n_max_inscrits'], {
+              n: i.inscritsCount,
+              max: i.inscriptionMax,
+            }),
             // Story 36.11 — servi par le DTO ici, dérivé de la liste des inscrits en contexte de
             // partie. Deferred-work (2026-08-24) : `MyCalendarOpenInscriptionEntry` porte
             // désormais `scenarioId`, la ligne est donc ouvrable comme en contexte de partie
@@ -728,7 +881,10 @@ export class CalendarView implements OnInit {
         key: `decl-${d.id}`,
         type: d.kind === 'AVAILABLE' ? 'mes-disponibilites' : 'mes-indisponibilites',
         date: d.startDate ?? '',
-        label: d.recurKind === 'RECURRING' ? 'Récurrent' : 'Ponctuel',
+        label:
+          d.recurKind === 'RECURRING'
+            ? tone['calendar.week_decl_recurring']
+            : tone['calendar.week_decl_punctual'],
         detail: d.slot,
         slot: d.slot,
       });
@@ -975,14 +1131,42 @@ export class CalendarView implements OnInit {
     return this.activePolls().find((e) => e.poll.id === target.pollId) ?? null;
   });
 
+  /** Story 40.5b — la conjonction dont le sondage est en cours de composition, ou `null`. */
+  private readonly composedGroupEntry = computed(() => {
+    const target = this.composeTarget();
+    if (target?.kind !== 'group-poll') return null;
+    return this.groupPolls().find((e) => e.card.id === target.eventId) ?? null;
+  });
+
   protected readonly composeTargetLabel = computed(() => {
+    const tone = this.theme.tone();
+    const group = this.composeTarget();
+    if (group?.kind === 'group-poll') {
+      return fillTone(tone['partie.ralliement_calendar_compose_target_poll'], {
+        title: this.composedGroupEntry()?.card.title ?? '',
+      });
+    }
+    if (group?.kind === 'group-new') return tone['partie.ralliement_calendar_compose_target_new'];
     const entry = this.composedPollEntry();
     if (entry) {
-      const suffix = entry.scenario.seances.length > 1 ? ` — Séance ${entry.seanceIndex}` : '';
-      return `Créneaux du vote : ${entry.scenario.title}${suffix}`;
+      return fillTone(tone['calendar.view_compose_target_poll'], {
+        label: this.pollEntryLabel(entry),
+      });
     }
-    return 'Créneaux d’un nouveau vote';
+    return tone['calendar.view_compose_target_new'];
   });
+
+  /** Titre d'un scénario suivi du rang de la séance — « Titre — Séance 2 ». */
+  private scenarioSeanceTitle(title: string, index: number): string {
+    return fillTone(this.theme.tone()['common.title_seance_index'], { title, index });
+  }
+
+  /** Étiquette d'un vote actif : le scénario, et la séance seulement s'il en a plusieurs. */
+  protected pollEntryLabel(entry: ActivePollEntry): string {
+    return entry.scenario.seances.length > 1
+      ? this.scenarioSeanceTitle(entry.scenario.title, entry.seanceIndex)
+      : entry.scenario.title;
+  }
 
   /** Les séances auxquelles un vote neuf peut être rattaché (AC11). Vide ⇒ la création n'est pas
    *  proposée : un vote sans séance est structurellement interdit. */
@@ -997,14 +1181,22 @@ export class CalendarView implements OnInit {
       .filter((e) => !only || e.seance.id === only)
       .map((e) => ({
         seanceId: e.seance.id,
-        label: `${e.scenario.title} — Séance ${e.seanceIndex}`,
+        label: this.scenarioSeanceTitle(e.scenario.title, e.seanceIndex),
       }));
   });
+
+  /** Story 40.5b — la composition vise la conjonction d'un groupe (ouverte, ou à créer). */
+  private isGroupTarget(): boolean {
+    const kind = this.composeTarget()?.kind;
+    return kind === 'group-poll' || kind === 'group-new';
+  }
 
   /** AC14 côté client : la borne serveur est 2..40, et la création exige une séance. Un bouton
    *  qu'on ne peut pas presser doit dire pourquoi (`composeBlockedReason`), jamais rester inerte. */
   protected readonly composeCanConfirm = computed(() => {
     const n = this.composedCells().length;
+    // Story 40.5b — un groupe : au moins deux créneaux, aucun plafond métier (le serveur garde le sien).
+    if (this.isGroupTarget()) return n >= GROUP_MIN_SLOTS;
     if (n < 2 || n > 40) return false;
     if (this.composeTarget()?.kind === 'new' && this.composeSeanceChoices().length === 0)
       return false;
@@ -1012,11 +1204,15 @@ export class CalendarView implements OnInit {
   });
 
   protected readonly composeBlockedReason = computed(() => {
+    const tone = this.theme.tone();
     const n = this.composedCells().length;
-    if (n < 2) return 'Un vote demande au moins deux créneaux.';
-    if (n > 40) return 'Quarante créneaux au maximum.';
+    if (this.isGroupTarget()) {
+      return n < GROUP_MIN_SLOTS ? tone['partie.ralliement_event_poll_min_hint'] : '';
+    }
+    if (n < 2) return tone['calendar.view_compose_blocked_min'];
+    if (n > 40) return tone['calendar.view_compose_blocked_max'];
     if (this.composeTarget()?.kind === 'new' && this.composeSeanceChoices().length === 0)
-      return 'Aucune séance n’attend un vote : un vote se rattache toujours à une séance.';
+      return tone['calendar.view_compose_blocked_no_seance'];
     return '';
   });
 
@@ -1083,6 +1279,15 @@ export class CalendarView implements OnInit {
   /** AC2 — bascule pure. Aucun appel réseau : rien n'est enregistré avant validation. */
   protected onComposeToggled(event: SlotSelectedEvent): void {
     if (!this.composing()) return;
+    if (this.isGroupTarget()) {
+      // Story 40.5b — une conjonction se propose sur un créneau précis : matin, après-midi ou soir.
+      // La journée entière est REFUSÉE avec sa raison écrite (jamais un tap muet).
+      if (event.slot === 'FULL_DAY') {
+        this.composeRefusal.set(this.theme.tone()['partie.ralliement_calendar_compose_full_day']);
+        return;
+      }
+      this.composeRefusal.set(null);
+    }
     const key = composeCellKey(event.date, event.slot);
     this.composedCells.update((cells) => {
       const without = cells.filter((c) => composeCellKey(c.date, c.slot) !== key);
@@ -1092,9 +1297,32 @@ export class CalendarView implements OnInit {
 
   /** AC3 — `Échap` et « Annuler » font la MÊME chose : sortir sans rien écrire. */
   protected cancelCompose(): void {
+    const target = this.composeTarget();
+    this.exitCompose();
+    // Story 40.5b — renoncer à composer les créneaux d'une conjonction à créer ramène à la fenêtre de
+    // création, brouillon intact (le brouillon n'est jamais perdu pour avoir hésité).
+    if (target?.kind === 'group-new') {
+      const id = this.partieId();
+      if (id) {
+        this.drafts.finishCompose(id);
+        void this.returnToGroupPage(id);
+      }
+    }
+  }
+
+  /** Sortie du mode, sans rien écrire ni naviguer. */
+  private exitCompose(): void {
     this.composing.set(false);
     this.composeTarget.set(null);
     this.composedCells.set([]);
+    this.composeRefusal.set(null);
+  }
+
+  /** Story 40.5b — retour à la page du groupe (son onglet des conjonctions rouvre la fenêtre de
+   *  création). L'entrée d'historique du calendrier est REMPLACÉE : le retour arrière ne ramène pas
+   *  dans un mode « composer » qui n'existe plus. */
+  private async returnToGroupPage(id: string): Promise<void> {
+    await this.router.navigate(['/parties', id], { replaceUrl: true });
   }
 
   /**
@@ -1113,6 +1341,15 @@ export class CalendarView implements OnInit {
     const partieId = this.partieId();
     const target = this.composeTarget();
     if (!partieId || !target || !this.composeCanConfirm() || this.pollActionPending()) return;
+
+    if (target.kind === 'group-new') {
+      this.confirmGroupNew(partieId);
+      return;
+    }
+    if (target.kind === 'group-poll') {
+      await this.confirmGroupPoll(partieId, target.eventId);
+      return;
+    }
 
     const options = this.composedCells().map((c) => ({
       date: toDateKey(c.date),
@@ -1164,9 +1401,7 @@ export class CalendarView implements OnInit {
       );
       const freshVoterCount = freshRemoved.reduce((sum, o) => sum + o.votes.length, 0);
       if (freshVoterCount > voterCount) {
-        this.error.set(
-          'Une nouvelle réponse est arrivée depuis l’avertissement — revalidez pour voir le chiffre à jour.',
-        );
+        this.error.set(this.theme.tone()['calendar.view_compose_stale_voters']);
         return;
       }
     }
@@ -1189,7 +1424,158 @@ export class CalendarView implements OnInit {
     } catch {
       // 🚨 Le mode NE SE FERME PAS sur une erreur : la composition du MJ est en mémoire et nulle
       // part ailleurs. La perdre l'obligerait à tout redésigner sur la grille.
-      this.error.set('Impossible d’enregistrer ces créneaux. Réessayez.');
+      this.error.set(this.theme.tone()['calendar.view_compose_save_error']);
+    } finally {
+      this.pollActionPending.set(false);
+    }
+  }
+
+  // ─── Story 40.5b — composer les créneaux d'une conjonction de groupe ─────────────────────────
+
+  /** Bascule la page en vue Semaine : la seule où l'on désigne un créneau précis (matin, après-midi,
+   *  soir) — la vue Mois fond un jour sans événement en une case « journée », refusée ici. La barre
+   *  de composition n'existe pas en Agenda. */
+  private showGridForCompose(): void {
+    if (this.view() !== 'week') this.onViewChange('week');
+    // Les créneaux de départ peuvent tomber hors de la semaine affichée : la grille s'ouvre sur le
+    // premier d'entre eux (date UTC à minuit, comme celles que les vues émettent).
+    const first = [...this.composedCells()].sort((a, b) => a.date.getTime() - b.date.getTime())[0];
+    if (first) {
+      const d = first.date;
+      this.sharedDate.set(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())));
+    }
+  }
+
+  /** L'hôte arme la composition sur le sondage ouvert de SA conjonction : les créneaux actuels sont
+   *  déjà composés (sans quoi « retiré s'il y était déjà » n'aurait aucun référent). */
+  protected startGroupCompose(eventId: string): void {
+    if (!this.isGroup() || this.composing()) return;
+    const entry = this.groupPolls().find((e) => e.card.id === eventId);
+    if (!entry?.card.can.edit) return;
+    this.composeTarget.set({ kind: 'group-poll', eventId });
+    this.composedCells.set(
+      entry.poll.options.map((o) => ({
+        date: dateKeyToLocalMidnight(o.date.substring(0, 10)),
+        slot: o.slot,
+      })),
+    );
+    this.composeRefusal.set(null);
+    this.composing.set(true);
+    this.showGridForCompose();
+  }
+
+  /** La fenêtre de création a envoyé ici son brouillon : composition d'une conjonction qui n'existe
+   *  pas encore, ses créneaux déjà choisis comme point de départ. Aucun appel au serveur. */
+  private startGroupComposeNew(draft: ConjonctionDraft): void {
+    this.composeTarget.set({ kind: 'group-new' });
+    this.composedCells.set(
+      draft.pollOptions.map((o) => ({
+        date: dateKeyToLocalMidnight(o.date.substring(0, 10)),
+        slot: o.slot,
+      })),
+    );
+    this.composeRefusal.set(null);
+    this.composing.set(true);
+    this.showGridForCompose();
+  }
+
+  /** Les créneaux désignés, triés par jour puis créneau, dans la forme de l'API (jamais `FULL_DAY`). */
+  private composedSlots(): EventPollOptionInput[] {
+    const rank: Record<string, number> = { MORNING: 0, AFTERNOON: 1, EVENING: 2 };
+    return this.composedCells()
+      .filter((c): c is SelectedCell & { slot: EventSlot } => c.slot !== 'FULL_DAY')
+      .map((c) => ({ date: toDateKey(c.date), slot: c.slot }))
+      .sort((a, b) =>
+        a.date === b.date ? rank[a.slot] - rank[b.slot] : a.date < b.date ? -1 : 1,
+      );
+  }
+
+  /** Valider la composition d'une conjonction à créer : les créneaux rejoignent le brouillon, la
+   *  fenêtre de création revient. Aucun appel au serveur (la conjonction n'existe qu'à « Créer »). */
+  private confirmGroupNew(partieId: string): void {
+    const options = this.composedSlots();
+    this.exitCompose();
+    this.drafts.finishCompose(partieId, options);
+    void this.returnToGroupPage(partieId);
+  }
+
+  /** Valider la composition d'une conjonction ouverte : `PATCH …/events/:eventId`, remplacement
+   *  complet avec les autres champs de la carte et les nouveaux `pollOptions` (jamais `date`/`slot`).
+   *  Les créneaux conservés gardent leurs réponses ; l'avertissement qui précède chiffre celles
+   *  qui disparaissent (lues dans `poll.votes`). */
+  private async confirmGroupPoll(partieId: string, eventId: string): Promise<void> {
+    const entry = this.composedGroupEntry();
+    if (!entry || entry.card.id !== eventId) return;
+    const tone = this.theme.tone();
+    const options = this.composedSlots();
+    const deadline = entry.poll.expiresAt?.substring(0, 10);
+    if (!deadline) {
+      this.error.set(tone['partie.ralliement_calendar_compose_save_error']);
+      return;
+    }
+
+    // Ce qui disparaît et ce que cela coûte aux autres : les réponses des créneaux retirés.
+    const kept = new Set(options.map((o) => `${o.date}|${o.slot}`));
+    const lostVotes = (poll: EventPollDto): { removed: number; votes: number } => {
+      const removedIds = new Set(
+        poll.options
+          .filter((o) => !kept.has(`${o.date.substring(0, 10)}|${o.slot}`))
+          .map((o) => o.id),
+      );
+      return {
+        removed: removedIds.size,
+        votes: poll.votes.filter((v) => removedIds.has(v.optionId)).length,
+      };
+    };
+    const before = lostVotes(entry.poll);
+    // La carte qui sert à bâtir le PATCH est celle relue APRÈS l'avertissement : une modification du
+    // nom, du lieu, de l'heure, des infos ou de la capacité arrivée entre-temps ne doit pas être écrasée.
+    let current = entry;
+
+    if (before.votes > 0) {
+      const data: ComposeConfirmData = {
+        mode: 'poll',
+        slotCount: options.length,
+        removedCount: before.removed,
+        voterCount: before.votes,
+        seances: [],
+        group: true,
+      };
+      const ref = this.dialog.open(ComposeConfirmDialog, { data });
+      const decision = await firstValueFrom(ref.afterClosed());
+      // Renoncer ne modifie RIEN, et la composition reste telle quelle.
+      if (!decision) return;
+
+      // Des réponses ont pu arriver pendant que l'avertissement était lu : si le chiffre a augmenté,
+      // le consentement ne porte plus sur le bon nombre — on redemande plutôt que d'écrire.
+      const fresh = this.composedGroupEntry();
+      if (!fresh || lostVotes(fresh.poll).votes > before.votes) {
+        this.error.set(tone['partie.ralliement_calendar_compose_stale_voters']);
+        return;
+      }
+      current = fresh;
+    }
+
+    const card = current.card;
+    const dto: UpdateEventDto = {
+      title: card.title,
+      lieu: card.seance?.lieu ?? null,
+      heureRdv: card.seance?.heureRdv ?? null,
+      notePratique: card.seance?.notePratique ?? null,
+      capacity: card.seance?.capacity ?? null,
+      pollOptions: options,
+      pollDeadline: current.poll.expiresAt?.substring(0, 10) ?? deadline,
+    };
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    try {
+      await this.injector.get(EventsApiService).update(partieId, card.id, dto);
+      await this.loadGroupEvents(partieId);
+      this.exitCompose();
+    } catch (err) {
+      // Le mode NE SE FERME PAS : la composition n'existe qu'en mémoire. Le refus du serveur (400 en
+      // français) est écrit tel quel.
+      this.error.set(refusalMessage(err, tone['partie.ralliement_calendar_compose_save_error']));
     } finally {
       this.pollActionPending.set(false);
     }
@@ -1268,6 +1654,12 @@ export class CalendarView implements OnInit {
           // l'option affichée : le sélecteur ouvert référencerait alors des données périmées, et
           // son ancre peut devenir un nœud détaché une fois la grille reconstruite ci-dessous.
           this.closePicker();
+          // Story 40.5b — un groupe relit ses conjonctions (sondages, votes) sur CE même signal : aucun
+          // nouveau handler `'partie:'`. Il n'a ni scénarios, ni créneaux agrégés à relire.
+          if (this.isGroup()) {
+            void this.loadGroupEvents(id);
+            return;
+          }
           void this.loadScenarios(id);
           void this.refreshMjPanels();
           if (this.isMjMode()) void this.loadMembers(id);
@@ -1355,6 +1747,15 @@ export class CalendarView implements OnInit {
       if (!stillOpen) untracked(() => this.cancelCompose());
     });
 
+    // Story 40.5b — même règle pour un groupe : la conjonction dont on compose les créneaux a pu cesser
+    // d'être un sondage ouvert (date fixée, vote clos, conjonction retirée) pendant la composition.
+    effect(() => {
+      const target = this.composeTarget();
+      if (target?.kind !== 'group-poll') return;
+      const stillOpen = this.groupPolls().some((e) => e.card.id === target.eventId);
+      if (!stillOpen) untracked(() => this.exitCompose());
+    });
+
     let firstRun = true;
     effect(() => {
       this.availabilitySvc.changed();
@@ -1393,6 +1794,11 @@ export class CalendarView implements OnInit {
     }
 
     this.destroyRef.onDestroy(() => {
+      // Story 40.5b — toute sortie autre que valider / renoncer / « Retour » (retour du navigateur, menu)
+      // pendant la composition d'une nouvelle conjonction rend le brouillon : la page du groupe rouvre
+      // la fenêtre de création au lieu de le perdre en silence.
+      const id = this.partieId();
+      if (id && this.composeTarget()?.kind === 'group-new') this.drafts.finishCompose(id);
       if (this.connectedPartieTopic) this.realtime.disconnect(this.connectedPartieTopic);
       if (this.connectedUserTopic) this.realtime.disconnect(this.connectedUserTopic);
     });
@@ -1415,6 +1821,15 @@ export class CalendarView implements OnInit {
   }
 
   private async loadForPartieId(id: string | null): Promise<void> {
+    // Story 40.5b — une nouvelle identité de partie repart de zéro : ni groupe, ni conjonctions, ni
+    // composition d'une partie précédente (la route réutilise l'instance sur un simple changement de
+    // `:id`).
+    this.isGroup.set(false);
+    this.groupResolved.set(false);
+    this.groupEvents.set([]);
+    this.groupEventsError.set(null);
+    this.exitCompose();
+
     // Story 30.6, Task 1 : état des couches actives, initialisé depuis le défaut du compte —
     // jamais persisté par la bascule elle-même (encadré n°2). `disponibilite-groupe` retirée hors
     // contexte de partie (AC8).
@@ -1442,6 +1857,9 @@ export class CalendarView implements OnInit {
       this.realtime.connect(topic);
       this.connectedPartieTopic = topic;
 
+      // Story 40.5b — seules les lectures que le serveur ne refuse pas à un groupe attendent de savoir
+      // si la partie en est un ; les déclarations de la personne partent tout de suite.
+      const groupResolved = this.resolveGroup(id);
       await Promise.all([
         this.router.navigate([], {
           relativeTo: this.route,
@@ -1450,9 +1868,7 @@ export class CalendarView implements OnInit {
           replaceUrl: true,
         }),
         this.loadDeclarations(),
-        this.loadAvailableSlots(id, this.fromDateStr(), this.toDateStr()),
-        this.loadHeatmap(id),
-        this.loadScenarios(id),
+        groupResolved.then(() => this.loadPartieData(id)),
       ]);
       // Revue de code Story 29.4 : la navigation interne ci-dessus (mêmes route/composant,
       // seuls les query params from/to changent) déclenche NavigationStart -> clear() sur
@@ -1461,6 +1877,13 @@ export class CalendarView implements OnInit {
       this.contextualNav.set({ title: this.theme.tone()['nav.calendar'] });
       if (this.isMjMode()) {
         await this.loadMembers(id);
+      }
+      // Story 40.5b — la fenêtre de création vient chercher ses créneaux : le mode « composer » est
+      // déjà armé pour la nouvelle conjonction (et le calendrier du groupe est en vue Semaine, la
+      // seule où l'on choisit un créneau précis).
+      if (this.isGroup() && this.partieId() === id) {
+        const draft = this.drafts.takeComposeRequest(id);
+        if (draft) this.startGroupComposeNew(draft);
       }
     } else {
       // Deferred-work (SSE, calendrier personnel) — le calendrier personnel agrège plusieurs
@@ -1493,11 +1916,76 @@ export class CalendarView implements OnInit {
   // (déjà utilisé par ScenarioTimeline) — évite un nouvel endpoint backend dédié. `activePolls` et
   // `eligibleSeances` (computed) en sont dérivés.
   private async loadScenarios(partieId: string): Promise<void> {
+    // Story 40.5b — la liste des scénarios est refusée à un groupe (et un groupe n'en a pas).
+    if (this.isGroup()) return;
     try {
       this.scenarios.set(await this.scenariosSvc.listAll(partieId));
     } catch {
       // non-bloquant — la vue reste utilisable sans la liste des scénarios/votes actifs
     }
+  }
+
+  /**
+   * Story 40.5b — la partie est-elle un groupe ? (famille `ralliement`, type `CAMPAGNE_EPISODIQUE`.)
+   * Jamais en mode MJ. Un échec de lecture laisse la page se comporter comme celle d'une quête : les
+   * lectures refusées à un groupe échouent alors en silence, comme avant.
+   */
+  private async resolveGroup(id: string): Promise<void> {
+    if (this.isMjMode()) {
+      this.groupResolved.set(true);
+      return;
+    }
+    let group = false;
+    try {
+      const partie = await this.partiesSvc.get(id);
+      // Story 41.2 : la soirée isolée (`ONE_SHOT`) vote aussi dans le calendrier du groupe.
+      group = familyOf(partie.gameSystemId) === 'ralliement';
+    } catch {
+      group = false;
+    }
+    if (this.partieId() !== id) return;
+    this.isGroup.set(group);
+    this.groupResolved.set(true);
+    // Un groupe n'a pas de couche « disponibilité du groupe », même mémorisée pour la session.
+    if (group) this.activeLayers.update((keys) => keys.filter((k) => k !== 'disponibilite-groupe'));
+  }
+
+  /** Les lectures propres à la partie, selon qu'elle est un groupe (ses conjonctions) ou non (créneaux
+   *  calculés, agrégat, scénarios). */
+  private async loadPartieData(id: string): Promise<void> {
+    if (this.isGroup()) {
+      await this.loadGroupEvents(id);
+      return;
+    }
+    await Promise.all([
+      this.loadAvailableSlots(id, this.fromDateStr(), this.toDateStr()),
+      this.loadHeatmap(id),
+      this.loadScenarios(id),
+    ]);
+  }
+
+  /**
+   * Story 40.5b — relit les conjonctions du groupe. Compteur de requêtes : une réponse périmée
+   * n'écrase pas une plus fraîche. Un échec se VOIT et garde le dernier état connu (jamais de
+   * `.set([])`).
+   */
+  private async loadGroupEvents(partieId: string): Promise<void> {
+    const reqId = ++this.groupEventsReqId;
+    try {
+      const list = await this.injector.get(EventsApiService).list(partieId);
+      if (reqId !== this.groupEventsReqId || this.partieId() !== partieId) return;
+      this.groupEvents.set(list);
+      this.groupEventsError.set(null);
+    } catch {
+      if (reqId !== this.groupEventsReqId || this.partieId() !== partieId) return;
+      this.groupEventsError.set(this.theme.tone()['partie.ralliement_calendar_events_error']);
+    }
+  }
+
+  /** Relit ce que la page affiche des votes : les conjonctions d'un groupe, les scénarios sinon. */
+  private async reloadVotes(partieId: string): Promise<void> {
+    if (this.isGroup()) await this.loadGroupEvents(partieId);
+    else await this.loadScenarios(partieId);
   }
 
   /**
@@ -1586,9 +2074,11 @@ export class CalendarView implements OnInit {
         await this.resolveBatchConflicts(err, event.cells, event.kind, items);
         return;
       }
-      this.snack.open('Impossible d’enregistrer ces disponibilités. Réessayez.', undefined, {
-        duration: 5000,
-      });
+      this.snack.open(
+        this.theme.tone()['common.impossible_d_enregistrer_ces_disponibilites_reessayez'],
+        undefined,
+        { duration: 5000 },
+      );
     }
   }
 
@@ -1604,10 +2094,11 @@ export class CalendarView implements OnInit {
     const resolvable = err.conflicts.filter((c) => typeof c.batchIndex === 'number' && !c.internal);
     if (resolvable.length === 0) {
       const labels = err.conflicts.map((c) => c.startDate ?? c.dayOfWeek).join(', ');
+      const tone = this.theme.tone();
       this.snack.open(
         labels
-          ? `Ces créneaux se contredisent entre eux (${labels}). Rien n'a été enregistré.`
-          : "Ces créneaux se contredisent entre eux. Rien n'a été enregistré.",
+          ? fillTone(tone['calendar.view_batch_conflict_labels'], { labels })
+          : tone['calendar.view_batch_conflict_plain'],
         undefined,
         { duration: 5000 },
       );
@@ -1618,20 +2109,17 @@ export class CalendarView implements OnInit {
     // tout await, sans quoi deux gestes rapprochés ouvriraient deux dialogues concurrents. Le
     // second geste est notifié plutôt que silencieusement perdu (revue de code Story 36.4).
     if (this.conflictDialogOpen()) {
-      this.snack.open(
-        'Une résolution de conflit est déjà en cours. Terminez-la avant de recommencer.',
-        undefined,
-        { duration: 5000 },
-      );
+      this.snack.open(this.theme.tone()['calendar.view_conflict_in_progress'], undefined, {
+        duration: 5000,
+      });
       return;
     }
     this.conflictDialogOpen.set(true);
     try {
       const conflictedIndexes = new Set(resolvable.map((c) => c.batchIndex as number));
-      const kindLabel = kind === 'AVAILABLE' ? 'disponible' : 'indisponible';
       const seanceExceptions = this.seanceCoveredCells(cells, conflictedIndexes);
       const data: ConflictDialogData = {
-        kindLabel,
+        kind,
         intentLabel: this.describeSelection(cells),
         conflicts: resolvable.map((c) => ({
           batchIndex: c.batchIndex as number,
@@ -1670,9 +2158,11 @@ export class CalendarView implements OnInit {
       await this.loadDeclarations();
       await this.refreshMjPanels();
     } catch {
-      this.snack.open('Impossible d’enregistrer ces disponibilités. Réessayez.', undefined, {
-        duration: 5000,
-      });
+      this.snack.open(
+        this.theme.tone()['common.impossible_d_enregistrer_ces_disponibilites_reessayez'],
+        undefined,
+        { duration: 5000 },
+      );
     } finally {
       this.conflictDialogOpen.set(false);
     }
@@ -1702,19 +2192,22 @@ export class CalendarView implements OnInit {
    *  écrit d'ailleurs « Mar 4 · Ven 7 · Dim 9 », sans créneau. Il reste nommé dès qu'il porte une
    *  information (Matin / Après-midi / Soir). */
   private describeCell(cell: SelectedCell | undefined): string {
-    if (!cell) return 'Créneau inconnu';
+    if (!cell) return this.theme.tone()['calendar.view_cell_unknown'];
     const date = CALENDAR_CELL_DATE_FORMAT.format(cell.date);
     return cell.slot === 'FULL_DAY' ? date : `${date} · ${SLOT_LABELS[cell.slot]}`;
   }
 
   /** Rappelle l'intention du geste sous le titre du dialogue — « du 3 au 9 août, le soir ». */
   private describeSelection(cells: SelectedCell[]): string {
-    if (cells.length === 0) return 'sur aucun créneau';
-    if (cells.length === 1) return `le ${this.describeCell(cells[0])}`;
+    const tone = this.theme.tone();
+    if (cells.length === 0) return tone['calendar.view_selection_none'];
+    if (cells.length === 1) {
+      return fillTone(tone['calendar.view_selection_one'], { cell: this.describeCell(cells[0]) });
+    }
     const sorted = [...cells].sort((a, b) => a.date.getTime() - b.date.getTime());
     const from = CALENDAR_CELL_DATE_FORMAT.format(sorted[0].date);
     const to = CALENDAR_CELL_DATE_FORMAT.format(sorted[sorted.length - 1].date);
-    return `sur ${cells.length} créneaux, du ${from} au ${to}`;
+    return fillTone(tone['calendar.view_selection_many'], { n: cells.length, from, to });
   }
 
   protected onViewChange(value: string): void {
@@ -1730,7 +2223,7 @@ export class CalendarView implements OnInit {
     this.sharedDate.set(d);
     const id = this.partieId();
     if (id) {
-      await this.loadHeatmap(id, d);
+      if (!this.isGroup()) await this.loadHeatmap(id, d);
     } else {
       // Story 30.6, AC10 : la plage affichée du calendrier personnel change — GET /me/calendar
       // est rappelé avec la nouvelle plage, jamais un cache silencieusement périmé.
@@ -1755,7 +2248,7 @@ export class CalendarView implements OnInit {
       // elle couvre largement la semaine de `d` (42 jours autour de son mois) et reste sous le
       // plafond serveur de 45 jours. Effet de bord accepté : deux navigations de semaine dans le
       // même mois rechargent la même plage, pour une requête déjà bornée.
-      await this.loadHeatmap(partieId, d);
+      if (!this.isGroup()) await this.loadHeatmap(partieId, d);
       return;
     }
     // Story 30.6, AC10 : contexte personnel — la plage affichée change, `GET /me/calendar` est
@@ -1801,6 +2294,12 @@ export class CalendarView implements OnInit {
    * première au premier changement.
    */
   protected onVoteOptionActivated(event: VoteOptionActivatedEvent): void {
+    // Story 40.5b — un groupe : le sélecteur ne s'ouvre que pour un votant éligible avant l'échéance.
+    // Les autres lisent la piste et les compteurs (lecture seule) ; le serveur reste juge de toute façon.
+    if (this.isGroup()) {
+      const entry = this.groupPolls().find((e) => e.poll.id === event.vote.pollId);
+      if (!entry || !this.canVoteGroupPoll(entry.poll)) return;
+    }
     this.pickerVote.set(event.vote);
     this.pickerAnchor.set(event.anchor);
     this.pickerLabel.set(this.composePickerLabel(event.date, event.slot));
@@ -1886,8 +2385,10 @@ export class CalendarView implements OnInit {
     try {
       await write();
       ok = true;
-    } catch {
-      this.error.set(errorMessage);
+    } catch (err) {
+      // Story 40.5b — le refus du serveur d'un groupe (hors votants éligibles, échéance dépassée) est
+      // écrit tel quel, en français ; une quête garde son message.
+      this.error.set(this.isGroup() ? refusalMessage(err, errorMessage) : errorMessage);
     } finally {
       this.pollActionPending.set(false);
     }
@@ -1901,7 +2402,7 @@ export class CalendarView implements OnInit {
     // Les deux contextes n'ont pas la même source : contexte de partie ⇒ les scénarios (d'où
     // `activePolls`) ; calendrier personnel ⇒ `GET /me/calendar`, qui n'a AUCUN temps réel.
     const partieId = this.partieId();
-    if (partieId) await this.loadScenarios(partieId);
+    if (partieId) await this.reloadVotes(partieId);
     else await this.loadMeCalendarForRange(this.fromDateStr(), this.toDateStr());
   }
 
@@ -1914,7 +2415,7 @@ export class CalendarView implements OnInit {
       await this.pollSvc.closePoll(id, pollId);
       await this.loadScenarios(id);
     } catch {
-      this.error.set('Impossible de clôturer le vote. Réessayez.');
+      this.error.set(this.theme.tone()['common.impossible_de_cloturer_le_vote_reessayez']);
     } finally {
       this.pollActionPending.set(false);
     }
@@ -1968,7 +2469,7 @@ export class CalendarView implements OnInit {
       await this.loadScenarios(id);
       await this.refreshMjPanels();
     } catch {
-      this.error.set('Impossible de sceller ce créneau. Réessayez.');
+      this.error.set(this.theme.tone()['calendar.view_seal_error']);
     }
   }
 
@@ -1993,6 +2494,12 @@ export class CalendarView implements OnInit {
   // du navigateur plutôt que sur un paramètre de retour explicite, aucune page tierce ne pouvant
   // ouvrir l'Oracle autrement que par un lien direct depuis ces deux origines.
   protected goBack(): void {
+    // Story 40.5b — « Retour » pendant la composition d'une nouvelle conjonction = renoncer : la
+    // fenêtre de création revient avec son brouillon, au lieu de le perdre avec la page.
+    if (this.composeTarget()?.kind === 'group-new') {
+      this.cancelCompose();
+      return;
+    }
     this.location.back();
   }
 
@@ -2012,7 +2519,8 @@ export class CalendarView implements OnInit {
 
   private async refreshMjPanels(): Promise<void> {
     const id = this.partieId();
-    if (!id) return;
+    // Story 40.5b — ni créneaux calculés ni agrégat pour un groupe : le serveur les lui refuse.
+    if (!id || this.isGroup()) return;
     await Promise.all([
       this.loadAvailableSlots(id, this.fromDateStr(), this.toDateStr()),
       this.loadHeatmap(id),
@@ -2033,7 +2541,7 @@ export class CalendarView implements OnInit {
     const from = this.fromDateStr();
     const to = this.toDateStr();
     if (from > to) {
-      this.slotsError.set('La date de début doit être avant ou égale à la date de fin.');
+      this.slotsError.set(this.theme.tone()['calendar.view_range_error']);
       return;
     }
     this.slotsError.set(null);
@@ -2052,7 +2560,7 @@ export class CalendarView implements OnInit {
     try {
       this.declarations.set(await this.availabilitySvc.getMyDeclarations());
     } catch {
-      this.error.set('Impossible de charger les disponibilités.');
+      this.error.set(this.theme.tone()['calendar.view_load_declarations_error']);
     } finally {
       this.loading.set(false);
     }
@@ -2086,6 +2594,7 @@ export class CalendarView implements OnInit {
   private heatmapReqId = 0;
 
   private async loadHeatmap(id: string, centerDate: Date = new Date()): Promise<void> {
+    if (this.isGroup()) return;
     const { from, to } = CalendarView.monthGridRange(centerDate);
     const reqId = ++this.heatmapReqId;
     try {
@@ -2102,11 +2611,12 @@ export class CalendarView implements OnInit {
   }
 
   private async loadAvailableSlots(id: string, from?: string, to?: string): Promise<void> {
+    if (this.isGroup()) return;
     this.slotsLoading.set(true);
     try {
       this.availableSlots.set(await this.pollSvc.getAvailableSlots(id, undefined, from, to));
     } catch {
-      this.slotsError.set('Impossible de charger les créneaux.');
+      this.slotsError.set(this.theme.tone()['calendar.view_load_slots_error']);
     } finally {
       this.slotsLoading.set(false);
     }
@@ -2135,7 +2645,7 @@ export class CalendarView implements OnInit {
       // était à jour — signaler l'échec et vider les couches temporelles plutôt que de les
       // laisser silencieusement périmées.
       this.meCalendar.set(null);
-      this.error.set('Impossible de charger le calendrier pour cette période.');
+      this.error.set(this.theme.tone()['calendar.view_load_calendar_error']);
     } finally {
       if (reqId === this.meCalendarReqId) this.meCalendarLoading.set(false);
     }

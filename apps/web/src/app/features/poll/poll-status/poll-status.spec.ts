@@ -8,6 +8,7 @@ import { PollStatusPanel } from './poll-status';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 const alice: PartieMemberDto = {
+  role: 'MEMBER',
   userId: 'u1',
   pseudo: 'Alice',
   displayName: 'Alice au pays',
@@ -15,6 +16,7 @@ const alice: PartieMemberDto = {
   joinedAt: '',
 };
 const bob: PartieMemberDto = {
+  role: 'MEMBER',
   userId: 'u2',
   pseudo: 'Bob',
   displayName: 'Bobby',
@@ -22,6 +24,7 @@ const bob: PartieMemberDto = {
   joinedAt: '',
 };
 const carol: PartieMemberDto = {
+  role: 'MEMBER',
   userId: 'u3',
   pseudo: 'Carol',
   displayName: 'Carol',
@@ -68,6 +71,14 @@ function makeThemeService() {
       'cta.choose_date': 'Sceller ce créneau',
       'alert.all_responded': 'Tous ont répondu.',
       'alert.missing_player': "{name} n'a pas encore répondu.",
+      'common.oui': 'Oui',
+      'common.non': 'Non',
+      'common.peut_etre': 'Peut-être',
+      'pollui.status_voters_aria': 'Votants',
+      'pollui.status_missing_aria': "N'ont pas encore répondu pour cette date",
+      'pollui.status_choose_confirm':
+        'Confirmer {date} — {slot} comme date de la prochaine séance ?',
+      'pollui.status_choose_no_vote_warning': "⚠️ Aucun membre n'a voté pour cette date.",
     }),
   };
 }
@@ -227,6 +238,7 @@ describe('PollStatusPanel', () => {
   it("vote partiel : un membre ayant voté sur une option mais pas l'autre n'apparaît manquant QUE sur celle où il n'a pas voté", async () => {
     // Dans fakePoll, Bob a voté sur opt1 et opt2 — on ajoute Dana qui ne vote QUE sur opt1.
     const dana: PartieMemberDto = {
+      role: 'MEMBER',
       userId: 'u4',
       pseudo: 'Dana',
       displayName: 'Dana',

@@ -37,7 +37,7 @@ export class NotesJournal {
     try {
       this.notes.set(await this.characterSvc.getNotes(id));
     } catch {
-      this.loadError.set("Le journal n'a pas pu être chargé.");
+      this.loadError.set(this.theme.tone()['characters_sheet.notes_load_error']);
     }
   }
 

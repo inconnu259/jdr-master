@@ -5,7 +5,7 @@
 
 /** Thèmes disponibles — liste déclarée une seule fois (AD-13), la validation API s'y réfère
  *  directement (`@IsIn(THEMES)`), jamais une seconde liste côté serveur. */
-export const THEMES = ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'] as const;
+export const THEMES = ['grimoire-emeraude', 'foret-ancienne', 'atelier-cuivre'] as const;
 
 export type Theme = (typeof THEMES)[number];
 
@@ -80,6 +80,31 @@ export interface AuthUser {
   defaultCalendarLayers: CalendarLayerKey[];
 }
 
+/** Un groupe (ou une rencontre isolée) que l'effacement du compte supprimerait : son utilisateur en est le
+ *  SEUL administrateur (Story 43.1, AD-11). */
+export interface DeletionImpactGroupDto {
+  id: string;
+  name: string;
+  /** Adhésions du groupe, administrateur compris. */
+  memberCount: number;
+  /** Événements du groupe (les conjonctions). */
+  eventCount: number;
+}
+
+/** Une partie de JDR que l'effacement du compte supprimerait : son utilisateur en est le MJ. */
+export interface DeletionImpactJdrPartieDto {
+  id: string;
+  name: string;
+  /** Joueurs (hors MJ) qui y perdraient leurs personnages. */
+  playerCount: number;
+}
+
+/** Réponse de GET /me/deletion-impact — ce que l'effacement du compte emporterait (Story 43.1). */
+export interface AccountDeletionImpactDto {
+  groups: DeletionImpactGroupDto[];
+  jdrParties: DeletionImpactJdrPartieDto[];
+}
+
 /** Corps de la requête PATCH /me/display-name. */
 export interface UpdateDisplayNameDto {
   displayName: string;
@@ -95,22 +120,263 @@ export interface HealthStatus {
   timestamp: string;
 }
 
-/** Systèmes de jeu proposés (liste constante — le moteur de règles viendra au Palier 2). */
-export const GAME_SYSTEMS = [
-  { id: 'draconis', name: 'Draconis' },
-  { id: 'conte-de-minuit', name: 'Conte de Minuit' },
-  { id: 'ryuutama', name: 'Ryuutama' },
-  { id: 'esteren', name: 'Esteren' },
-] as const;
-
-export type GameSystemId = (typeof GAME_SYSTEMS)[number]['id'];
-
 /** Type d'une partie. En 1b l'UI n'expose que ONE_SHOT + CAMPAGNE_LINEAIRE (libellé « Campagne »). */
 export type PartieKind = 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE' | 'CAMPAGNE_EPISODIQUE';
 
+/** Famille d'un système de jeu (Story 37.5, AD-2) : `jdr` pour les jeux de rôle, `ralliement`
+ *  pour les soirées entre amis (épic 38). Gouverne la politique de droits et les transitions
+ *  autorisées (changement de système, conversion de type). */
+export type GameSystemFamily = 'jdr' | 'ralliement';
+
+/** Capacités qu'un système peut déclarer (Story 37.5) — à terme (Story 37.7), chaque
+ *  fonctionnalité de couche 3 (JDR) sera conditionnée à l'une d'elles, plus à un identifiant de
+ *  système en dur. */
+export type GameSystemCapability =
+  | 'characters'
+  | 'scenarioLifecycle'
+  | 'xp'
+  | 'hommeDragon'
+  | 'groupRoles'
+  | 'announcements'
+  | 'linearCampaign';
+
+/** Forme d'une entrée du registre `GAME_SYSTEMS`. */
+export interface GameSystemEntry {
+  id: string;
+  name: string;
+  family: GameSystemFamily;
+  capabilities: readonly GameSystemCapability[];
+  kinds: readonly PartieKind[];
+  /** Le système peut-il être choisi à la création d'une partie (ou par un changement de
+   *  système) ? */
+  openForCreation: boolean;
+  /** Badge rond du système dans la liste des parties (Story 38.5) : `R1` (Ryuutama), `L1`
+   *  (ralliement) ; absent ou `null` = pas de badge, la seule pastille texte suffit. */
+  badge?: GameSystemBadge | null;
+}
+
+/** Glyphes de badge de système (maquettes `badge-R1-…` et `badge-L1-…`). */
+export type GameSystemBadge = 'R1' | 'L1';
+
+const JDR_KINDS = ['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'] as const;
+
+/** Registre UNIQUE des systèmes de jeu (Story 37.5, AD-2) : famille, capacités, types de partie
+ *  admis et ouverture à la création. Remplace l'ancien drapeau `module` (Story 29.15/29.17), qui
+ *  confondait « a des personnages jouables » et « peut être choisi à la création ». Toujours lu via
+ *  les lecteurs `familyOf()`, `hasCapability()`, `kindsOf()`, `isOpenForCreation()` ci-dessous,
+ *  jamais champ par champ. Consommé par le web (bouton de création de personnage, onglet par
+ *  défaut, tooltip du slot roster, liste proposée par `PartieForm`, libellés) et par l'API
+ *  (`PartiesService.create()`/`update()`/`convertKind()`, `CharacterService.create()`, signal
+ *  `PERSONNAGE_A_CREER` de `party-signals.service.ts`, validateurs DTO « id connu »).
+ *
+ *  `ralliement` est ouvert à la création depuis la Story 38.2 ; il n'a pas de ligne en table
+ *  `GameSystem`. Importer en VALEUR (jamais `import type`). */
+export const GAME_SYSTEMS = [
+  {
+    id: 'draconis',
+    name: 'Draconis',
+    family: 'jdr',
+    capabilities: [],
+    kinds: JDR_KINDS,
+    openForCreation: false,
+  },
+  {
+    id: 'conte-de-minuit',
+    name: 'Conte de Minuit',
+    family: 'jdr',
+    capabilities: [],
+    kinds: JDR_KINDS,
+    openForCreation: false,
+  },
+  {
+    id: 'ryuutama',
+    name: 'Ryuutama',
+    family: 'jdr',
+    capabilities: [
+      'characters',
+      'scenarioLifecycle',
+      'xp',
+      'hommeDragon',
+      'groupRoles',
+      'announcements',
+      'linearCampaign',
+    ],
+    kinds: JDR_KINDS,
+    openForCreation: true,
+    badge: 'R1',
+  },
+  {
+    id: 'esteren',
+    name: 'Esteren',
+    family: 'jdr',
+    capabilities: [],
+    kinds: JDR_KINDS,
+    openForCreation: false,
+  },
+  {
+    id: 'ralliement',
+    name: 'Ralliement',
+    family: 'ralliement',
+    capabilities: [],
+    kinds: ['ONE_SHOT', 'CAMPAGNE_EPISODIQUE'],
+    openForCreation: true,
+    badge: 'L1',
+  },
+] as const satisfies readonly GameSystemEntry[];
+
+export type GameSystemId = (typeof GAME_SYSTEMS)[number]['id'];
+
+/** Entrée du registre pour un `id`, ou `undefined` si inconnu. */
+function findGameSystem(id: string): GameSystemEntry | undefined {
+  return (GAME_SYSTEMS as readonly GameSystemEntry[]).find((g) => g.id === id);
+}
+
+/** Famille d'un système. Tolère un `id` inconnu (jamais d'exception) → `null`. */
+export function familyOf(id: string): GameSystemFamily | null {
+  return findGameSystem(id)?.family ?? null;
+}
+
+/** Le système déclare-t-il cette capacité ? `id` inconnu → `false`. */
+export function hasCapability(id: string, capability: GameSystemCapability): boolean {
+  return findGameSystem(id)?.capabilities.includes(capability) ?? false;
+}
+
+/** Types de partie admis par le système. `id` inconnu → `[]`. */
+export function kindsOf(id: string): readonly PartieKind[] {
+  return findGameSystem(id)?.kinds ?? [];
+}
+
+/** Le système peut-il être choisi à la création d'une partie ou par un changement de système ?
+ *  `id` inconnu → `false`. */
+export function isOpenForCreation(id: string): boolean {
+  return findGameSystem(id)?.openForCreation ?? false;
+}
+
+/** Glyphe de badge du système (Story 38.5), ou `null` s'il n'en a pas. `id` inconnu → `null`,
+ *  jamais d'exception. */
+export function badgeOf(id: string): GameSystemBadge | null {
+  return findGameSystem(id)?.badge ?? null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Droits sur une partie (Story 37.6, AD-6)
+//
+// Toute décision de droit sur une partie, ses événements et ses séances passe par
+// `PermissionService.assert(userId, action, cible)` côté API. Les actions forment une union
+// FERMÉE : en ajouter une oblige à compléter la table de politique de chaque famille (le
+// compilateur refuse une table incomplète).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Rôle d'un utilisateur sur une partie. Famille `jdr` : `mj` (propriétaire) ou `player`
+ *  (membre). Famille `ralliement` (Story 38.2) : `admin` ou `member`, dérivé de
+ *  `Membership.role` uniquement. Un propriétaire nul (compte supprimé, AD-5) ne donne jamais
+ *  `mj`. */
+export type PartieRole = 'mj' | 'player' | 'admin' | 'member';
+
+/** Rôle d'un membre d'une partie (colonne `Membership.role`, Story 38.2) — union FERMÉE. Le
+ *  créateur d'un ralliement est inséré `ADMIN` ; tout autre membre est `MEMBER`. */
+export type MembershipRole = 'ADMIN' | 'MEMBER';
+
+/** Action soumise à un droit sur une partie (Story 37.6) — union fermée, `SCREAMING_SNAKE`. */
+export type PermissionAction =
+  // Partie
+  | 'PARTIE_READ'
+  | 'PARTIE_UPDATE'
+  | 'PARTIE_CONVERT_KIND'
+  | 'PARTIE_CLOSE'
+  | 'PARTIE_REOPEN'
+  | 'PARTIE_DELETE'
+  | 'PARTIE_MEMBERS_READ'
+  | 'PARTIE_MEMBER_REMOVE'
+  | 'PARTIE_MEMBER_ROLE_SET'
+  // Story 39.5 : quitter soi-même une partie (groupe de ralliement seulement)
+  | 'PARTIE_LEAVE'
+  | 'PARTIE_AVAILABILITY_READ'
+  | 'PARTIE_VISIBILITY_LOCKS_READ'
+  | 'PARTIE_VISIBILITY_LOCKS_UPDATE'
+  | 'PARTIE_COVER_READ'
+  | 'PARTIE_COVER_UPDATE'
+  // Fiches de référence du système (Story 37.7) : lecture par tout participant / par le MJ seul
+  | 'PARTIE_REFERENCE_ASSET_READ'
+  | 'PARTIE_REFERENCE_ASSET_MJ_READ'
+  // Scénario (extension JDR de l'événement)
+  | 'SCENARIO_CREATE'
+  | 'SCENARIO_UPDATE'
+  | 'SCENARIO_STATUS_CHANGE'
+  | 'SCENARIO_READ'
+  | 'SCENARIO_DRAFTS_READ'
+  | 'SCENARIO_DOCUMENT_UPLOAD'
+  | 'SCENARIO_DOCUMENTS_READ'
+  | 'SCENARIO_PARTICIPATE'
+  // Séance
+  | 'SEANCE_ADD'
+  | 'SEANCE_DELETE'
+  | 'SEANCE_DATE_RESET'
+  | 'SEANCE_CAPACITY_SET'
+  | 'SEANCE_COMPTE_RENDU_SET'
+  | 'SEANCE_PRACTICAL_INFO_SET'
+  | 'SEANCE_POLL_CREATE'
+  | 'SEANCE_INSCRIBE'
+  | 'SEANCE_UNSUBSCRIBE'
+  // Story 40.4 : réserver une place à un membre / retirer une réservation — l'hôte seul (règle
+  // décidée dans `PermissionService`), groupe de ralliement seulement.
+  | 'SEANCE_RESERVE'
+  // Vote de date
+  | 'POLL_READ'
+  | 'POLL_VOTE'
+  | 'POLL_CHOOSE'
+  // Story 40.7 : prolonger le vote d'une conjonction — l'hôte seul (règle décidée dans `PermissionService`),
+  // groupe de ralliement seulement ; absente du JDR (son échéance par défaut reste de 14 jours).
+  | 'POLL_EXTEND'
+  | 'POLL_OPTIONS_SET'
+  | 'POLL_CLOSE'
+  // Capacités JDR (Story 37.7, couche 3) : les actions d'ÉCRITURE sont aussi conditionnées à une
+  // capacité du système de la partie par la table action → capacité de `permissions/`
+  // (`characters`, `xp`, `hommeDragon`, `groupRoles`, `announcements`).
+  // Personnage
+  | 'CHARACTER_CREATE'
+  | 'CHARACTER_LIST'
+  | 'CHARACTER_READ'
+  | 'CHARACTER_PORTRAIT_READ'
+  | 'CHARACTER_NOTES_READ'
+  | 'CHARACTER_XP_SET'
+  | 'CHARACTER_SHEET_FIELD_SET'
+  | 'CHARACTER_HISTORY_READ'
+  // Distribution d'XP
+  | 'XP_DISTRIBUTION_CREATE'
+  | 'XP_DISTRIBUTION_READ'
+  // Homme Dragon
+  | 'HOMME_DRAGON_MANAGE'
+  | 'HOMME_DRAGON_READ'
+  | 'HOMME_DRAGON_UNLINK'
+  // Rôles de groupe
+  | 'GROUP_ROLE_ASSIGN'
+  | 'GROUP_ROLE_UNASSIGN'
+  | 'GROUP_ROLE_READ'
+  // Annonces
+  | 'ANNOUNCEMENT_CREATE'
+  | 'ANNOUNCEMENT_READ'
+  | 'ANNOUNCEMENT_MARK_READ'
+  // Événements d'un groupe de ralliement (Story 40.1) : proposer une conjonction, lister celles du
+  // groupe. Couche 2, aucune capacité requise ; fermées à tous en JDR (le JDR passe par ses scénarios).
+  | 'EVENT_CREATE'
+  | 'EVENT_LIST'
+  // Story 40.2 : modifier une conjonction — son hôte seul (règle décidée dans `PermissionService`).
+  | 'EVENT_UPDATE'
+  // Story 42.1 : annuler une conjonction — son hôte OU un administrateur du groupe (règle décidée dans
+  // `PermissionService`). Fermée à tous en JDR.
+  | 'EVENT_CANCEL'
+  // Invitations et liens d'invitation (couche 2, aucune capacité requise)
+  | 'INVITATION_CREATE'
+  | 'INVITATION_READ'
+  | 'INVITATION_REVOKE'
+  | 'INVITE_LINK_CREATE'
+  | 'INVITE_LINK_READ'
+  | 'INVITE_LINK_REVOKE';
+
 /** Statut d'une partie — dérivé côté serveur à partir de `Partie.closedAt` et de la présence de
  *  scénarios (AD-8), jamais recalculé côté client (Story 29.6). */
-export type PartieStatus = 'A_VENIR' | 'EN_COURS' | 'TERMINEE';
+export type PartieStatus = 'A_VENIR' | 'EN_COURS' | 'TERMINEE' | 'ANNULEE';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Conversion du type d'une partie (Story 29.14)
@@ -230,18 +496,20 @@ export interface PartieDto {
   kind: PartieKind;
   gameSystemId: string;
   description: string | null;
-  mjId: string;
+  /** Propriétaire de la partie (le MJ pour la famille `jdr`). `null` = compte propriétaire supprimé
+   *  (AD-5) — inatteignable tant qu'aucun code ne supprime de compte, mais à traiter. */
+  ownerId: string | null;
   /** Renseigné uniquement par `GET /parties/:id` (`findOneDto`) — jamais par `GET /parties`
    *  (`listForUser`, tableau de bord), qui reste volontairement hors du périmètre de l'homonymie
    *  (Story 28.3, Task 1). Toujours vérifier avant usage plutôt que supposer présent. */
-  mjPseudo?: string;
-  mjDisplayName?: string;
+  ownerPseudo?: string;
+  ownerDisplayName?: string;
   createdAt: string;
   nextSessionDate: string | null;
   nextSessionSlot: DaySlot | null;
-  /** Rôle de l'appelant sur cette partie — calculé serveur (`mjId === userId`), jamais dérivé
-   *  côté client (Story 29.1, AD-15). Toujours présent, contrairement à `mjPseudo`/`mjDisplayName`. */
-  role: 'mj' | 'player';
+  /** Rôle de l'appelant sur cette partie — calculé serveur (`ownerId === userId`), jamais dérivé
+   *  côté client (Story 29.1, AD-15). Toujours présent, contrairement à `ownerPseudo`/`ownerDisplayName`. */
+  role: PartieRole;
   /** Toujours présent, calculé serveur (AD-8) — jamais dérivé côté client (Story 29.6). */
   status: PartieStatus;
   /** Toujours présent, calculé serveur (Story 29.8) — jamais dérivé côté client. */
@@ -267,7 +535,11 @@ export type PartySignalCode =
   | 'AUCUNE_DATE_NI_VOTE'
   | 'RAPPORT_FIN_MANQUANT'
   | 'PROCHAINE_SEANCE_CONNUE'
-  | 'PARTIE_TERMINEE';
+  | 'PARTIE_TERMINEE'
+  // Story 42.2 : la rencontre isolée (statut ANNULEE) a été annulée par son hôte — seul signal qu'elle porte.
+  | 'PARTIE_ANNULEE'
+  // Story 40.4 : une place est réservée à l'utilisateur dans une conjonction à venir d'un groupe.
+  | 'RESERVATION_A_CONFIRMER';
 
 /** Réponse de `GET /me/party-signals` — une entrée par partie de l'utilisateur, jamais une entrée
  *  absente (`signals: []` si aucun signal actif). `role`/`status` sont dupliqués depuis `PartieDto`
@@ -293,6 +565,9 @@ export interface PartieMemberDto {
   userId: string;
   pseudo: string;
   displayName: string;
+  /** Rôle d'adhésion (Story 39.4) : `ADMIN` ou `MEMBER`. Une partie de la famille `jdr` renvoie
+   *  toujours `MEMBER` — son pouvoir vient de `ownerId`, pas de ce rôle. */
+  role: MembershipRole;
   /** Renseigné uniquement lorsque le demandeur est le MJ de la partie (AD-2) — omis pour tout autre membre. */
   email?: string;
   joinedAt: string;
@@ -359,6 +634,21 @@ export interface SeanceDto {
   poll?: SessionPollDto;
   /** Inscription à capacité limitée (CAMPAGNE_EPISODIQUE uniquement, Story 8.3) — peuplé seulement si `inscriptionMax` est défini sur la Seance (AD-4 : jamais en même temps que `poll`). */
   inscription?: SeanceInscriptionDto;
+  /**
+   * Story 32.3 — date EFFECTIVE de la séance, **à la racine**, résolue côté serveur :
+   * `poll.chosenDate` quand un vote a été scellé, sinon la colonne `Seance.dateValidee`.
+   *
+   * 🚨 **Pourquoi à la racine.** `dateValidee` ne vivait que dans le bloc `inscription`, lui-même
+   * peuplé seulement si `inscriptionMax != null` : une séance datée **sans vote ni inscription**
+   * (héritage `validerDate()`, campagne linéaire) n'exposait donc AUCUNE date exploitable, et son
+   * état (« Programmée », « À débriefer », « Jouée ») n'était pas dérivable. Ajout purement
+   * additif — `inscription.dateValidee` reste servi à l'identique, aucun site d'appel n'est touché.
+   */
+  dateValidee: string | null;
+  /** Créneau de `dateValidee`. Renseigné seulement quand la date vient d'un vote scellé
+   *  (`poll.chosenSlot`) : la colonne `Seance.dateValidee` n'a pas de créneau propre — même
+   *  convention que `recalculateNextSession()`, qui pose `slot: null` dans ce cas. */
+  slotValidee: DaySlot | null;
   compteRendu: string | null;
   /** Informations pratiques (Story 36.5, D-15 amendée le 2026-08-19) — trois champs
    *  facultatifs, séparés pour qu'on puisse en lâcher un quand la place manque.
@@ -368,6 +658,9 @@ export interface SeanceDto {
   lieu: string | null;
   notePratique: string | null;
   createdAt: string;
+  /** Story 44.1 : droits d'organisateur de la personne qui lit, sur cette séance (aucun écran du JDR
+   *  ne les lit encore). */
+  can: OrganizerCan;
 }
 
 /** État d'inscription à capacité limitée d'une Seance (Story 8.3). */
@@ -438,6 +731,160 @@ export interface UpdateScenarioDto {
   dureeSeances?: number;
 }
 
+// ─── Epic 40 : conjonctions d'un groupe de ralliement ─────────────────────────
+
+/** Créneau d'une conjonction (Story 40.1) : toujours un créneau de journée précis — jamais
+ *  `FULL_DAY`, jamais vide. */
+export type EventSlot = Exclude<DaySlot, 'FULL_DAY'>;
+
+/** Statut d'une inscription (colonne `Inscription.status`, Story 40.4) — union FERMÉE. `RESERVED` :
+ *  place réservée par l'hôte, pas encore acceptée (elle compte dans la capacité et n'expire jamais) ;
+ *  `CONFIRMED` : inscription confirmée (défaut — toutes les lignes du JDR). */
+export type InscriptionStatus = 'RESERVED' | 'CONFIRMED';
+
+/** Un créneau candidat d'un sondage de dates de conjonction (Story 40.5) : un jour (`YYYY-MM-DD`) et
+ *  un créneau précis. */
+export interface EventPollOptionInput {
+  date: string;
+  slot: EventSlot;
+}
+
+/** Payload de création d'une conjonction à date fixée (POST /parties/:id/events, Story 40.1).
+ *  `date` est une clé `YYYY-MM-DD` (aujourd'hui accepté, jamais avant) ; `heureRdv` est une
+ *  ÉTIQUETTE `"HH:MM"`, jamais un instant. `capacity` : `null` (ou absent) = « Tous les membres »,
+ *  sinon N places, hôte compris (N ≥ 2, sans plafond). */
+export interface CreateEventDto {
+  title: string;
+  /** Mode « date fixée » : jour et créneau. Absents (avec `pollOptions`) en mode « sondage de dates »
+   *  (Story 40.5) — les deux modes sont exclusifs. */
+  date?: string;
+  slot?: EventSlot;
+  /** Story 40.5, mode « sondage de dates » : créneaux candidats (au moins 2, distincts, jamais
+   *  `FULL_DAY`, sans plafond métier). Exclusif avec `date`/`slot`. */
+  pollOptions?: EventPollOptionInput[];
+  /** Story 40.5 : fin du vote, clé `YYYY-MM-DD` (aujourd'hui accepté, jamais avant) ; obligatoire avec
+   *  `pollOptions`. Le vote se termine à la fin de ce jour (UTC). */
+  pollDeadline?: string;
+  lieu?: string | null;
+  heureRdv?: string | null;
+  notePratique?: string | null;
+  capacity?: number | null;
+  /** Story 40.4 : membres à qui l'hôte réserve une place d'emblée (distincts, jamais l'hôte, places
+   *  limitées seulement, au plus `capacity − 1`). Ignoré par la modification. */
+  reservedUserIds?: string[];
+}
+
+/** Payload de prolongation du vote d'une conjonction (PATCH /parties/:id/poll/:pollId/extend, Story 40.7) :
+ *  `expiresAt` est la clé `YYYY-MM-DD` du NOUVEAU jour d'échéance (le vote se termine à la fin de ce jour,
+ *  UTC) ; strictement après le jour d'échéance actuel, jamais avant aujourd'hui. */
+export interface ExtendPollDto {
+  expiresAt: string;
+}
+
+/** Payload de réservation d'une place (POST /scenarios/seances/:id/reservations, Story 40.4). */
+export interface ReservePlaceDto {
+  userId: string;
+}
+
+/** Payload de modification d'une conjonction (PATCH /parties/:id/events/:eventId, Story 40.2) :
+ *  remplacement COMPLET, mêmes champs et mêmes règles que la création (l'hôte est immuable). */
+export type UpdateEventDto = CreateEventDto;
+
+/** La séance unique d'une conjonction, telle que projetée pour sa carte (Story 40.1). `date` est la
+ *  clé `YYYY-MM-DD` du début de sa plage (`null` tant qu'elle n'est pas fixée) ; `capacity` `null` =
+ *  « Tous les membres ». */
+export interface EventCardSeanceDto {
+  id: string;
+  date: string | null;
+  slot: DaySlot | null;
+  lieu: string | null;
+  heureRdv: string | null;
+  notePratique: string | null;
+  capacity: number | null;
+  /** Story 40.4 : places prises = l'hôte + TOUTES les lignes d'inscription, `RESERVED` comprises —
+   *  servi à tous pour que « Complet » et « libres » soient justes sans révéler qui tient une place
+   *  en attente. */
+  placesTaken: number;
+}
+
+/** Un participant d'une conjonction (Story 40.2) : l'hôte d'abord (`isHost`), puis les inscrits par
+ *  ordre d'inscription. `isAdmin` = `Membership.role` du groupe (jamais un droit sur l'événement).
+ *  Story 40.4 : `status` — une ligne `RESERVED` n'est servie qu'à l'hôte de la conjonction. */
+export interface EventParticipantDto {
+  userId: string;
+  displayName: string;
+  isHost: boolean;
+  isAdmin: boolean;
+  status: InscriptionStatus;
+}
+
+/** Un créneau candidat du sondage d'une conjonction, tel que servi aux membres (Story 40.5).
+ *  `availableCount` : parmi les inscrits (hôte + inscriptions confirmées), combien sont libres sur ce
+ *  créneau d'après leurs disponibilités déclarées — un nombre, jamais des noms. */
+export interface EventPollOptionDto {
+  id: string;
+  date: string;
+  slot: DaySlot;
+  availableCount: number;
+}
+
+/** La réponse d'un votant éligible à un créneau (Story 40.5). */
+export interface EventPollVoteDto {
+  optionId: string;
+  userId: string;
+  answer: VoteAnswer;
+}
+
+/** Sondage de dates d'une conjonction (Story 40.5) — projection explicite, servie aux membres du
+ *  groupe seuls. `eligibleVoterIds` : qui peut voter (tous les membres, ou l'hôte + les inscrits
+ *  confirmés si les places sont limitées) ; le résumé du vote (réponses, meilleur créneau, « n'ont pas
+ *  encore répondu ») est calculé à l'écran depuis cette liste et `votes`. `expiresAt` : fin du vote
+ *  (instant ISO, fin du jour d'échéance en UTC). */
+export interface EventPollDto {
+  id: string;
+  expiresAt: string | null;
+  status: PollStatus;
+  eligibleVoterIds: string[];
+  options: EventPollOptionDto[];
+  votes: EventPollVoteDto[];
+}
+
+/**
+ * Droits d'organisateur d'un rendez-vous pour la personne qui lit (Story 44.1, AD-4) — calculés par le
+ * serveur (`PermissionService`), jamais déduits à l'écran d'un `hostId` ou d'un rôle. Ils disent le DROIT,
+ * pas l'état : un sondage clos ou une date fixée restent des conditions d'écran à part.
+ * - `propose` : proposer des dates (créer un sondage) ;
+ * - `edit` : modifier les dates d'un sondage ouvert ;
+ * - `choose` : fixer la date ;
+ * - `extend` : prolonger le vote (jamais en JDR, où l'on repousse l'échéance en modifiant le sondage).
+ */
+export interface OrganizerCan {
+  propose: boolean;
+  edit: boolean;
+  choose: boolean;
+  extend: boolean;
+}
+
+/** Carte d'une conjonction (GET /parties/:id/events/list, Story 40.1) — projection explicite :
+ *  l'hôte (immuable, `null` si son compte a disparu), la séance unique et, depuis la Story 40.2, ses
+ *  participants (hôte en premier, puis les inscrits). */
+export interface EventCardDto {
+  id: string;
+  title: string;
+  hostId: string | null;
+  hostDisplayName: string | null;
+  seance: EventCardSeanceDto | null;
+  participants: EventParticipantDto[];
+  /** Story 40.4 : la ligne d'inscription de la personne qui lit (`null` : aucune — l'hôte non plus). */
+  myInscription: InscriptionStatus | null;
+  /** Story 40.5 : le sondage de dates de la conjonction (`null` pour une conjonction à date fixée). */
+  poll: EventPollDto | null;
+  /** Story 42.1 : la conjonction est annulée (définitif) — plus aucune action, sondage clos. */
+  cancelled: boolean;
+  /** Story 44.1 : droits d'organisateur de la personne qui lit, sur cet événement. */
+  can: OrganizerCan;
+}
+
 // ─── Epic 9 : Annonces MJ ──────────────────────────────────────────────────
 
 /** Une annonce MJ à portée variable (Story 9.1) — `scenarioId: null` = portée Partie/campagne entière. */
@@ -447,7 +894,7 @@ export interface AnnouncementDto {
   scenarioId: string | null;
   text: string;
   createdAt: string;
-  /** Identité du MJ auteur — dérivée de `Partie.mjId`, jamais stockée sur l'annonce (AD-2, Story 28.2). */
+  /** Identité du MJ auteur — dérivée de `Partie.ownerId`, jamais stockée sur l'annonce (AD-2, Story 28.2). */
   authorPseudo: string;
   authorDisplayName: string;
 }
@@ -869,6 +1316,22 @@ export interface CharacterDto {
    * de niveau sans que `level` n'augmente tant que le joueur n'a pas validé le `LevelUpWizard`.
    */
   level: number;
+  /**
+   * Chemins de fiche retirés de cette réponse par le cadenas de visibilité (Story 31.6) — chemin
+   * pointé simple (`"classId"`) ou sous-champ (`"attributes.AGI"`), plus `"derived"` quand
+   * `derived` est retiré en entier (dépendance à `attributes`/`levelUps` verrouillée). Toujours
+   * renvoyé par l'API (tableau vide pour le propriétaire de la fiche et pour le MJ, qui voient
+   * toujours tout — ou quand rien n'est configuré pour la Partie). `sheetData`/`derived` restent
+   * typés pleins ci-dessus (contrat DTO existant) : une clé retirée est simplement absente à
+   * l'exécution (jamais vide ni nulle), signalée ici.
+   *
+   * Optionnel dans CE TYPE (pas côté API, qui le peuple systématiquement) : `apps/web/**` est hors
+   * périmètre de la Story 31.6 (aucune modification, cf. spec) et
+   * `apps/web/src/app/core/characters/character-dto.fixture.ts` construit un `CharacterDto`
+   * littéral sans ce champ — le marquer requis casserait sa compilation sans qu'aucune story
+   * n'ait mandat de la corriger ici.
+   */
+  hiddenFields?: string[];
 }
 
 /** Personnage enrichi du nom de sa Partie d'origine — forme de réponse propre à `GET /me/characters`
@@ -1078,10 +1541,32 @@ export interface CreateCharacterDto {
   sheetData: SheetData;
 }
 
+/** Description d'une clé de `sheetSchema` (Story 31.6/31.7) — `lockable`/`lockableFields`
+ *  déclarent ce que l'écran de configuration des cadenas (31.7) peut proposer à la coche, sans
+ *  aucune liste écrite en dur côté écran. `label`/`lockableFieldLabels` portent les libellés
+ *  affichés (mêmes textes que `creationSteps`/la fiche personnage, jamais un nouveau libellé
+ *  inventé pour cet écran). */
+export interface SheetSchemaFieldDto {
+  type: string;
+  optional?: boolean;
+  fields?: string[];
+  lockable?: boolean;
+  lockableFields?: string[];
+  label: string;
+  lockableFieldLabels?: Record<string, string>;
+}
+
 /** Réponse de GET /game-systems/:id/schema. */
 export interface GameSystemSchemaDto {
-  sheetSchema: unknown;
+  sheetSchema: Record<string, SheetSchemaFieldDto>;
   creationSteps: unknown[];
+}
+
+/** Un chemin verrouillé (Story 31.6/31.7) — miroir du retour de `setVisibilityLocks()`/
+ *  `getVisibilityLocks()` côté API, jamais réimporté depuis `apps/api`. */
+export interface VisibilityLockPathDto {
+  fieldKey: string;
+  subField: string | null;
 }
 
 /** Entrée de contenu générique d'un système de jeu (ex: une classe, un type, une arme). */
@@ -1111,8 +1596,9 @@ export interface ResetPasswordDto {
 /** Race de l'Homme Dragon (Story 10.1) — fixée à la création, détermine les artefacts proposés. */
 export type HommeDragonRace = 'DRAGON_VERT' | 'DRAGON_BLEU' | 'DRAGON_ROUGE' | 'DRAGON_NOIR';
 
-/** Fiche du personnage du MJ pour Ryuutama (Story 10.1). Forme minimale — `derived`/
- * `voyageursProteges`/`historique` seront ajoutés par les Stories 10.2/10.3, pas encore calculés. */
+/** Fiche du personnage du MJ pour Ryuutama (Story 10.1) — la part saisie et persistée (`sheetData`).
+ * Niveau, PS, aventures, historique et éveils en attente sont calculés à la lecture
+ * (`HommeDragonDto`, AD-3), jamais stockés ici. */
 export interface HommeDragonSheetData {
   race: HommeDragonRace;
   artefact: { key: string; nom?: string; inscription?: string };
@@ -1126,22 +1612,56 @@ export interface HommeDragonSheetData {
   /** Pouvoirs d'éveil choisis, un par niveau franchi (2-5) — jamais recalculé, c'est un choix
    * du MJ (Story 10.4). Absent sur les fiches créées avant cette story. */
   eveilPowers?: { level: number; key: string }[];
+  /** Artefact offert par les hommes-dragons des autres races au niveau 4 (Story 33.7) : choix
+   * unique et définitif du MJ, jamais d'artefact de la race du dragon. Le libellé se lit au
+   * catalogue `hommeDragonArtefact`. Absent tant que rien n'est choisi. */
+  artefactCadeau?: { key: string };
+  /** Réserve de souffles du dragon (Story 33.6) : une seule par Homme Dragon, positionnelle
+   * (index = numéro d'emplacement − 1), clé d'un souffle du catalogue `souffle` ou `souffleRituel`,
+   * `null`/absent = emplacement vide. Écrite uniquement par `PUT …/reserve/:slot`, jamais par le
+   * `PATCH` générique ; lue par le MJ seul (la fiche entière lui est réservée). */
+  reserve?: (string | null)[];
+}
+
+/** Référence légère à un Homme Dragon : `{ id, nom }` (AD-23). Renvoyée par
+ * `GET /parties/:id/homme-dragon` (`null` si l'aventure n'en a pas) — ni race, ni niveau, ni réserve. */
+export interface HommeDragonRefDto {
+  id: string;
+  nom: string;
+}
+
+/** Un voyageur protégé d'une aventure (AD-23) — convention joueur / personnage : `pseudo` et
+ * `displayName` permettent au front d'afficher le nom selon la convention de l'application. */
+export interface HommeDragonVoyageurDto {
+  userId: string;
+  pseudo: string;
+  displayName: string;
+}
+
+/** Une aventure d'un Homme Dragon (AD-23) : une partie dont `hommeDragonId` est son id, avec les
+ * voyageurs protégés (membres de la partie hors MJ) — calculé à la lecture, jamais stocké. */
+export interface HommeDragonAventureDto {
+  partieId: string;
+  nom: string;
+  voyageurs: HommeDragonVoyageurDto[];
 }
 
 export interface HommeDragonDto {
   id: string;
   userId: string;
-  partieId: string;
   gameSystemId: string;
   sheetData: HommeDragonSheetData;
   createdAt: string;
   updatedAt: string;
-  /** Membres actuels de la Partie (hors MJ) — calculé à la lecture, jamais stocké (AD-3, Story 10.2). */
-  voyageursProteges: { userId: string; pseudo: string }[];
-  /** Scénarios `PASSE` de la Partie — calculé à la lecture, jamais stocké (AD-3, Story 10.2). */
-  historique: { scenarioTitle: string; date: string; participants: string[] }[];
+  /** Aventures de l'Homme Dragon (0..N, triées par `Partie.createdAt` puis `id`) avec leurs
+   * voyageurs protégés — calculé à la lecture, jamais stocké (AD-3, AD-23). Remplace le
+   * `partieId` et le `voyageursProteges` plat d'avant la Story 33.8. */
+  aventures: HommeDragonAventureDto[];
+  /** Scénarios `PASSE` de TOUTES les aventures, chacun avec sa `partieId`, triés par date de
+   * clôture puis id croissants — calculé à la lecture, jamais stocké (AD-3, AD-23). */
+  historique: { scenarioTitle: string; date: string; participants: string[]; partieId: string }[];
   /** Niveau (1-5) et Points de Souffle max — calculés à la lecture depuis le nombre de scénarios
-   * `PASSE`, jamais stockés (AD-3, Story 10.3). */
+   * `PASSE` cumulés sur toutes les aventures, jamais stockés (AD-3, Story 10.3, AD-23). */
   derived: { level: number; PS: number };
   /** Miroir de `sheetData.eveilPowers`, toujours un tableau (jamais `undefined`). */
   eveilPowers: { level: number; key: string }[];
@@ -1150,13 +1670,34 @@ export interface HommeDragonDto {
   pendingEveilLevels: number[];
 }
 
-/** Payload de création (POST /parties/:id/homme-dragon) — mêmes champs que la fiche, à plat. */
+/**
+ * Un Homme Dragon vu depuis « Personnages » (Story 33.5) — lecture agrégée `GET /me/homme-dragons`,
+ * volontairement légère : pas de `derived` ni de niveau (calcul par scénarios `PASSE`, fan-out
+ * par partie). Une ligne par Homme Dragon, filtrée par propriétaire seul (AD-23) : `aventures`
+ * peut être vide (Homme Dragon sans aventure, atteignable par dissociation ou suppression de partie).
+ */
+export interface MyHommeDragonDto {
+  id: string;
+  /** Aventures de l'Homme Dragon, triées par `Partie.createdAt` puis `id` ; éventuellement vide. */
+  aventures: { partieId: string; nom: string }[];
+  gameSystemId: string;
+  nom: string;
+  race: HommeDragonRace;
+  avatar?: string;
+  createdAt: string;
+}
+
+/** Payload de création (POST /parties/:id/homme-dragon, crée ET lie à la partie) — mêmes champs que la fiche, à plat. */
 export type CreateHommeDragonDto = HommeDragonSheetData;
 
-/** Payload de mise à jour (PATCH /parties/:id/homme-dragon) — race jamais éditable après création. */
-export type UpdateHommeDragonDto = Partial<Omit<HommeDragonSheetData, 'race'>>;
+/** Payload de mise à jour (PATCH /homme-dragons/:id) — race jamais éditable après création,
+ * ni l'artefact cadeau (choix définitif via POST `artefact-cadeau`, Story 33.7), ni la réserve de
+ * souffles (route dédiée `PUT reserve/:slot`, Story 33.6). */
+export type UpdateHommeDragonDto = Partial<
+  Omit<HommeDragonSheetData, 'race' | 'artefactCadeau' | 'reserve'>
+>;
 
-/** Payload de choix d'un pouvoir d'éveil (POST /parties/:id/homme-dragon/eveil-power).
+/** Payload de choix d'un pouvoir d'éveil (POST /homme-dragons/:id/eveil-power).
  * Décision utilisateur (Story 10.4) : le catalogue `eveilPower` est un pool commun à toutes les
  * races, sans niveau de déblocage par pouvoir — `level` désigne ici le seuil de niveau franchi
  * pour lequel ce choix est fait (doit appartenir à `pendingEveilLevels`), pas un attribut du
@@ -1164,4 +1705,17 @@ export type UpdateHommeDragonDto = Partial<Omit<HommeDragonSheetData, 'race'>>;
 export interface ChooseEveilPowerDto {
   level: number;
   key: string;
+}
+
+/** Payload du choix de l'artefact cadeau (POST /homme-dragons/:id/artefact-cadeau,
+ * Story 33.7) — niveau ≥ 4, choix unique et définitif, artefact d'une autre race que le dragon. */
+export interface ChooseArtefactCadeauDto {
+  key: string;
+}
+
+/** Payload de l'écriture d'un emplacement de la réserve (PUT /homme-dragons/:id/reserve/:slot,
+ * Story 33.6) — `key: null` retire le souffle de l'emplacement. Un seul emplacement par appel ; le
+ * numéro d'emplacement (1-based) est dans l'URL. */
+export interface SetReserveSlotDto {
+  key: string | null;
 }
