@@ -53,9 +53,9 @@ async function bootstrap() {
   // simultanément `localhost:4200` (navigateur du poste) et l'IP LAN du poste (`192.168.x.x:4200`,
   // utilisée depuis un vrai téléphone pour valider le rendu mobile du Palier 9).
   //
-  // ⚠️ CHANGEMENT DE DEV À REVOIR AVANT LA MISE EN PRODUCTION (Palier 10) : en prod `WEB_ORIGIN`
+  // ⚠️ CHANGEMENT DE DEV À REVOIR AVANT LA MISE EN PRODUCTION (Palier 11) : en prod `WEB_ORIGIN`
   // ne doit contenir QUE l'origine publique réelle — surtout aucune IP de réseau local.
-  // Voir docs/backlog.md § Palier 10.
+  // Voir docs/backlog.md § Palier 11.
   const webOrigins = (process.env.WEB_ORIGIN ?? 'http://localhost:4200')
     .split(',')
     .map((origin) => origin.trim())

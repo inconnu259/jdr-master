@@ -5,6 +5,10 @@ import type { AvailabilityDeclarationDto, CalendarLayerKey } from '@master-jdr/s
 import type { AgendaEntry } from '../calendar-agenda-view/calendar-agenda-view';
 import { CalendarWeekView, buildWeek, getWeekStart } from './calendar-week-view';
 import { LONG_PRESS_MS } from '../selection.utils';
+import { THEMES, TONE_MAP } from '../../../core/theme/tones';
+import { fillTone } from '../../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 describe('getWeekStart', () => {
   it('returns Monday for a Wednesday', () => {
@@ -47,14 +51,14 @@ describe('buildWeek', () => {
 
   it('returns 7 cells', () => {
     const weekStart = getWeekStart(new Date(2026, 5, 22));
-    const cells = buildWeek(weekStart, emptyDecls, null);
+    const cells = buildWeek(weekStart, emptyDecls, null, TONE_MAP['grimoire-emeraude']);
     expect(cells).toHaveLength(7);
   });
 
   it('marks today as isToday', () => {
     const today = new Date();
     const weekStart = getWeekStart(today);
-    const cells = buildWeek(weekStart, emptyDecls, null);
+    const cells = buildWeek(weekStart, emptyDecls, null, TONE_MAP['grimoire-emeraude']);
 
     const todayCell = cells.find((c) => {
       const midnight = new Date(c.date);
@@ -73,7 +77,7 @@ describe('buildWeek', () => {
     const pastWeekStart = new Date();
     pastWeekStart.setDate(pastWeekStart.getDate() - 14);
     const weekStart = getWeekStart(pastWeekStart);
-    const cells = buildWeek(weekStart, emptyDecls, null);
+    const cells = buildWeek(weekStart, emptyDecls, null, TONE_MAP['grimoire-emeraude']);
     expect(cells.every((c) => c.isPast)).toBe(true);
   });
 
@@ -82,7 +86,7 @@ describe('buildWeek', () => {
     const futureWeekStart = new Date();
     futureWeekStart.setDate(futureWeekStart.getDate() + 7);
     const weekStart = getWeekStart(futureWeekStart);
-    const cells = buildWeek(weekStart, emptyDecls, null);
+    const cells = buildWeek(weekStart, emptyDecls, null, TONE_MAP['grimoire-emeraude']);
     expect(cells.every((c) => !c.isPast)).toBe(true);
   });
 });
@@ -109,7 +113,7 @@ describe('buildWeek - findWeekDecl avec endDate (AC1)', () => {
       startDate: null,
       endDate: '2026-06-21', // veille du lundi → la série est terminée
     };
-    const cells = buildWeek(weekStart, [decl], null);
+    const cells = buildWeek(weekStart, [decl], null, TONE_MAP['grimoire-emeraude']);
     const monday = cells[0]; // index 0 = lundi
     expect(monday.morning.declLabel).toBeNull();
   });
@@ -124,11 +128,29 @@ describe('buildWeek - findWeekDecl avec endDate (AC1)', () => {
       startDate: null,
       endDate: '2026-06-22', // exactement le jour de la cellule → encore valide
     };
-    const cells = buildWeek(weekStart, [decl], null);
+    const cells = buildWeek(weekStart, [decl], null, TONE_MAP['grimoire-emeraude']);
     const monday = cells[0];
     expect(monday.morning.declLabel).not.toBeNull();
     expect(monday.morning.declLabel).toContain('Récurrent');
   });
+
+  for (const theme of THEMES) {
+    it(`${theme} : le libellé de déclaration emploie les mots du thème passé`, () => {
+      const decl: AvailabilityDeclarationDto = {
+        ...BASE_DECL,
+        kind: 'UNAVAILABLE',
+        recurKind: 'RECURRING',
+        dayOfWeek: 1,
+        slot: 'MORNING',
+        startDate: null,
+        endDate: null,
+      };
+      const tone = TONE_MAP[theme];
+      const label = buildWeek(weekStart, [decl], null, tone)[0].morning.declLabel;
+      expect(label).toContain(tone['calendar.week_decl_unavailable']);
+      expect(label).toContain(tone['calendar.week_decl_recurring']);
+    });
+  }
 
   it('renvoie le declLabel pour une déclaration RECURRING sans endDate', () => {
     const decl: AvailabilityDeclarationDto = {
@@ -140,7 +162,7 @@ describe('buildWeek - findWeekDecl avec endDate (AC1)', () => {
       startDate: null,
       endDate: null,
     };
-    const cells = buildWeek(weekStart, [decl], null);
+    const cells = buildWeek(weekStart, [decl], null, TONE_MAP['grimoire-emeraude']);
     const wednesday = cells[2]; // index 2 = mercredi
     expect(wednesday.afternoon.declLabel).not.toBeNull();
   });
@@ -466,7 +488,7 @@ describe('CalendarWeekView — sélection par glissement', () => {
     fixture.detectChanges();
 
     const otherBtn = Array.from(el.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Autre…',
+      (b) => b.textContent?.trim() === GRIMOIRE_TONE['calendar.selbar_other'],
     )!;
     otherBtn.click();
     fixture.detectChanges();
@@ -586,14 +608,24 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
     }
   });
 
+  it('la navigation porte les pictogrammes precedent, suivant puis aujourdhui, dans cet ordre', () => {
+    create();
+    const names = Array.from(el.querySelectorAll('.week-nav button app-icon')).map((i) =>
+      i.getAttribute('data-icon'),
+    );
+    expect(names).toEqual(['precedent', 'suivant', 'aujourdhui']);
+  });
+
   // AC1 + AC2 — la gouttière porte une icône par créneau, et chacune est nommée. L'icône y
   // REMPLACE le mot (contrairement au rail, où elle l'accompagne et reste aria-hidden).
   it('AC1/AC2 — la gouttière porte trois icônes de créneau, chacune avec un libellé accessible', () => {
     create();
     const icons = Array.from(el.querySelectorAll('.row-label .slot-icon'));
     expect(icons).toHaveLength(3);
-    expect(icons.map((i) => i.getAttribute('aria-label'))).toEqual(['Matin', 'Après-midi', 'Soir']);
-    expect(icons.some((i) => i.getAttribute('aria-hidden') === 'true')).toBe(false);
+    expect(icons.map((i) => i.getAttribute('data-icon'))).toEqual(['matin', 'apres-midi', 'soir']);
+    const svgs = icons.map((i) => i.querySelector('svg')!);
+    expect(svgs.map((s) => s.getAttribute('aria-label'))).toEqual(['Matin', 'Après-midi', 'Soir']);
+    expect(svgs.some((s) => s.getAttribute('aria-hidden') === 'true')).toBe(false);
   });
 
   // AC6 — la case du Mois n'en porte pas : la position y dit déjà le créneau. Vérifié ici par
@@ -776,8 +808,14 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
   it('Story 36.6, AC14 — le nom accessible de la cellule dit la participation et ma réponse', () => {
     create([voteEntry(2, { vote: PARTICIPATION })], ['votes-en-cours']);
     const label = cellAt('MORNING', 2).getAttribute('aria-label')!;
-    expect(label).toContain('3 réponses sur 4');
-    expect(label).toContain('tu as dit oui');
+    expect(label).toContain(
+      fillTone(GRIMOIRE_TONE['calendar.util_participation_many'], { n: 3, total: 4 }),
+    );
+    expect(label).toContain(
+      fillTone(GRIMOIRE_TONE['calendar.util_answer_mine'], {
+        answer: GRIMOIRE_TONE['calendar.util_answer_yes'],
+      }),
+    );
   });
 
   it('🚨 Story 36.6, AC9 — le nœud de piste reste un descendant porteur de data-cell-date', () => {
@@ -1051,6 +1089,114 @@ describe('CalendarWeekView — mode de composition (Story 36.10)', () => {
     expect(el.querySelector('app-selection-bar')).toBeNull();
   });
 
+  // ── Story 45.3 — le geste des dispos en composition (bloc JUMEAU de la vue Mois) ──
+
+  const barEl = () => el.querySelector('app-selection-bar');
+  const barButton = (text: string) =>
+    Array.from(el.querySelectorAll('app-selection-bar button')).find(
+      (b) => b.textContent?.trim() === text,
+    ) as HTMLButtonElement;
+  const gridEl = () => el.querySelector('.week-grid') as HTMLElement;
+
+  /** Appui maintenu sur une cellule, relâché : arme une sélection sur la ligne de cette cellule. */
+  function longPressCell(cell: HTMLElement): void {
+    cell.dispatchEvent(pointer('pointerdown'));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    gridEl().dispatchEvent(pointer('pointerup'));
+    fixture.detectChanges();
+  }
+
+  it('Story 45.3 — en composition, l’appui maintenu arme une sélection ET ouvre la barre en version composition', () => {
+    vi.useFakeTimers();
+    create({ composing: true, composedKeys: new Set<string>() });
+    const toggled = vi.fn();
+    fixture.componentInstance.composeToggled.subscribe(toggled);
+
+    longPressCell(cellAt('EVENING', 2));
+
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(1);
+    expect(barEl()).not.toBeNull();
+    expect(barButton(GRIMOIRE_TONE['calendar.selbar_compose_add'])).toBeTruthy();
+    expect(barButton(GRIMOIRE_TONE['common.indisponible'])).toBeUndefined();
+    expect(toggled).not.toHaveBeenCalled();
+  });
+
+  it('Story 45.3 — « Ajouter au vote » émet la sélection et ferme la barre ; « Retirer » émet composeRemoved', () => {
+    vi.useFakeTimers();
+    create({ composing: true, composedKeys: new Set<string>() });
+    const added = vi.fn();
+    const removed = vi.fn();
+    fixture.componentInstance.composeAdded.subscribe(added);
+    fixture.componentInstance.composeRemoved.subscribe(removed);
+
+    longPressCell(cellAt('EVENING', 2));
+    barButton(GRIMOIRE_TONE['calendar.selbar_compose_add']).click();
+    fixture.detectChanges();
+    expect(added).toHaveBeenCalledTimes(1);
+    expect(added.mock.calls[0][0].map((c: { slot: string }) => c.slot)).toEqual(['EVENING']);
+    expect(barEl()).toBeNull();
+
+    longPressCell(cellAt('MORNING', 3));
+    barButton(GRIMOIRE_TONE['calendar.selbar_compose_remove']).click();
+    expect(removed).toHaveBeenCalledTimes(1);
+    expect(removed.mock.calls[0][0].map((c: { slot: string }) => c.slot)).toEqual(['MORNING']);
+  });
+
+  it('Story 45.3 — barre ouverte, un tap bascule la cellule dans la SÉLECTION, jamais dans la composition', () => {
+    vi.useFakeTimers();
+    create({ composing: true, composedKeys: new Set<string>() });
+    const toggled = vi.fn();
+    fixture.componentInstance.composeToggled.subscribe(toggled);
+
+    longPressCell(cellAt('EVENING', 2));
+    tap(cellAt('EVENING', 4));
+
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(2);
+    expect(toggled).not.toHaveBeenCalled();
+  });
+
+  it('Story 45.3 — `Échap` ferme d’abord la barre, puis quitte le composer', () => {
+    vi.useFakeTimers();
+    create({ composing: true, composedKeys: new Set<string>() });
+    const cancelled = vi.fn();
+    fixture.componentInstance.composeCancelled.subscribe(cancelled);
+    const escape = () =>
+      gridEl().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    longPressCell(cellAt('EVENING', 2));
+    escape();
+    fixture.detectChanges();
+    expect(barEl()).toBeNull();
+    expect(cancelled).not.toHaveBeenCalled();
+
+    escape();
+    expect(cancelled).toHaveBeenCalledTimes(1);
+  });
+
+  it('Story 45.3 — quitter le composer efface la sélection', () => {
+    vi.useFakeTimers();
+    create({ composing: true, composedKeys: new Set<string>() });
+    longPressCell(cellAt('EVENING', 2));
+    expect(barEl()).not.toBeNull();
+
+    fixture.componentRef.setInput('composing', false);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(0);
+    expect(barEl()).toBeNull();
+  });
+
+  it('Story 45.3 — sans journée entière (groupe), la barre ne propose pas « Journée »', () => {
+    vi.useFakeTimers();
+    create({ composing: true, composedKeys: new Set<string>(), composeFullDay: false });
+    longPressCell(cellAt('EVENING', 2));
+
+    const labels = Array.from(el.querySelectorAll('app-selection-bar .scope-seg')).map((b) =>
+      b.textContent!.trim(),
+    );
+    expect(labels).toEqual(['Matin', 'Après-m.', 'Soir']);
+  });
+
   it('🚨 AC12 — une cellule portant un VOTE n’ouvre pas le sélecteur de réponse en composition', () => {
     create({
       entries: [voteEntry(2)],
@@ -1106,7 +1252,7 @@ describe('CalendarWeekView — mode de composition (Story 36.10)', () => {
 
     const cell = cellAt('EVENING', 2);
     expect(cell.classList.contains('slot-cell--composed')).toBe(true);
-    expect(cell.getAttribute('aria-label')).toContain('désigné pour le vote');
+    expect(cell.getAttribute('aria-label')).toContain(GRIMOIRE_TONE['common.designe_pour_le_vote']);
 
     const other = cellAt('MORNING', 2);
     expect(other.classList.contains('slot-cell--composed')).toBe(false);
@@ -1118,6 +1264,44 @@ describe('CalendarWeekView — mode de composition (Story 36.10)', () => {
     const cell = cellAt('EVENING', 2);
     expect(cell.classList.contains('slot-cell--composed')).toBe(true);
     expect(cell.classList.contains('selected')).toBe(false);
+  });
+
+  // ⚠️ Story 47.4 — bloc JUMEAU de la vue Mois : l'aperçu des plages.
+  it('Story 47.4 — le départ garde son tireté, les créneaux couverts prennent l’aperçu', () => {
+    create({
+      composing: true,
+      composedKeys: new Set([`${dayKey(2)}|EVENING`]),
+      composeCoverKeys: new Set([`${dayKey(3)}|MORNING`, `${dayKey(3)}|AFTERNOON`]),
+      composeDuration: 3,
+    });
+
+    expect(cellAt('EVENING', 2).classList.contains('slot-cell--span-preview')).toBe(false);
+    expect(cellAt('MORNING', 3).classList.contains('slot-cell--span-preview')).toBe(true);
+    expect(cellAt('AFTERNOON', 3).classList.contains('slot-cell--span-preview')).toBe(true);
+    expect(cellAt('EVENING', 3).classList.contains('slot-cell--span-preview')).toBe(false);
+  });
+
+  it('Story 47.4 — au survol, la plage qu’ouvrirait la cellule s’allume ; à 1 créneau, rien', () => {
+    create({ composing: true, composedKeys: new Set<string>(), composeDuration: 2 });
+
+    cellAt('EVENING', 2).dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }));
+    fixture.detectChanges();
+    expect(cellAt('EVENING', 2).classList.contains('slot-cell--span-preview')).toBe(true);
+    expect(cellAt('MORNING', 3).classList.contains('slot-cell--span-preview')).toBe(true);
+
+    cellAt('EVENING', 2).dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' }));
+    fixture.detectChanges();
+    expect(el.querySelectorAll('.slot-cell--span-preview')).toHaveLength(0);
+
+    // Au doigt, l'entrée émulée après un tap n'a pas de sortie : elle n'allume rien.
+    cellAt('EVENING', 2).dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'touch' }));
+    fixture.detectChanges();
+    expect(el.querySelectorAll('.slot-cell--span-preview')).toHaveLength(0);
+
+    fixture.componentRef.setInput('composeDuration', 1);
+    cellAt('EVENING', 2).dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }));
+    fixture.detectChanges();
+    expect(el.querySelectorAll('.slot-cell--span-preview')).toHaveLength(0);
   });
 });
 
@@ -1212,6 +1396,24 @@ describe('CalendarWeekView — sceller depuis la barre de sélection (Story 36.1
     });
   });
 
+  it('Story 47.5 — sealCandidate d’une plage porte « début → fin », pas seulement le créneau de départ', () => {
+    create({
+      canSeal: true,
+      entries: [{ ...voteEntry(2, 'EVENING'), endDate: dayKey(4), endSlot: 'AFTERNOON' } as AgendaEntry],
+    });
+    selectSingle(2, 'EVENING');
+    const candidate = (fixture.componentInstance as any).sealCandidate();
+    expect(candidate.dateLabel).toMatch(
+      /^[^ ]+\. \d{1,2} [^ ]+ soir → [^ ]+\. \d{1,2} [^ ]+ après-midi$/,
+    );
+    // Un créneau seul garde son écriture d'avant (sans flèche).
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ imports: [CalendarWeekView] });
+    create({ canSeal: true, entries: [voteEntry(2, 'EVENING')] });
+    selectSingle(2, 'EVENING');
+    expect((fixture.componentInstance as any).sealCandidate().dateLabel).not.toContain('→');
+  });
+
   it('AC1 — le bouton Sceller est rendu dans la barre de sélection', () => {
     create({ canSeal: true, entries: [voteEntry(2)] });
     selectSingle(2, 'EVENING');
@@ -1261,5 +1463,280 @@ describe('CalendarWeekView — sceller depuis la barre de sélection (Story 36.1
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({ pollId: 'poll1', optionId: 'opt1' }),
     );
+  });
+});
+
+// ─── Story 46.2 — la fenêtre de l'automate sélectionnée : contour plein, jamais tireté ──────────
+describe('CalendarWeekView — fenêtre de l’automate sélectionnée (Story 46.2)', () => {
+  let fixture: ComponentFixture<CalendarWeekView>;
+  let el: HTMLElement;
+  const start = new Date();
+  start.setDate(start.getDate() + 14);
+  const weekStart = getWeekStart(
+    new Date(Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())),
+  );
+  const dayKey = (i: number) => {
+    const y = weekStart.getUTCFullYear();
+    const d = new Date(y, weekStart.getUTCMonth(), weekStart.getUTCDate() + i);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  function create(windowKey: string | null): void {
+    TestBed.configureTestingModule({ imports: [CalendarWeekView] });
+    fixture = TestBed.createComponent(CalendarWeekView);
+    fixture.componentRef.setInput('startDate', start);
+    fixture.componentRef.setInput('entries', []);
+    fixture.componentRef.setInput('activeLayers', []);
+    fixture.componentRef.setInput('windowKey', windowKey);
+    fixture.detectChanges();
+    el = fixture.nativeElement;
+  }
+  const cellAt = (slot: 'MORNING' | 'AFTERNOON' | 'EVENING', i: number) =>
+    Array.from(el.querySelectorAll<HTMLElement>(`.slot-cell[data-cell-slot="${slot}"]`))[i];
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('sans fenêtre : aucune cellule contournée', () => {
+    create(null);
+    expect(el.querySelectorAll('.slot-cell--window')).toHaveLength(0);
+  });
+
+  it('la cellule de la fenêtre porte le contour, et elle seule', () => {
+    create(`${dayKey(2)}|EVENING`);
+    expect(el.querySelectorAll('.slot-cell--window')).toHaveLength(1);
+    expect(cellAt('EVENING', 2).classList).toContain('slot-cell--window');
+    expect(cellAt('MORNING', 2).classList).not.toContain('slot-cell--window');
+  });
+
+  it('son nom accessible dit « fenêtre sélectionnée » (jamais le contour seul)', () => {
+    create(`${dayKey(2)}|EVENING`);
+    expect(cellAt('EVENING', 2).getAttribute('aria-label')).toContain(
+      TONE_MAP['grimoire-emeraude']['calendar.window_selected_aria'],
+    );
+    expect(cellAt('EVENING', 3).getAttribute('aria-label')).not.toContain(
+      TONE_MAP['grimoire-emeraude']['calendar.window_selected_aria'],
+    );
+  });
+});
+
+describe('CalendarWeekView — une plage sur la semaine (Story 47.3)', () => {
+  let fixture: ComponentFixture<CalendarWeekView>;
+  let el: HTMLElement;
+
+  const futureStart = new Date();
+  futureStart.setDate(futureStart.getDate() + 14);
+  const weekStart = getWeekStart(
+    new Date(Date.UTC(futureStart.getFullYear(), futureStart.getMonth(), futureStart.getDate())),
+  );
+  const dayKey = (i: number): string => {
+    const d = new Date(
+      weekStart.getUTCFullYear(),
+      weekStart.getUTCMonth(),
+      weekStart.getUTCDate() + i,
+    );
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const cellAt = (slot: string, dayIndex: number): HTMLElement =>
+    Array.from(el.querySelectorAll<HTMLElement>(`.slot-cell[data-cell-slot="${slot}"]`))[dayIndex];
+
+  /** Vendredi soir → dimanche après-midi (jours 4 à 6 de la semaine). */
+  const weekend = (over: Partial<AgendaEntry> = {}): AgendaEntry => ({
+    key: 'seance-w',
+    type: 'mes-seances',
+    date: dayKey(4),
+    slot: 'EVENING',
+    endDate: dayKey(6),
+    endSlot: 'AFTERNOON',
+    label: 'Week-end jeux',
+    partieId: 'p1',
+    scenarioId: 's1',
+    ...over,
+  });
+
+  function create(entries: AgendaEntry[], layers: CalendarLayerKey[] = ['mes-seances']): void {
+    TestBed.configureTestingModule({ imports: [CalendarWeekView] });
+    fixture = TestBed.createComponent(CalendarWeekView);
+    fixture.componentRef.setInput('startDate', futureStart);
+    fixture.componentRef.setInput('entries', entries);
+    fixture.componentRef.setInput('activeLayers', layers);
+    fixture.detectChanges();
+    el = fixture.nativeElement;
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('les 6 cellules couvertes sont marquées comme une séance, le soir du dimanche reste libre', () => {
+    create([weekend()]);
+    const winners = [
+      cellAt('EVENING', 4),
+      cellAt('MORNING', 5),
+      cellAt('AFTERNOON', 5),
+      cellAt('EVENING', 5),
+      cellAt('MORNING', 6),
+      cellAt('AFTERNOON', 6),
+    ].map((c) => c.getAttribute('data-winner'));
+    expect(winners).toEqual(Array(6).fill('seance'));
+    expect(cellAt('EVENING', 6).getAttribute('data-winner')).not.toBe('seance');
+    expect(cellAt('MORNING', 4).getAttribute('data-winner')).not.toBe('seance');
+  });
+
+  it('le nom n’est écrit qu’une fois dans la semaine ; chaque cellule couverte dit la plage entière', () => {
+    create([weekend()]);
+    const titles = Array.from(el.querySelectorAll('.ev-title')).map((n) => n.textContent?.trim());
+    expect(titles).toEqual(['Week-end jeux']);
+    const label = cellAt('AFTERNOON', 5).getAttribute('aria-label') ?? '';
+    expect(label).toContain('Week-end jeux, du vendredi');
+    expect(label).toContain('au dimanche');
+  });
+
+  it('chaque cellule couverte garde le style d\'une cellule d\'événement, même sans texte', () => {
+    create([weekend()]);
+    expect(cellAt('AFTERNOON', 5).classList.contains('has-event')).toBe(true);
+    expect(cellAt('EVENING', 5).classList.contains('has-event')).toBe(true);
+    expect(cellAt('EVENING', 6).classList.contains('has-event')).toBe(false);
+  });
+
+  it('connecteurs : le soir continue, le matin suivant vient de la veille', () => {
+    create([weekend()]);
+    expect(cellAt('EVENING', 4).classList.contains('slot-cell--span-next')).toBe(true);
+    expect(cellAt('MORNING', 5).classList.contains('slot-cell--span-prev')).toBe(true);
+    expect(cellAt('EVENING', 5).classList.contains('slot-cell--span-next')).toBe(true);
+    expect(cellAt('MORNING', 6).classList.contains('slot-cell--span-prev')).toBe(true);
+    expect(cellAt('AFTERNOON', 5).classList.contains('slot-cell--span-next')).toBe(false);
+    expect(cellAt('AFTERNOON', 6).classList.contains('slot-cell--span-next')).toBe(false);
+  });
+
+  it('une plage commencée la semaine d’avant : la première cellule visible reprend « ← »', () => {
+    create([weekend({ date: dayKey(-2), slot: 'EVENING', endDate: dayKey(1), endSlot: 'AFTERNOON' })]);
+    const titles = Array.from(el.querySelectorAll('.ev-title')).map((n) => n.textContent?.trim());
+    expect(titles).toEqual(['← Week-end jeux']);
+  });
+
+  it('un créneau seul : ni connecteur ni plage', () => {
+    create([weekend({ endDate: undefined, endSlot: undefined })]);
+    expect(el.querySelector('.slot-cell--span-next, .slot-cell--span-prev')).toBeNull();
+    expect(cellAt('MORNING', 5).getAttribute('data-winner')).not.toBe('seance');
+  });
+});
+
+describe('CalendarWeekView — plusieurs plages d’un même vote (Story 47.5)', () => {
+  let fixture: ComponentFixture<CalendarWeekView>;
+  let el: HTMLElement;
+
+  const futureStart = new Date();
+  futureStart.setDate(futureStart.getDate() + 14);
+  const weekStart = getWeekStart(
+    new Date(Date.UTC(futureStart.getFullYear(), futureStart.getMonth(), futureStart.getDate())),
+  );
+  const dayKey = (i: number): string => {
+    const d = new Date(
+      weekStart.getUTCFullYear(),
+      weekStart.getUTCMonth(),
+      weekStart.getUTCDate() + i,
+    );
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const cellAt = (slot: string, dayIndex: number): HTMLElement =>
+    Array.from(el.querySelectorAll<HTMLElement>(`.slot-cell[data-cell-slot="${slot}"]`))[dayIndex];
+
+  const participation = (optionId: string) => ({
+    partieId: 'p1',
+    pollId: 'poll-1',
+    optionId,
+    yes: 1,
+    maybe: 0,
+    no: 0,
+    total: 4,
+    myAnswer: null,
+  });
+  // Durée 3 : (a) jour 5 matin → soir ; (b) jour 5 après-midi → jour 6 matin. Recouvrement : après-midi et soir du jour 5.
+  const optionA: AgendaEntry = {
+    key: 'poll-1-a',
+    type: 'votes-en-cours',
+    date: dayKey(5),
+    slot: 'MORNING',
+    endDate: dayKey(5),
+    endSlot: 'EVENING',
+    label: 'Week-end jeux',
+    vote: participation('a'),
+  };
+  const optionB: AgendaEntry = {
+    key: 'poll-1-b',
+    type: 'votes-en-cours',
+    date: dayKey(5),
+    slot: 'AFTERNOON',
+    endDate: dayKey(6),
+    endSlot: 'MORNING',
+    label: 'Week-end jeux',
+    vote: participation('b'),
+  };
+
+  function create(entries: AgendaEntry[], layers: CalendarLayerKey[] = ['votes-en-cours']): void {
+    TestBed.configureTestingModule({ imports: [CalendarWeekView] });
+    fixture = TestBed.createComponent(CalendarWeekView);
+    fixture.componentRef.setInput('startDate', futureStart);
+    fixture.componentRef.setInput('entries', entries);
+    fixture.componentRef.setInput('activeLayers', layers);
+    fixture.detectChanges();
+    el = fixture.nativeElement;
+  }
+
+  /** Le tap de la vue Semaine est synthétisé par `onGridPointerUp()` (cf. Story 36.7). */
+  function tap(cell: HTMLElement): void {
+    const grid = el.querySelector('.week-grid') as HTMLElement;
+    const ev = (type: string) =>
+      new PointerEvent(type, { clientX: 10, clientY: 10, pointerType: 'mouse', bubbles: true });
+    cell.dispatchEvent(ev('pointerdown'));
+    grid.dispatchEvent(ev('pointerup'));
+    fixture.detectChanges();
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('« ×2 » sur chaque cellule recouverte deux fois, rien ailleurs ; il entre dans le nom accessible', () => {
+    create([optionA, optionB]);
+
+    expect(cellAt('AFTERNOON', 5).querySelector('.ev-overlap')?.textContent?.trim()).toBe('×2');
+    expect(cellAt('EVENING', 5).querySelector('.ev-overlap')?.textContent?.trim()).toBe('×2');
+    expect(cellAt('MORNING', 5).querySelector('.ev-overlap')).toBeNull();
+    expect(cellAt('MORNING', 6).querySelector('.ev-overlap')).toBeNull();
+    expect(cellAt('AFTERNOON', 5).getAttribute('aria-label')).toContain(
+      '2 plages se superposent (×2)',
+    );
+    expect(cellAt('MORNING', 5).getAttribute('aria-label')).not.toContain('×');
+  });
+
+  it('une seule plage sur le créneau, ou un créneau seul : pas de « ×n »', () => {
+    create([optionA]);
+    expect(el.querySelector('.ev-overlap')).toBeNull();
+    TestBed.resetTestingModule();
+    create([{ ...optionA, endDate: undefined, endSlot: undefined }]);
+    expect(el.querySelector('.ev-overlap')).toBeNull();
+  });
+
+  it('toucher la cellule recouverte signale TOUTES les plages qui la couvrent, dans l’ordre de leur début', () => {
+    create([optionB, optionA]);
+    const emitted: any[] = [];
+    fixture.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    tap(cellAt('AFTERNOON', 5));
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].lines.map((l: any) => l.vote.optionId)).toEqual(['a', 'b']);
+  });
+
+  it('toucher une cellule couverte une seule fois : une seule ligne', () => {
+    create([optionA, optionB]);
+    const emitted: any[] = [];
+    fixture.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    tap(cellAt('MORNING', 5));
+
+    expect(emitted[0].lines.map((l: any) => l.vote.optionId)).toEqual(['a']);
+  });
+
+  it('couche « votes en cours » éteinte : ni marque ni signal', () => {
+    create([optionA, optionB], ['mes-seances']);
+    expect(el.querySelector('.ev-overlap')).toBeNull();
   });
 });

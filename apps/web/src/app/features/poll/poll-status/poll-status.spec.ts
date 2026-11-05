@@ -1,13 +1,16 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { MatDialog } from '@angular/material/dialog';
 import { of } from 'rxjs';
-import { vi } from 'vitest';
+import { it, vi } from 'vitest';
 import type { PartieMemberDto, SessionPollDto } from '@master-jdr/shared';
 import { PollStatusPanel } from './poll-status';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { TONE_MAP } from '../../../core/theme/tones';
 
 const alice: PartieMemberDto = {
+  role: 'MEMBER',
   userId: 'u1',
   pseudo: 'Alice',
   displayName: 'Alice au pays',
@@ -15,6 +18,7 @@ const alice: PartieMemberDto = {
   joinedAt: '',
 };
 const bob: PartieMemberDto = {
+  role: 'MEMBER',
   userId: 'u2',
   pseudo: 'Bob',
   displayName: 'Bobby',
@@ -22,6 +26,7 @@ const bob: PartieMemberDto = {
   joinedAt: '',
 };
 const carol: PartieMemberDto = {
+  role: 'MEMBER',
   userId: 'u3',
   pseudo: 'Carol',
   displayName: 'Carol',
@@ -39,6 +44,7 @@ const fakePoll: SessionPollDto = {
   chosenSlot: null,
   // Story 36.6 — effectif de la troupe (MJ + membres).
   membersCount: 4,
+  durationSlots: 1,
   options: [
     {
       id: 'opt1',
@@ -63,11 +69,24 @@ const fakePoll: SessionPollDto = {
 
 function makeThemeService() {
   return {
+    // `activeTheme` : `<app-icon>` (icônes « de sens », story 51.7) lit le thème actif.
+    activeTheme: signal('grimoire-emeraude'),
     tone: () => ({
       'poll.status_title': 'Vote en cours',
       'cta.choose_date': 'Sceller ce créneau',
       'alert.all_responded': 'Tous ont répondu.',
       'alert.missing_player': "{name} n'a pas encore répondu.",
+      'common.oui': 'Oui',
+      'common.non': 'Non',
+      'common.peut_etre': 'Peut-être',
+      'calendar.util_answer_yes': 'oui',
+      'calendar.util_answer_no': 'non',
+      'calendar.util_answer_maybe': 'peut-être',
+      'pollui.status_voters_aria': 'Votants',
+      'pollui.status_missing_aria': "N'ont pas encore répondu pour cette date",
+      'pollui.status_choose_confirm':
+        'Confirmer {date} — {slot} comme date de la prochaine séance ?',
+      'pollui.status_choose_no_vote_warning': "Aucun membre n'a voté pour cette date.",
     }),
   };
 }
@@ -147,7 +166,7 @@ describe('PollStatusPanel', () => {
     expect(emitted).toEqual([]);
   });
 
-  it('onChooseClick sur une option à 0 vote inclut un avertissement dans le message du dialogue', async () => {
+  it('onChooseClick sur une option à 0 vote passe l’avertissement dans le champ warning, pas dans le message', async () => {
     const zeroVotePoll: SessionPollDto = {
       ...fakePoll,
       options: [{ ...fakePoll.options[0], votes: [] }, fakePoll.options[1]],
@@ -156,8 +175,12 @@ describe('PollStatusPanel', () => {
 
     const comp = fixture.componentInstance as any;
     await comp.onChooseClick(zeroVotePoll.options[0]);
-    const message = dialog.open.mock.calls[0][1].data.message;
-    expect(message).toContain("Aucun membre n'a voté");
+    const data = dialog.open.mock.calls[0][1].data;
+    expect(data.warning).toBe("Aucun membre n'a voté pour cette date.");
+    expect(data.warning).not.toContain('⚠');
+    // Le message reste la question simple, sans avertissement concaténé.
+    expect(data.message).not.toContain("Aucun membre n'a voté");
+    expect(data.message).toContain('Confirmer');
   });
 
   it("onChooseClick sur une option avec des votes n'inclut pas l'avertissement 0-vote", async () => {
@@ -165,8 +188,9 @@ describe('PollStatusPanel', () => {
 
     const comp = fixture.componentInstance as any;
     await comp.onChooseClick(fakePoll.options[0]);
-    const message = dialog.open.mock.calls[0][1].data.message;
-    expect(message).not.toContain("Aucun membre n'a voté");
+    const data = dialog.open.mock.calls[0][1].data;
+    expect(data.message).not.toContain("Aucun membre n'a voté");
+    expect(data.warning).toBeUndefined();
   });
 
   it("double-clic rapide → le dialogue ne s'ouvre qu'une seule fois (garde dialogPending)", async () => {
@@ -227,6 +251,7 @@ describe('PollStatusPanel', () => {
   it("vote partiel : un membre ayant voté sur une option mais pas l'autre n'apparaît manquant QUE sur celle où il n'a pas voté", async () => {
     // Dans fakePoll, Bob a voté sur opt1 et opt2 — on ajoute Dana qui ne vote QUE sur opt1.
     const dana: PartieMemberDto = {
+      role: 'MEMBER',
       userId: 'u4',
       pseudo: 'Dana',
       displayName: 'Dana',
@@ -264,4 +289,95 @@ describe('PollStatusPanel', () => {
         .map((m: PartieMemberDto) => m.pseudo),
     ).toEqual(['Dana']);
   });
+});
+
+describe('PollStatusPanel — vote de plusieurs créneaux (Story 47.5)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const longPoll: SessionPollDto = { ...fakePoll, durationSlots: 6 };
+
+  it('chaque option s’écrit de son début à sa fin ; un vote d’un créneau garde « date — créneau »', async () => {
+    const { fixture } = await createComponent(longPoll);
+    const dates = [...fixture.nativeElement.querySelectorAll('.poll-status__date')].map((n) =>
+      (n as HTMLElement).textContent?.trim(),
+    );
+    expect(dates).toEqual([
+      'sam. 1 août matin → dim. 2 août soir',
+      'sam. 8 août après-midi → lun. 10 août matin',
+    ]);
+    TestBed.resetTestingModule();
+
+    const single = await createComponent(fakePoll);
+    const first = single.fixture.nativeElement.querySelector('.poll-status__date') as HTMLElement;
+    expect(first.textContent?.trim()).toBe('sam. 1 août — Matin');
+  });
+
+  it('la confirmation de scellement nomme la plage, sans « — créneau » en plus', async () => {
+    const { fixture, dialog } = await createComponent(longPoll, true);
+
+    await (fixture.componentInstance as any).onChooseClick(longPoll.options[0]);
+
+    expect(dialog.open.mock.calls[0][1].data.message).toBe(
+      'Confirmer sam. 1 août matin → dim. 2 août soir comme date de la prochaine séance ?',
+    );
+  });
+});
+
+describe('PollStatusPanel — gabarit réel de la confirmation de scellement (Story 47.5)', () => {
+  // Pour une plage, `onChooseClick` remplit {date} par la plage « début → fin » et {slot} par du vide, puis retire le
+  // séparateur « {date} — » pour ne pas écrire un « — » orphelin. Cette retouche repose sur le motif exact
+  // « {date} — {slot} » : si un thème change son gabarit, ce test casse AVANT que la phrase ne soit fausse à l'écran.
+  it.each([
+    ['atelier-cuivre', TONE_MAP['atelier-cuivre']],
+    ['foret-ancienne', TONE_MAP['foret-ancienne']],
+    ['grimoire-emeraude', TONE_MAP['grimoire-emeraude']],
+  ])('%s : « pollui.status_choose_confirm » contient « {date} — {slot} »', (_name, tone) => {
+    expect(tone['pollui.status_choose_confirm']).toContain('{date} — {slot}');
+  });
+});
+
+describe('PollStatusPanel — pictogrammes de disponibilité (story 51.5)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const iconNames = (root: Element) =>
+    Array.from(root.querySelectorAll('app-icon')).map((i) => i.getAttribute('data-icon'));
+
+  it('les compteurs oui / non / peut-être sont trois dessins distincts, chiffres conservés', async () => {
+    const { fixture } = await createComponent();
+    const breakdown = fixture.nativeElement.querySelector('.poll-status__breakdown') as HTMLElement;
+    expect(iconNames(breakdown)).toEqual(['dispo-oui', 'dispo-non', 'dispo-partiel']);
+    expect(new Set(iconNames(breakdown)).size).toBe(3);
+    // opt1 : 2 oui, 0 non, 0 peut-être.
+    expect(breakdown.textContent!.replace(/\s+/g, ' ').trim()).toBe('2 · 0 · 0');
+    expect(breakdown.textContent).not.toMatch(/[✅❌❔]/u);
+    // Chaque compteur est nommé par son icône (clés de ton existantes), sans texte visible en plus.
+    const svgs = Array.from(breakdown.querySelectorAll('app-icon svg'));
+    expect(svgs.map((s) => s.getAttribute('aria-label'))).toEqual(['oui', 'non', 'peut-être']);
+  });
+
+  it('la réponse de chaque votant porte le pictogramme de sa réponse, en plus du libellé', async () => {
+    const { fixture } = await createComponent();
+    const answers = Array.from(
+      fixture.nativeElement
+        .querySelectorAll('.poll-status__option')[1]
+        .querySelectorAll('.poll-status__answer'),
+    ) as HTMLElement[];
+    expect(answers.map((a) => a.querySelector('app-icon')!.getAttribute('data-icon'))).toEqual([
+      'dispo-oui',
+      'dispo-non',
+    ]);
+    expect(answers.map((a) => a.textContent!.trim())).toEqual(['Oui', 'Non']);
+  });
+});
+
+describe('Avertissement « aucun vote » — fichiers de ton (story 51.5)', () => {
+  it.each(['grimoire-emeraude', 'foret-ancienne', 'atelier-cuivre'] as const)(
+    '%s : la phrase n’a plus de ⚠, le pictogramme vient du dialogue',
+    (theme) => {
+      const text = TONE_MAP[theme]['pollui.status_choose_no_vote_warning'];
+      expect(text).toBeTruthy();
+      expect(text).not.toMatch(/⚠|️/u);
+      expect(text).toMatch(/^Aucun /u);
+    },
+  );
 });

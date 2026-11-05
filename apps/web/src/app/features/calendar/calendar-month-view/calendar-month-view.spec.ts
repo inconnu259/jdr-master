@@ -4,6 +4,10 @@ import { provideAnimationsAsync } from '@angular/platform-browser/animations/asy
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CalendarMonthView, buildMonth } from './calendar-month-view';
 import { LONG_PRESS_MS } from '../selection.utils';
+import { TONE_MAP } from '../../../core/theme/tones';
+import { fillTone } from '../../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 describe('buildMonth', () => {
   it('returns 6 weeks of 7 days', () => {
@@ -80,6 +84,14 @@ describe('CalendarMonthView — navigation UTC-midnight (Q8)', () => {
   }
 
   afterEach(() => TestBed.resetTestingModule());
+
+  it('la navigation porte les pictogrammes precedent, suivant puis aujourdhui, dans cet ordre', async () => {
+    const fixture = await createMonthView();
+    const names = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.month-nav button app-icon'),
+    ).map((i) => i.getAttribute('data-icon'));
+    expect(names).toEqual(['precedent', 'suivant', 'aujourdhui']);
+  });
 
   it('goToToday() émet un Date UTC-midnight', async () => {
     const fixture = await createMonthView();
@@ -165,6 +177,25 @@ describe('CalendarMonthView — accessibilité clavier des bandes (touches 1/2/3
 
     expect(emitted).toHaveLength(1);
     expect(emitted[0].slot).toBe('EVENING');
+  });
+
+  it("Story 35.2 : nom accessible d'une case — « {jour} (aujourd'hui) » pour aujourd'hui, le numéro seul pour un autre jour, aucun hors du mois", async () => {
+    const fixture = await createMonthView();
+    const root = fixture.nativeElement as HTMLElement;
+
+    const today = root.querySelector('.day-cell.today') as HTMLElement;
+    expect(today.getAttribute('aria-label')).toBe(`${new Date().getDate()} (aujourd'hui)`);
+
+    const others = [
+      ...root.querySelectorAll<HTMLElement>('.day-cell:not(.today):not(.other-month)'),
+    ];
+    expect(others.length).toBeGreaterThan(0);
+    for (const cell of others) {
+      expect(cell.getAttribute('aria-label')).toMatch(/^\d{1,2}$/);
+    }
+
+    const outside = root.querySelector('.day-cell.other-month') as HTMLElement | null;
+    if (outside) expect(outside.getAttribute('aria-label')).toBeNull();
   });
 
   it('la cellule interactive référence les instructions clavier via aria-describedby', async () => {
@@ -485,7 +516,7 @@ describe('CalendarMonthView — sélection par glissement', () => {
     fixture.detectChanges();
 
     const otherBtn = Array.from(el.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Autre…',
+      (b) => b.textContent?.trim() === GRIMOIRE_TONE['calendar.selbar_other'],
     )!;
     otherBtn.click();
     fixture.detectChanges();
@@ -900,8 +931,14 @@ describe('CalendarMonthView — les trois bandes', () => {
     });
 
     const label = cellOf(20).querySelectorAll('.band')[0].getAttribute('aria-label') ?? '';
-    expect(label).toContain('3 réponses sur 4');
-    expect(label).toContain('tu as dit oui');
+    expect(label).toContain(
+      fillTone(GRIMOIRE_TONE['calendar.util_participation_many'], { n: 3, total: 4 }),
+    );
+    expect(label).toContain(
+      fillTone(GRIMOIRE_TONE['calendar.util_answer_mine'], {
+        answer: GRIMOIRE_TONE['calendar.util_answer_yes'],
+      }),
+    );
   });
 
   it('rend trois bandes pour un jour dont les créneaux diffèrent (AC1)', async () => {
@@ -1211,6 +1248,209 @@ describe('CalendarMonthView — les trois bandes', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Story 36.8 — la disponibilité du groupe sur un canal séparé
 // ─────────────────────────────────────────────────────────────────────────────
+
+describe('CalendarMonthView — une plage de plusieurs créneaux (Story 47.3)', () => {
+  let fixture: any;
+  let el: HTMLElement;
+
+  // Août 2026 : le vendredi 21 au soir → le dimanche 23 après-midi (une seule ligne de semaine).
+  const WEEKEND = {
+    key: 'seance-w',
+    type: 'mes-seances',
+    date: '2026-08-21',
+    slot: 'EVENING',
+    endDate: '2026-08-23',
+    endSlot: 'AFTERNOON',
+    label: 'Week-end jeux',
+    partieId: 'p1',
+    scenarioId: 'sc1',
+    seanceId: 'w',
+  } as any;
+
+  async function createWith(entries: any[]) {
+    await TestBed.configureTestingModule({
+      imports: [CalendarMonthView],
+      providers: [provideAnimationsAsync()],
+    }).compileComponents();
+    fixture = TestBed.createComponent(CalendarMonthView);
+    fixture.componentRef.setInput('activeLayers', ['mes-seances']);
+    fixture.componentRef.setInput('initialDate', new Date(2026, 7, 15));
+    fixture.componentRef.setInput('entries', entries);
+    fixture.detectChanges();
+    el = fixture.nativeElement;
+  }
+
+  const bandsOf = (day: number): HTMLElement[] => {
+    const cell = el.querySelector(`.day-cell[data-cell-date="${new Date(2026, 7, day).getTime()}"]`);
+    return Array.from(cell!.querySelectorAll<HTMLElement>('.band'));
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 10));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('les bandes couvertes portent le rang séance, les connecteurs sont aux changements de jour', async () => {
+    await createWith([WEEKEND]);
+    const [friM, friA, friE] = bandsOf(21);
+    const [satM, satA, satE] = bandsOf(22);
+    const [sunM, sunA, sunE] = bandsOf(23);
+
+    expect([friM, friA].map((b) => b.dataset['winner'])).not.toContain('seance');
+    for (const band of [friE, satM, satA, satE, sunM, sunA]) {
+      expect(band.dataset['winner']).toBe('seance');
+    }
+    expect(sunE.dataset['winner']).not.toBe('seance');
+
+    expect(friE.classList.contains('band--span-next')).toBe(true);
+    expect(satM.classList.contains('band--span-prev')).toBe(true);
+    expect(satE.classList.contains('band--span-next')).toBe(true);
+    expect(sunM.classList.contains('band--span-prev')).toBe(true);
+    expect(satA.classList.contains('band--span-next')).toBe(false);
+    expect(sunA.classList.contains('band--span-next')).toBe(false);
+  });
+
+  it('le nom visible n’est écrit qu’une fois ; chaque bande couverte dit la plage entière', async () => {
+    await createWith([WEEKEND]);
+    const labels = Array.from(el.querySelectorAll('.band__label')).map((n) => n.textContent?.trim());
+    expect(labels).toEqual(['Week-end jeux']);
+
+    const aria = bandsOf(22)[1].getAttribute('aria-label') ?? '';
+    expect(aria).toContain('Week-end jeux, du vendredi 21 soir au dimanche 23 après-midi');
+  });
+
+  it('un créneau seul : la bande est celle d’avant, sans connecteur', async () => {
+    await createWith([{ ...WEEKEND, endDate: undefined, endSlot: undefined }]);
+    expect(el.querySelector('.band--span-next, .band--span-prev')).toBeNull();
+    expect(bandsOf(21)[2].getAttribute('aria-label')).not.toContain('du vendredi');
+  });
+});
+
+describe('CalendarMonthView — plusieurs plages d’un même vote (Story 47.5)', () => {
+  let fixture: any;
+  let el: HTMLElement;
+
+  const participation = (optionId: string) => ({
+    partieId: 'p1',
+    pollId: 'poll-1',
+    optionId,
+    yes: 1,
+    maybe: 0,
+    no: 0,
+    total: 4,
+    myAnswer: null,
+  });
+  // Août 2026, durée 3 : (a) samedi 22 matin → soir ; (b) samedi 22 après-midi → dimanche 23 matin.
+  // Elles se recouvrent le samedi après-midi et le samedi soir.
+  const optionA = {
+    key: 'poll-1-a',
+    type: 'votes-en-cours',
+    date: '2026-08-22',
+    slot: 'MORNING',
+    endDate: '2026-08-22',
+    endSlot: 'EVENING',
+    label: 'Week-end jeux',
+    vote: participation('a'),
+  } as any;
+  const optionB = {
+    key: 'poll-1-b',
+    type: 'votes-en-cours',
+    date: '2026-08-22',
+    slot: 'AFTERNOON',
+    endDate: '2026-08-23',
+    endSlot: 'MORNING',
+    label: 'Week-end jeux',
+    vote: participation('b'),
+  } as any;
+
+  async function createWith(entries: any[], layers = ['votes-en-cours']) {
+    await TestBed.configureTestingModule({
+      imports: [CalendarMonthView],
+      providers: [provideAnimationsAsync()],
+    }).compileComponents();
+    fixture = TestBed.createComponent(CalendarMonthView);
+    fixture.componentRef.setInput('activeLayers', layers);
+    fixture.componentRef.setInput('initialDate', new Date(2026, 7, 15));
+    fixture.componentRef.setInput('entries', entries);
+    fixture.detectChanges();
+    el = fixture.nativeElement;
+  }
+
+  const bandsOf = (day: number): HTMLElement[] => {
+    const cell = el.querySelector(`.day-cell[data-cell-date="${new Date(2026, 7, day).getTime()}"]`);
+    return Array.from(cell!.querySelectorAll<HTMLElement>('.band'));
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 10));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('« ×2 » sur chaque bande recouverte deux fois, rien ailleurs ; il entre dans le nom accessible', async () => {
+    await createWith([optionA, optionB]);
+    const [satM, satA, satE] = bandsOf(22);
+    const [sunM] = bandsOf(23);
+
+    expect(satA.querySelector('.band__overlap')?.textContent?.trim()).toBe('×2');
+    expect(satE.querySelector('.band__overlap')?.textContent?.trim()).toBe('×2');
+    expect(satM.querySelector('.band__overlap')).toBeNull();
+    expect(sunM.querySelector('.band__overlap')).toBeNull();
+    expect(satA.getAttribute('aria-label')).toContain('2 plages se superposent (×2)');
+    expect(satM.getAttribute('aria-label')).not.toContain('×');
+  });
+
+  it('une seule plage sur le créneau : pas de « ×n »', async () => {
+    await createWith([optionA]);
+    expect(el.querySelector('.band__overlap')).toBeNull();
+  });
+
+  it('un créneau seul : la sortie d’avant (pas de marque)', async () => {
+    await createWith([{ ...optionA, endDate: undefined, endSlot: undefined }]);
+    expect(el.querySelector('.band__overlap')).toBeNull();
+  });
+
+  it('toucher la bande recouverte signale TOUTES les plages qui la couvrent, dans l’ordre de leur début', async () => {
+    await createWith([optionB, optionA]);
+    const emitted: any[] = [];
+    fixture.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    bandsOf(22)[1].click();
+    fixture.detectChanges();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].lines.map((l: any) => l.vote.optionId)).toEqual(['a', 'b']);
+    expect(emitted[0].lines.map((l: any) => l.range)).toEqual([
+      'sam. 22 matin → sam. 22 soir',
+      'sam. 22 après-midi → dim. 23 matin',
+    ]);
+  });
+
+  it('toucher une bande couverte une seule fois : une seule ligne', async () => {
+    await createWith([optionA, optionB]);
+    const emitted: any[] = [];
+    fixture.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    bandsOf(22)[0].click();
+    fixture.detectChanges();
+
+    expect(emitted[0].lines.map((l: any) => l.vote.optionId)).toEqual(['a']);
+  });
+
+  it('couche « votes en cours » éteinte : ni marque ni signal', async () => {
+    await createWith([optionA, optionB], ['mes-seances']);
+    expect(el.querySelector('.band__overlap')).toBeNull();
+  });
+});
 
 describe('CalendarMonthView — le canal de groupe (Story 36.8)', () => {
   let el: HTMLElement;
@@ -1655,25 +1895,152 @@ describe('CalendarMonthView — mode de composition (Story 36.10)', () => {
     expect(voteActivated).toHaveBeenCalledTimes(1);
   });
 
-  it('AC12 — en composition, l’appui maintenu n’arme plus la sélection', async () => {
-    const f = await createWith({
-      entries: [VOTE_ENTRY],
-      composing: true,
-      composedKeys: new Set<string>(),
-    });
+  // ── Story 45.3 — le geste des dispos en composition (bloc JUMEAU de la vue Semaine) ──
 
-    bandOf(20, 2).dispatchEvent(
-      new PointerEvent('pointerdown', {
-        clientX: 5,
-        clientY: 5,
-        pointerType: 'mouse',
-        bubbles: true,
-      }),
-    );
+  const pointerAt = (type: string, x = 5, y = 5) =>
+    new PointerEvent(type, { clientX: x, clientY: y, pointerType: 'mouse', bubbles: true });
+  const gridEl = () => el.querySelector('.calendar-grid') as HTMLElement;
+  const barEl = () => el.querySelector('app-selection-bar');
+  const barButton = (text: string) =>
+    Array.from(el.querySelectorAll('app-selection-bar button')).find(
+      (b) => b.textContent?.trim() === text,
+    ) as HTMLButtonElement;
+
+  /** Un glissement de la case `from` à la case `to`, relâché. */
+  function dragDays(from: number, to: number): void {
+    cellOf(from).dispatchEvent(pointerAt('pointerdown', 0, 0));
+    document.elementFromPoint = vi.fn().mockReturnValue(cellOf(to));
+    gridEl().dispatchEvent(pointerAt('pointermove', 60, 0));
+    gridEl().dispatchEvent(pointerAt('pointerup', 60, 0));
+  }
+
+  it('Story 45.3 — en composition, l’appui maintenu arme une sélection de jours ET ouvre la barre en version composition', async () => {
+    const f = await createWith({ composing: true, composedKeys: new Set<string>() });
+    const toggled = vi.fn();
+    f.componentInstance.composeToggled.subscribe(toggled);
+
+    uniformBandOf(20).dispatchEvent(pointerAt('pointerdown'));
     vi.advanceTimersByTime(LONG_PRESS_MS);
+    gridEl().dispatchEvent(pointerAt('pointerup'));
+    f.detectChanges();
+    // Le `click` que le navigateur émet derrière le geste est AVALÉ : il ne compose pas la case sélectionnée.
+    uniformBandOf(20).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     f.detectChanges();
 
-    expect(el.querySelector('app-selection-bar')).toBeNull();
+    expect(f.componentInstance['selectedDays']()).toHaveLength(1);
+    expect(barEl()).not.toBeNull();
+    expect(barButton(GRIMOIRE_TONE['calendar.selbar_compose_add'])).toBeTruthy();
+    expect(barButton(GRIMOIRE_TONE['common.disponible'])).toBeUndefined();
+    expect(toggled).not.toHaveBeenCalled();
+  });
+
+  it('Story 45.3 — un glissement sélectionne plusieurs jours ; choisir « Soir » puis « Ajouter au vote » émet CES créneaux, sans rien composer par la vue', async () => {
+    const f = await createWith({ composing: true, composedKeys: new Set<string>() });
+    const added = vi.fn();
+    const toggled = vi.fn();
+    f.componentInstance.composeAdded.subscribe(added);
+    f.componentInstance.composeToggled.subscribe(toggled);
+
+    dragDays(20, 22);
+    f.detectChanges();
+    expect(f.componentInstance['selectedDays']()).toHaveLength(3);
+
+    (el.querySelector('app-selection-bar .scope-seg[aria-label="Soir"]') as HTMLButtonElement).click();
+    f.detectChanges();
+    barButton(GRIMOIRE_TONE['calendar.selbar_compose_add']).click();
+    f.detectChanges();
+
+    expect(added).toHaveBeenCalledTimes(1);
+    const cells = added.mock.calls[0][0] as { date: Date; slot: string }[];
+    expect(cells.map((c) => [c.date.getDate(), c.slot])).toEqual([
+      [20, 'EVENING'],
+      [21, 'EVENING'],
+      [22, 'EVENING'],
+    ]);
+    expect(barEl()).toBeNull();
+    expect(toggled).not.toHaveBeenCalled();
+  });
+
+  it('Story 45.3 — « Retirer » émet composeRemoved avec la sélection', async () => {
+    const f = await createWith({ composing: true, composedKeys: new Set<string>() });
+    const removed = vi.fn();
+    f.componentInstance.composeRemoved.subscribe(removed);
+
+    dragDays(20, 21);
+    f.detectChanges();
+    barButton(GRIMOIRE_TONE['calendar.selbar_compose_remove']).click();
+    f.detectChanges();
+
+    expect(removed).toHaveBeenCalledTimes(1);
+    expect(removed.mock.calls[0][0]).toHaveLength(2);
+    expect(barEl()).toBeNull();
+  });
+
+  it('Story 45.3 — barre ouverte, un tap bascule la case dans la SÉLECTION (jamais dans la composition)', async () => {
+    const f = await createWith({ composing: true, composedKeys: new Set<string>() });
+    const toggled = vi.fn();
+    f.componentInstance.composeToggled.subscribe(toggled);
+
+    dragDays(20, 21);
+    f.detectChanges();
+    expect(f.componentInstance['selectedDays']()).toHaveLength(2);
+
+    // Un vrai tap : le `pointerdown` remet à zéro l'avalement du clic du geste précédent.
+    uniformBandOf(25).dispatchEvent(pointerAt('pointerdown'));
+    gridEl().dispatchEvent(pointerAt('pointerup'));
+    uniformBandOf(25).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    f.detectChanges();
+
+    expect(f.componentInstance['selectedDays']()).toHaveLength(3);
+    expect(toggled).not.toHaveBeenCalled();
+  });
+
+  it('Story 45.3 — `Échap` ferme d’abord la barre de sélection, puis (sans barre) quitte le composer', async () => {
+    const f = await createWith({ composing: true, composedKeys: new Set<string>() });
+    const cancelled = vi.fn();
+    f.componentInstance.composeCancelled.subscribe(cancelled);
+    const escape = () =>
+      gridEl().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    dragDays(20, 21);
+    f.detectChanges();
+    escape();
+    f.detectChanges();
+    expect(barEl()).toBeNull();
+    expect(cancelled).not.toHaveBeenCalled();
+
+    escape();
+    expect(cancelled).toHaveBeenCalledTimes(1);
+  });
+
+  it('Story 45.3 — quitter le composer efface la sélection : une barre de composition ne devient pas une barre de déclaration', async () => {
+    const f = await createWith({ composing: true, composedKeys: new Set<string>() });
+    dragDays(20, 21);
+    f.detectChanges();
+    expect(barEl()).not.toBeNull();
+
+    f.componentRef.setInput('composing', false);
+    f.detectChanges();
+
+    expect(f.componentInstance['selectedDays']()).toHaveLength(0);
+    expect(barEl()).toBeNull();
+  });
+
+  it('Story 45.3 — sans journée entière (groupe), la barre ne propose pas « Journée »', async () => {
+    const f = await createWith({
+      composing: true,
+      composedKeys: new Set<string>(),
+      composeFullDay: false,
+    });
+    dragDays(20, 21);
+    f.detectChanges();
+
+    const labels = Array.from(el.querySelectorAll('app-selection-bar .scope-seg')).map((b) =>
+      b.textContent!.trim(),
+    );
+    expect(labels).not.toContain('Journée');
+    // La sélection part d'une journée entière : « Ajouter » attend qu'on choisisse un moment.
+    expect(barButton(GRIMOIRE_TONE['calendar.selbar_compose_add']).disabled).toBe(true);
   });
 
   it('AC12/AC16 — au clavier aussi : `1` compose au lieu d’armer une sélection', async () => {
@@ -1727,7 +2094,7 @@ describe('CalendarMonthView — mode de composition (Story 36.10)', () => {
 
     const band = bandOf(20, 2);
     expect(band.classList.contains('band--composed')).toBe(true);
-    expect(band.getAttribute('aria-label')).toContain('désigné pour le vote');
+    expect(band.getAttribute('aria-label')).toContain(GRIMOIRE_TONE['common.designe_pour_le_vote']);
 
     // Le voisin ne l'est pas : la classe suit bien la clé, pas le jour.
     const morning = bandOf(20, 0);
@@ -1744,6 +2111,84 @@ describe('CalendarMonthView — mode de composition (Story 36.10)', () => {
     const band = bandOf(20, 2);
     expect(band.classList.contains('band--composed')).toBe(true);
     expect(band.classList.contains('band--selected')).toBe(false);
+  });
+
+  // ⚠️ Story 47.4 — l'aperçu de la plage de chaque départ désigné.
+  describe('aperçu des plages (Story 47.4)', () => {
+    const COVER = new Set(['2026-08-21|MORNING', '2026-08-21|AFTERNOON']);
+
+    it('le départ garde son tireté ; les autres bandes de sa plage prennent l’aperçu, un jour vide se déplie', async () => {
+      await createWith({
+        entries: [VOTE_ENTRY],
+        composing: true,
+        composedKeys: new Set(['2026-08-20|EVENING']),
+        composeCoverKeys: COVER,
+        composeDuration: 3,
+      });
+
+      const start = bandOf(20, 2);
+      expect(start.classList.contains('band--composed')).toBe(true);
+      expect(start.classList.contains('band--span-preview')).toBe(false);
+      // Le 21 ne porte rien (case uniforme hors composition) : il montre ses trois créneaux.
+      expect(cellOf(21).querySelectorAll('.band')).toHaveLength(3);
+      expect(bandOf(21, 0).classList.contains('band--span-preview')).toBe(true);
+      expect(bandOf(21, 1).classList.contains('band--span-preview')).toBe(true);
+      expect(bandOf(21, 2).classList.contains('band--span-preview')).toBe(false);
+    });
+
+    it('au survol d’une bande, la plage qu’elle ouvrirait s’allume ; la quitter l’éteint', async () => {
+      const f = await createWith({
+        entries: [VOTE_ENTRY],
+        composing: true,
+        composedKeys: new Set<string>(),
+        composeCoverKeys: new Set<string>(),
+        composeDuration: 2,
+      });
+
+      bandOf(20, 2).dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }));
+      f.detectChanges();
+      expect(bandOf(20, 2).classList.contains('band--span-preview')).toBe(true);
+      expect(bandOf(21, 0).classList.contains('band--span-preview')).toBe(true);
+      expect(bandOf(21, 1).classList.contains('band--span-preview')).toBe(false);
+
+      bandOf(20, 2).dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' }));
+      f.detectChanges();
+      expect(el.querySelectorAll('.band--span-preview')).toHaveLength(0);
+      expect(cellOf(21).querySelectorAll('.band')).toHaveLength(1);
+    });
+
+    it('au doigt (entrée émulée sans sortie), ou sur un jour passé, le survol n’allume rien', async () => {
+      const f = await createWith({
+        entries: [VOTE_ENTRY, { ...VOTE_ENTRY, key: 'vote-past', date: '2026-08-05' }],
+        composing: true,
+        composedKeys: new Set<string>(),
+        composeCoverKeys: new Set<string>(),
+        composeDuration: 2,
+      });
+
+      bandOf(20, 2).dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'touch' }));
+      f.detectChanges();
+      expect(el.querySelectorAll('.band--span-preview')).toHaveLength(0);
+
+      bandOf(5, 2).dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }));
+      f.detectChanges();
+      expect(el.querySelectorAll('.band--span-preview')).toHaveLength(0);
+    });
+
+    it('à 1 créneau, rien ne change : pas d’aperçu, un jour vide reste une seule bande', async () => {
+      const f = await createWith({
+        entries: [VOTE_ENTRY],
+        composing: true,
+        composedKeys: new Set(['2026-08-20|EVENING']),
+        composeCoverKeys: new Set<string>(),
+        composeDuration: 1,
+      });
+
+      bandOf(20, 2).dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }));
+      f.detectChanges();
+      expect(el.querySelectorAll('.band--span-preview')).toHaveLength(0);
+      expect(cellOf(21).querySelectorAll('.band')).toHaveLength(1);
+    });
   });
 });
 
@@ -1813,6 +2258,16 @@ describe('CalendarMonthView — sceller depuis la barre de sélection (Story 36.
     });
   });
 
+  it('Story 47.5 — sealCandidate d’une plage porte « début → fin », pas seulement le créneau de départ', async () => {
+    await createWith({
+      canSeal: true,
+      entries: [{ ...VOTE_ENTRY, endDate: '2026-08-22', endSlot: 'AFTERNOON' }],
+    });
+    selectSingle(20, 'EVENING');
+    const candidate = (fixture.componentInstance as any).sealCandidate();
+    expect(candidate.dateLabel).toBe('jeu. 20 août soir → sam. 22 août après-midi');
+  });
+
   it('AC1 — le bouton Sceller est rendu dans la barre de sélection', async () => {
     await createWith({ canSeal: true, entries: [VOTE_ENTRY] });
     selectSingle(20, 'EVENING');
@@ -1858,5 +2313,52 @@ describe('CalendarMonthView — sceller depuis la barre de sélection (Story 36.
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({ pollId: 'poll1', optionId: 'opt1' }),
     );
+  });
+});
+
+// ─── Story 46.2 — la fenêtre de l'automate sélectionnée : contour plein, jamais tireté ──────────
+describe('CalendarMonthView — fenêtre de l’automate sélectionnée (Story 46.2)', () => {
+  let el: HTMLElement;
+
+  async function createWith(windowKey: string | null) {
+    await TestBed.configureTestingModule({
+      imports: [CalendarMonthView],
+      providers: [provideAnimationsAsync()],
+    }).compileComponents();
+    const f = TestBed.createComponent(CalendarMonthView);
+    f.componentRef.setInput('activeLayers', ['mes-disponibilites']);
+    f.componentRef.setInput('initialDate', new Date(2026, 7, 15));
+    f.componentRef.setInput('windowKey', windowKey);
+    f.detectChanges();
+    el = f.nativeElement;
+    return f;
+  }
+
+  const cellOf = (day: number) => {
+    const target = new Date(2026, 7, day).getTime();
+    return el.querySelector(`.day-cell[data-cell-date="${target}"]`) as HTMLElement;
+  };
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('sans fenêtre : aucune bande contournée', async () => {
+    await createWith(null);
+    expect(el.querySelectorAll('.band--window')).toHaveLength(0);
+  });
+
+  it('un jour sans rien (bande fusionnée) est contourné dès que la fenêtre tombe ce jour-là', async () => {
+    await createWith('2026-08-20|EVENING');
+    const band = cellOf(20).querySelector('.band') as HTMLElement;
+    expect(band.classList).toContain('band--uniform');
+    expect(band.classList).toContain('band--window');
+    expect(el.querySelectorAll('.band--window')).toHaveLength(1);
+    expect(band.getAttribute('aria-label')).toContain(
+      TONE_MAP['grimoire-emeraude']['calendar.window_selected_aria'],
+    );
+  });
+
+  it('une autre clé ne contourne rien', async () => {
+    await createWith('2026-09-20|EVENING');
+    expect(el.querySelectorAll('.band--window')).toHaveLength(0);
   });
 });

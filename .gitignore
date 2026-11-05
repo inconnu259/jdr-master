@@ -23,6 +23,9 @@ Thumbs.db
 
 _bmad/
 .claude/
+graphify-out/
 
 # Contenu utilisateur uploadé (portraits, etc.) — runtime uniquement, jamais committé
 apps/api/uploads/
+# Fichier temporaire d'écriture de la config MCP par WebStorm
+.mcp.json.tmp

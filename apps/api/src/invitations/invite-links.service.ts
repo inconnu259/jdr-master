@@ -8,8 +8,11 @@ import {
 import { randomBytes } from 'node:crypto';
 import type { InviteLink, Prisma } from '@prisma/client';
 import type { InviteLinkPreviewDto } from '@master-jdr/shared';
+import { familyOf } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { EventsService } from '../events/events.service';
 import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import { CreateInviteLinkDto } from './dto/create-invite-link.dto';
 
@@ -19,13 +22,19 @@ const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // +7 jours
 export class InviteLinksService {
   constructor(
     private readonly prisma: PrismaService,
+    // Signaux de la partie (`notifyPartieSignalsChanged`) : écriture de `parties/`,
+    // aucune décision de droit.
     private readonly parties: PartiesService,
+    private readonly permissions: PermissionService,
     private readonly realtimeEvents: RealtimeEventsService,
+    // Story 41.4 : une soirée terminée ne prend plus de lien ni de nouveau membre (lecture seule).
+    private readonly events: EventsService,
   ) {}
 
-  /** Le MJ génère un lien d'invitation pour SA partie. */
+  /** Le MJ (ou l'administrateur d'un ralliement) génère un lien d'invitation pour SA partie. */
   async create(partieId: string, mjId: string, dto: CreateInviteLinkDto) {
-    await this.parties.getOwned(partieId, mjId);
+    const { partie } = await this.permissions.assert(mjId, 'INVITE_LINK_CREATE', { partieId });
+    await this.events.assertIsolatedOpen(partie);
     const expiresAt = dto.expiresAt
       ? new Date(dto.expiresAt)
       : new Date(Date.now() + DEFAULT_TTL_MS);
@@ -46,7 +55,7 @@ export class InviteLinksService {
 
   /** Liens d'une partie (vue MJ). */
   async listForPartie(partieId: string, mjId: string) {
-    await this.parties.getOwned(partieId, mjId);
+    await this.permissions.assert(mjId, 'INVITE_LINK_READ', { partieId });
     return this.prisma.inviteLink.findMany({
       where: { partieId },
       orderBy: { createdAt: 'desc' },
@@ -55,11 +64,8 @@ export class InviteLinksService {
 
   /** Le MJ révoque un lien. */
   async revoke(linkId: string, userId: string) {
-    const link = await this.prisma.inviteLink.findUnique({
-      where: { id: linkId },
-    });
-    if (!link) throw new NotFoundException('Lien introuvable');
-    await this.parties.getOwned(link.partieId, userId); // MJ uniquement
+    // La partie est résolue depuis le lien (404 si inconnu, 403 si étranger) — MJ uniquement.
+    await this.permissions.assert(userId, 'INVITE_LINK_REVOKE', { inviteLinkId: linkId });
     await this.prisma.inviteLink.update({
       where: { id: linkId },
       data: { revoked: true },
@@ -94,7 +100,7 @@ export class InviteLinksService {
     this.realtimeEvents.emit(userTopic(userId));
     // AUCUN_MEMBRE_INVITE (Story 29.7, AD-14) : le MJ doit voir ce signal se lever quand quelqu'un
     // rejoint par lien. En plus des émissions ci-dessus, jamais en remplacement.
-    await this.parties.notifyPartieSignalsChanged(link.partieId, link.partie.mjId);
+    await this.parties.notifyPartieSignalsChanged(link.partieId, link.partie.ownerId);
     return { ok: true, partieId: link.partieId };
   }
 
@@ -107,21 +113,36 @@ export class InviteLinksService {
     tx: Prisma.TransactionClient,
     token: string,
     userId: string,
-  ): Promise<InviteLink & { partie: { mjId: string } }> {
+  ): Promise<InviteLink & { partie: { ownerId: string | null; gameSystemId: string } }> {
     const link = await tx.inviteLink.findUnique({
       where: { token },
-      include: { partie: { select: { mjId: true } } },
+      include: {
+        partie: {
+          select: { id: true, ownerId: true, gameSystemId: true, kind: true, closedAt: true },
+        },
+      },
     });
     if (!link) throw new NotFoundException('Lien invalide');
     const status = this.linkStatus(link);
     if (!status.valid) throw new ForbiddenException(status.reason);
-    if (link.partie.mjId === userId) {
-      throw new ConflictException('Vous êtes déjà le MJ de cette partie.');
+    // Story 41.4 : on ne rejoint plus une soirée terminée (lecture hors transaction, sans effet pour les
+    // autres types de partie).
+    await this.events.assertIsolatedOpen(link.partie);
+    // Textes neutres pour un ralliement (Story 39.3) : ni « MJ » ni « partie ».
+    const isGroup = familyOf(link.partie.gameSystemId) === 'ralliement';
+    if (link.partie.ownerId === userId) {
+      throw new ConflictException(
+        isGroup ? 'Vous êtes déjà membre de ce groupe.' : 'Vous êtes déjà le MJ de cette partie.',
+      );
     }
     const existing = await tx.membership.findUnique({
       where: { userId_partieId: { userId, partieId: link.partieId } },
     });
-    if (existing) throw new ConflictException('Vous êtes déjà membre de cette partie.');
+    if (existing) {
+      throw new ConflictException(
+        isGroup ? 'Vous êtes déjà membre de ce groupe.' : 'Vous êtes déjà membre de cette partie.',
+      );
+    }
 
     const claim = await tx.inviteLink.updateMany({
       where: {
@@ -134,7 +155,8 @@ export class InviteLinksService {
     });
     if (claim.count === 0) throw new ForbiddenException('Lien invalide ou quota atteint.');
 
-    await tx.membership.create({ data: { userId, partieId: link.partieId } });
+    // Rôle explicite (Story 39.3) : un lien ne fait jamais entrer en administrateur.
+    await tx.membership.create({ data: { userId, partieId: link.partieId, role: 'MEMBER' } });
     return link;
   }
 

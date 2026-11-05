@@ -43,7 +43,8 @@ master-jdr/
 │  └─ shared/     # types TypeScript partagés (@master-jdr/shared)
 ├─ docs/          # spec, backlog, sécurité, checklist
 ├─ docker-compose.yml
-└─ .env.example
+├─ .env.dev       # configuration de dev versionnée (à copier en .env)
+└─ .env           # copie locale, non versionnée
 ```
 
 ## Développement
@@ -53,6 +54,32 @@ master-jdr/
   Ex. : `docker compose exec api pnpm prisma studio`.
 - **Éditeur** : VS Code + extension **Dev Containers** (« Reopen in Container ») pour bénéficier des
   outils figés (autocomplétion, lint) sans rien installer.
+
+## Données de démonstration
+
+Un jeu de données de démo (comptes, parties, personnages, votes, invitations…) permet de tester
+l'interface sans rien saisir. **Réservé au développement local**, jamais à la production. Toutes
+les dates sont relatives au moment du seed.
+
+Remise à zéro complète, **dans cet ordre** :
+
+```bash
+docker compose exec api pnpm exec prisma migrate reset --force   # base vide
+docker compose exec api pnpm seed                                # compte admin (identifiants de .env)
+docker compose restart api                                       # puis attendre « Nest application successfully started »
+docker compose exec api pnpm seed:demo                           # données de démo
+```
+
+- Prisma 7 ne lance plus le seed après `migrate reset` : l'étape `pnpm seed` est manuelle.
+- Le redémarrage de l'API est indispensable : c'est lui qui crée les systèmes de jeu (Ryuutama) dont
+  le seed de démo dépend. Lancé trop tôt, `seed:demo` s'arrête avec un message explicite, sans
+  rien écrire.
+- Le seed de démo n'est pas idempotent : si les comptes de démo existent déjà, il ne fait rien.
+- Les comptes de démo (et leurs particularités), les liens d'invitation et les liens à usage unique
+  (réinitialisation de mot de passe, changement d'e-mail) sont affichés **dans la sortie console**
+  du seed — c'est elle qui fait foi. Le compte admin utilise les identifiants `ADMIN_*` de `.env`.
+- Les e-mails envoyés par l'application (invitations, rappels de séance, réinitialisation…) sont
+  captés par **Mailpit** : http://localhost:8025.
 
 ## Versions épinglées
 

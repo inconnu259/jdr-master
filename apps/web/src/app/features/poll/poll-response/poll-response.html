@@ -7,7 +7,7 @@
   @for (opt of poll().options; track opt.id) {
     <div class="poll-response__option" [class.poll-response__option--failed]="failedOptionIds().has(opt.id)">
       <span class="poll-response__date">
-        {{ formatDate(opt.date) }} — {{ SLOT_LABELS[opt.slot] }}
+        {{ optionLabel(opt) }}
       </span>
       <div class="poll-response__buttons">
         @for (a of VOTE_OPTIONS; track a) {
@@ -16,7 +16,7 @@
             [class.poll-response__btn--active]="getAnswer(opt.id) === a"
             [disabled]="isClosed() || saving() || withdrawingOptionIds().has(opt.id)"
             (click)="setAnswer(opt.id, a)"
-          >{{ a }}</button>
+          >{{ theme.tone()[VOTE_LABEL_KEYS[a]] }}</button>
         }
         @if (confirmedOptionIds().has(opt.id)) {
           <button
@@ -28,7 +28,11 @@
         }
       </div>
       @if (failedOptionIds().has(opt.id)) {
-        <span class="poll-response__option-error" aria-label="Non enregistré">⚠</span>
+        <app-icon
+          class="poll-response__option-error"
+          name="avertissement"
+          [label]="theme.tone()['pollui.response_not_saved_aria']"
+        />
       }
     </div>
   }
@@ -46,7 +50,7 @@
         [disabled]="!hasSelection() || saving()"
         (click)="onConfirm()"
       >
-        @if (saving()) { Envoi… } @else { {{ theme.tone()['cta.confirm_votes'] }} }
+        @if (saving()) { {{ theme.tone()['common.envoi'] }} } @else { {{ theme.tone()['cta.confirm_votes'] }} }
       </button>
     </div>
   }

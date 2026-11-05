@@ -10,10 +10,19 @@ import {
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import type { CastVoteDto, DaySlot, SessionPollDto, VoteAnswer } from '@master-jdr/shared';
+import type {
+  CastVoteDto,
+  DaySlot,
+  PollOptionDto,
+  SessionPollDto,
+  VoteAnswer,
+} from '@master-jdr/shared';
+import { AppIcon } from '../../../core/icons/app-icon';
 import { AuthService } from '../../../core/auth/auth.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
+import { candidateSpanShort } from '../../calendar/span-label';
 
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
@@ -25,7 +34,7 @@ const SLOT_LABELS: Record<DaySlot, string> = {
 @Component({
   selector: 'app-poll-response',
   standalone: true,
-  imports: [MatButtonModule],
+  imports: [MatButtonModule, AppIcon],
   templateUrl: './poll-response.html',
   styleUrl: './poll-response.scss',
 })
@@ -57,6 +66,13 @@ export class PollResponseComponent {
 
   readonly SLOT_LABELS = SLOT_LABELS;
   readonly VOTE_OPTIONS: VoteAnswer[] = ['YES', 'NO', 'MAYBE'];
+  /** Clé de ton du libellé de chaque bouton de vote : les valeurs d'API (YES / NO / MAYBE) ne
+   *  s'affichent jamais telles quelles. */
+  readonly VOTE_LABEL_KEYS: Record<VoteAnswer, string> = {
+    YES: 'common.oui',
+    NO: 'common.non',
+    MAYBE: 'common.peut_etre',
+  };
 
   protected readonly isClosed = computed(() => this.poll().status === 'CLOSED');
   protected readonly hasSelection = computed(() => this.pendingAnswers().size > 0);
@@ -91,6 +107,14 @@ export class PollResponseComponent {
     const m = new Map(this.pendingAnswers());
     m.set(optionId, answer);
     this.pendingAnswers.set(m);
+  }
+
+  /** « sam. 25 oct. — Soir » ; Story 47.5 : un candidat de plusieurs créneaux s'écrit de son début à sa fin. */
+  protected optionLabel(opt: PollOptionDto): string {
+    return (
+      candidateSpanShort(opt, this.poll().durationSlots) ??
+      `${this.formatDate(opt.date)} — ${SLOT_LABELS[opt.slot]}`
+    );
   }
 
   protected getAnswer(optionId: string): VoteAnswer | null {
@@ -175,7 +199,10 @@ export class PollResponseComponent {
     } else {
       const successCount = entries.length - failed.size;
       this.error.set(
-        `${successCount}/${entries.length} réponse(s) enregistrée(s). Réessayez pour les autres.`,
+        fillTone(this.theme.tone()['pollui.response_partial_error'], {
+          success: successCount,
+          total: entries.length,
+        }),
       );
     }
     this.saving.set(false);

@@ -9,8 +9,12 @@ import type {
   SessionPollDto,
   VoteAnswer,
 } from '@master-jdr/shared';
+import type { IconName } from '../../../core/icons/icon-registry.generated';
+import { AppIcon } from '../../../core/icons/app-icon';
 import { getMissingVoters, getMissingVotersForOption } from '../../../core/poll/poll.util';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
+import { candidateSpanShort } from '../../calendar/span-label';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
 import { ConfirmDialog } from '../../parties/confirm-dialog/confirm-dialog';
 
@@ -21,22 +25,24 @@ const SLOT_LABELS: Record<DaySlot, string> = {
   FULL_DAY: 'Journée',
 };
 
-const ANSWER_LABELS: Record<VoteAnswer, string> = {
-  YES: 'Oui',
-  NO: 'Non',
-  MAYBE: 'Peut-être',
+/** Clés du registre de ton (libellés « Oui / Non / Peut-être »), résolues par le gabarit. */
+const ANSWER_LABEL_KEYS: Record<VoteAnswer, string> = {
+  YES: 'common.oui',
+  NO: 'common.non',
+  MAYBE: 'common.peut_etre',
 };
 
-const ANSWER_ICONS: Record<VoteAnswer, string> = {
-  YES: '✅',
-  NO: '❌',
-  MAYBE: '❔',
+// Les trois réponses se distinguent par la FORME du dessin (mêmes pictogrammes que les compteurs de dispos).
+const ANSWER_ICONS: Record<VoteAnswer, IconName> = {
+  YES: 'dispo-oui',
+  NO: 'dispo-non',
+  MAYBE: 'dispo-partiel',
 };
 
 @Component({
   selector: 'app-poll-status',
   standalone: true,
-  imports: [MatButtonModule, IdentityLabel],
+  imports: [MatButtonModule, IdentityLabel, AppIcon],
   templateUrl: './poll-status.html',
   styleUrl: './poll-status.scss',
 })
@@ -55,7 +61,7 @@ export class PollStatusPanel {
   protected readonly dialogPending = signal(false);
 
   readonly SLOT_LABELS = SLOT_LABELS;
-  readonly ANSWER_LABELS = ANSWER_LABELS;
+  readonly ANSWER_LABEL_KEYS = ANSWER_LABEL_KEYS;
   readonly ANSWER_ICONS = ANSWER_ICONS;
 
   protected formatDate(iso: string): string {
@@ -66,6 +72,15 @@ export class PollStatusPanel {
       month: 'short',
       timeZone: 'UTC',
     }).format(d);
+  }
+
+  /** « sam. 25 oct. — Soir » ; Story 47.5 : un candidat de plusieurs créneaux s'écrit de son début à sa fin
+   *  (« ven. 6 nov. soir → dim. 8 nov. après-midi »). Un créneau seul est inchangé. */
+  protected optionLabel(opt: PollOptionDto): string {
+    return (
+      candidateSpanShort(opt, this.poll().durationSlots) ??
+      `${this.formatDate(opt.date)} — ${SLOT_LABELS[opt.slot]}`
+    );
   }
 
   protected countByAnswer(opt: PollOptionDto, answer: VoteAnswer): number {
@@ -98,11 +113,27 @@ export class PollStatusPanel {
     if (this.busy() || this.dialogPending()) return;
     this.dialogPending.set(true);
     try {
-      const warning = opt.votes.length === 0 ? " ⚠️ Aucun membre n'a voté pour cette date." : '';
+      const tone = this.theme.tone();
+      const noVoteWarning = tone['pollui.status_choose_no_vote_warning'];
+      // L'avertissement « aucun vote » n'est plus collé à la question : le dialogue le montre sous
+      // le message, précédé de son pictogramme.
+      const warning = opt.votes.length === 0 ? noVoteWarning : undefined;
+      // Story 47.5 : une plage se scelle écrite de son début à sa fin (pas de « — créneau » en plus).
+      const span = candidateSpanShort(opt, this.poll().durationSlots);
+      const question = span
+        ? fillTone(tone['pollui.status_choose_confirm'], { date: span, slot: '' }).replace(
+            `${span} — `,
+            span,
+          )
+        : fillTone(tone['pollui.status_choose_confirm'], {
+            date: this.formatDate(opt.date),
+            slot: SLOT_LABELS[opt.slot],
+          });
       const ref = this.dialog.open(ConfirmDialog, {
         data: {
-          message: `Confirmer ${this.formatDate(opt.date)} — ${SLOT_LABELS[opt.slot]} comme date de la prochaine séance ?${warning}`,
-          confirmLabel: this.theme.tone()['cta.choose_date'],
+          message: question,
+          warning,
+          confirmLabel: tone['cta.choose_date'],
         },
       });
       const confirmed = await firstValueFrom(ref.afterClosed());

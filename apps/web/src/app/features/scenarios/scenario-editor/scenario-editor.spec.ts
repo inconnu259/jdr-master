@@ -21,6 +21,9 @@ import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-a
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { makeAnnouncementDto } from '../../../core/announcements/announcement-dto.fixture';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
+import { TONE_MAP } from '../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const SCENARIO: ScenarioDto = {
   id: 's1',
@@ -60,9 +63,9 @@ const PARTIE: PartieDto = {
   kind: 'CAMPAGNE_EPISODIQUE',
   gameSystemId: 'draconis',
   description: null,
-  mjId: 'mj1',
-  mjPseudo: 'mj-pseudo',
-  mjDisplayName: 'MJ Nom',
+  ownerId: 'mj1',
+  ownerPseudo: 'mj-pseudo',
+  ownerDisplayName: 'MJ Nom',
   createdAt: '',
   nextSessionDate: null,
   nextSessionSlot: null,
@@ -355,7 +358,7 @@ describe('ScenarioEditor', () => {
     );
     const button = Array.from(
       fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
-    ).find((b) => b.textContent?.includes('Enregistrer'))!;
+    ).find((b) => b.textContent?.trim() === GRIMOIRE_TONE['common.enregistrer'])!;
 
     const clickPromise = (fixture.componentInstance as any).submitDescription();
     fixture.detectChanges();
@@ -453,6 +456,18 @@ describe('ScenarioEditor', () => {
     expect(comp.downloadError()).toBeNull();
   });
 
+  it('chaque ligne de document porte le pictogramme document, décoratif', async () => {
+    const { fixture } = await createComponent();
+    const rows = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.document-row'),
+    ) as HTMLElement[];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.querySelector('app-icon')?.getAttribute('data-icon')).toBe('document');
+      expect(row.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
   it('document-row : classe "disabled" pendant le téléchargement (Story 13.1, AC1)', async () => {
     const { fixture, scenariosSvc } = await createComponent();
     let resolveCall: (v: unknown) => void;
@@ -480,7 +495,9 @@ describe('ScenarioEditor', () => {
         const { fixture } = await createComponent({ ...SCENARIO, status });
         expect(
           Array.from(fixture.nativeElement.querySelectorAll('button')).some((b) =>
-            (b as HTMLElement).textContent?.includes('Marquer comme Courant'),
+            (b as HTMLElement).textContent?.includes(
+              GRIMOIRE_TONE['scenarios.editor_mark_courant'],
+            ),
           ),
         ).toBe(false);
       },
@@ -490,7 +507,7 @@ describe('ScenarioEditor', () => {
       const { fixture } = await createComponent({ ...SCENARIO, status: 'A_VENIR' });
       expect(
         Array.from(fixture.nativeElement.querySelectorAll('button')).some((b) =>
-          (b as HTMLElement).textContent?.includes('Marquer comme Courant'),
+          (b as HTMLElement).textContent?.includes(GRIMOIRE_TONE['scenarios.editor_mark_courant']),
         ),
       ).toBe(true);
     });
@@ -547,7 +564,7 @@ describe('ScenarioEditor', () => {
       );
       const button = Array.from(
         fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
-      ).find((b) => b.textContent?.includes('Marquer comme Courant'))!;
+      ).find((b) => b.textContent?.includes(GRIMOIRE_TONE['scenarios.editor_mark_courant']))!;
 
       const comp = fixture.componentInstance as any;
       const clickPromise = comp.markCourant();
@@ -586,7 +603,7 @@ describe('ScenarioEditor', () => {
         const { fixture } = await createComponent({ ...SCENARIO, status });
         expect(
           Array.from(fixture.nativeElement.querySelectorAll('button')).some((b) =>
-            (b as HTMLElement).textContent?.includes('Clôturer le scénario'),
+            (b as HTMLElement).textContent?.includes(GRIMOIRE_TONE['scenarios.editor_close']),
           ),
         ).toBe(false);
       },
@@ -596,7 +613,7 @@ describe('ScenarioEditor', () => {
       const { fixture } = await createComponent({ ...SCENARIO, status: 'COURANT' });
       expect(
         Array.from(fixture.nativeElement.querySelectorAll('button')).some((b) =>
-          (b as HTMLElement).textContent?.includes('Clôturer le scénario'),
+          (b as HTMLElement).textContent?.includes(GRIMOIRE_TONE['scenarios.editor_close']),
         ),
       ).toBe(true);
     });
@@ -658,7 +675,7 @@ describe('ScenarioEditor', () => {
       );
       const button = Array.from(
         fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
-      ).find((b) => b.textContent?.includes('Clôturer le scénario'))!;
+      ).find((b) => b.textContent?.includes(GRIMOIRE_TONE['scenarios.editor_close']))!;
 
       const comp = fixture.componentInstance as any;
       const clickPromise = comp.close();
@@ -693,7 +710,7 @@ describe('ScenarioEditor', () => {
   describe('Section participants (vue MJ, non-régression 8.1)', () => {
     it('scénario ONE_SHOT/CAMPAGNE_LINEAIRE (participants undefined) → section absente', async () => {
       const { fixture } = await createComponent({ ...SCENARIO, status: 'COURANT' });
-      expect(fixture.nativeElement.textContent).not.toContain('Participants');
+      expect(fixture.nativeElement.textContent).not.toContain(GRIMOIRE_TONE['common.participants']);
     });
 
     it('CAMPAGNE_EPISODIQUE avec participants → CharacterSummaryCard affichée pour chacun', async () => {
@@ -706,7 +723,7 @@ describe('ScenarioEditor', () => {
         },
         [alice],
       );
-      expect(fixture.nativeElement.textContent).toContain('Participants');
+      expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['common.participants']);
       expect(fixture.nativeElement.querySelectorAll('app-character-summary-card')).toHaveLength(1);
     });
 
@@ -716,7 +733,9 @@ describe('ScenarioEditor', () => {
         status: 'COURANT',
         participants: [],
       });
-      expect(fixture.nativeElement.textContent).toContain('Aucun participant pour l’instant.');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['scenarios.editor_no_participants'],
+      );
       expect(fixture.nativeElement.querySelectorAll('app-character-summary-card')).toHaveLength(0);
     });
 
@@ -776,10 +795,10 @@ describe('ScenarioEditor', () => {
 
       const comp = fixture.componentInstance as any;
       expect(comp.participantsLoadError()).toBe(
-        'Impossible de charger les participants. Réessayez.',
+        GRIMOIRE_TONE['scenarios.editor_participants_load_error'],
       );
       expect(fixture.nativeElement.textContent).toContain(
-        'Impossible de charger les participants. Réessayez.',
+        GRIMOIRE_TONE['scenarios.editor_participants_load_error'],
       );
     });
 
@@ -794,7 +813,9 @@ describe('ScenarioEditor', () => {
       );
       expect(fixture.nativeElement.querySelectorAll('app-character-summary-card')).toHaveLength(0);
       expect(fixture.nativeElement.textContent).toContain('Bob');
-      expect(fixture.nativeElement.textContent).toContain('pas encore de personnage');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.pas_encore_de_personnage'],
+      );
     });
 
     it('AC3 : deux participants sans personnage partageant le même displayName → pseudo affiché en complément', async () => {
@@ -859,8 +880,20 @@ describe('ScenarioEditor', () => {
 
       await comp.addSeance();
 
-      expect(scenariosSvc.addSeance).toHaveBeenCalledWith('s1');
+      expect(scenariosSvc.addSeance).toHaveBeenCalledWith('s1', 1);
       expect(comp.scenario().seances).toHaveLength(1);
+    });
+
+    it('Story 47.1 : la durée choisie part avec l’ajout, puis le compteur revient à 1 créneau', async () => {
+      const { fixture, scenariosSvc } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.addSeance.mockResolvedValue({ ...SCENARIO, seances: [] });
+      comp.newSeanceDuration.set(6);
+
+      await comp.addSeance();
+
+      expect(scenariosSvc.addSeance).toHaveBeenCalledWith('s1', 6);
+      expect(comp.newSeanceDuration()).toBe(1);
     });
 
     it('échec → addSeanceError affiche le message serveur', async () => {
@@ -904,7 +937,7 @@ describe('ScenarioEditor', () => {
       );
       const button = Array.from(
         fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
-      ).find((b) => b.textContent?.includes('Ajouter une séance'))!;
+      ).find((b) => b.textContent?.includes(GRIMOIRE_TONE['scenarios.editor_add_seance']))!;
 
       const clickPromise = (fixture.componentInstance as any).addSeance();
       fixture.detectChanges();
@@ -973,7 +1006,9 @@ describe('ScenarioEditor', () => {
         status: 'PASSE',
         resumeFin: null,
       });
-      expect(fixture.nativeElement.textContent).toContain('Aucun résumé pour l’instant');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['scenarios.editor_resume_empty_hint'].split(' —')[0],
+      );
     });
 
     it('statut PASSE avec résumé déjà rédigé → valeur pré-remplie dans le textarea', async () => {
@@ -1059,7 +1094,7 @@ describe('ScenarioEditor', () => {
       );
       const button = Array.from(
         fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
-      ).find((b) => b.textContent?.includes('Enregistrer le résumé de fin'))!;
+      ).find((b) => b.textContent?.includes(GRIMOIRE_TONE['scenarios.editor_save_resume']))!;
 
       const clickPromise = (fixture.componentInstance as any).submitResumeFin();
       fixture.detectChanges();

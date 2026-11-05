@@ -18,6 +18,7 @@ const fakePoll: SessionPollDto = {
   chosenSlot: null,
   // Story 36.6 — effectif de la troupe (MJ + membres).
   membersCount: 4,
+  durationSlots: 1,
   options: [
     { id: 'opt1', date: '2026-08-01T00:00:00.000Z', slot: 'MORNING', votes: [] },
     {
@@ -58,6 +59,13 @@ function makeThemeService() {
       'poll.withdraw_error': 'Le retrait a échoué.',
       'poll.vote_closed': 'Vote clos',
       'poll.status_title': 'Vote en cours',
+      'common.envoi': 'Envoi…',
+      'common.oui': 'Oui-registre',
+      'common.non': 'Non-registre',
+      'common.peut_etre': 'Peut-être-registre',
+      'pollui.response_not_saved_aria': 'Non enregistré',
+      'pollui.response_partial_error':
+        '{success}/{total} réponse(s) enregistrée(s). Réessayez pour les autres.',
     }),
   };
 }
@@ -89,6 +97,15 @@ async function createComponent(poll = fakePoll, userId = 'u1') {
 
 describe('PollResponseComponent', () => {
   afterEach(() => TestBed.resetTestingModule());
+
+  it('les boutons de vote affichent les textes du registre (oui, non, peut-être), dans cet ordre', async () => {
+    const { fixture } = await createComponent();
+    const first = fixture.nativeElement.querySelector('.poll-response__option');
+    const labels = Array.from(
+      first.querySelectorAll('.poll-response__buttons button:not(.poll-response__withdraw)'),
+    ).map((b) => (b as HTMLElement).textContent?.trim());
+    expect(labels).toEqual(['Oui-registre', 'Non-registre', 'Peut-être-registre']);
+  });
 
   it("contient autant d'options que le poll", async () => {
     const { fixture } = await createComponent();
@@ -161,6 +178,18 @@ describe('PollResponseComponent', () => {
     expect(comp.error()).toContain('1/2');
     expect(comp.failedOptionIds().has('opt2')).toBe(true);
     expect(comp.failedOptionIds().has('opt1')).toBe(false);
+
+    // Story 51.5 — la marque « non enregistré » est une icône nommée, et le nom n'est porté qu'une fois.
+    fixture.detectChanges();
+    const marks = fixture.nativeElement.querySelectorAll('.poll-response__option-error');
+    expect(marks).toHaveLength(1);
+    const mark = marks[0] as HTMLElement;
+    expect(mark.tagName.toLowerCase()).toBe('app-icon');
+    expect(mark.getAttribute('data-icon')).toBe('avertissement');
+    expect(mark.getAttribute('aria-label')).toBeNull();
+    expect(mark.querySelector('svg')!.getAttribute('role')).toBe('img');
+    expect(mark.querySelector('svg')!.getAttribute('aria-label')).toBe('Non enregistré');
+    expect(mark.textContent!.trim()).toBe('');
   });
 
   it('poll CLOSED → isClosed vrai, setAnswer sans effet', async () => {
@@ -337,5 +366,23 @@ describe('PollResponseComponent', () => {
       resolveWithdraw();
       await withdrawal;
     });
+  });
+});
+
+describe('PollResponseComponent — vote de plusieurs créneaux (Story 47.5)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('chaque option s’écrit de son début à sa fin', async () => {
+    const { fixture } = await createComponent({ ...fakePoll, durationSlots: 6 });
+    const first = fixture.nativeElement.querySelector('.poll-response__date') as HTMLElement;
+    expect(first.textContent).toContain('→');
+    expect(first.textContent).not.toContain('—');
+  });
+
+  it('un vote d’un créneau : « date — créneau » d’avant', async () => {
+    const { fixture } = await createComponent(fakePoll);
+    const first = fixture.nativeElement.querySelector('.poll-response__date') as HTMLElement;
+    expect(first.textContent).toContain('—');
+    expect(first.textContent).not.toContain('→');
   });
 });

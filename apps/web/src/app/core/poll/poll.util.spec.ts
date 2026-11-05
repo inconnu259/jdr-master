@@ -8,13 +8,21 @@ import {
 
 const members: PartieMemberDto[] = [
   {
+    role: 'MEMBER',
     userId: 'u1',
     pseudo: 'Alice',
     displayName: 'Alice au pays',
     email: 'alice@test.com',
     joinedAt: '',
   },
-  { userId: 'u2', pseudo: 'Bob', displayName: 'Bobby', email: 'bob@test.com', joinedAt: '' },
+  {
+    role: 'MEMBER',
+    userId: 'u2',
+    pseudo: 'Bob',
+    displayName: 'Bobby',
+    email: 'bob@test.com',
+    joinedAt: '',
+  },
 ];
 
 function makePoll(options: SessionPollDto['options']): SessionPollDto {
@@ -28,6 +36,7 @@ function makePoll(options: SessionPollDto['options']): SessionPollDto {
     chosenSlot: null,
     // Story 36.6 — effectif de la troupe (MJ + membres).
     membersCount: 4,
+    durationSlots: 1,
     options,
   };
 }
